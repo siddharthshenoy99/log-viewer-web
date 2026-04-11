@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Portable NVIDIA report viewer: MSInfo (.nfo) summary, BSOD and WinDbg text hints, GPU-Z log charts — runs locally in the browser with no upload pipeline."
+    />
+    <!--
+      Portable / offline — copy the entire log-viewer-web folder. No npm, Node, Python, build step, CDN,
+      database, or remote API. Analysis runs in the browser from local files only.
+      Required: index.html, styles.css, app.js, nvidia-logo.png (same folder).
+      Optional: Open-Report-Viewer.bat, serve.ps1, PORTABLE-HANDOFF.txt (handoff notes).
+      app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu.
+      Network: nothing is fetched for parsing; https:// and ms-settings: links run only when the user clicks them (docs, vendor sites, Windows Settings).
+    -->
+    <title>NVIDIA — System report, BSOD hints &amp; GPU log analyzer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">Skip to tools</a>
+    <div class="ambient" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="brand">
+        <div class="logo-wrap">
+          <img
+            src="nvidia-logo.png"
+            alt="NVIDIA"
+            class="brand-logo"
+            width="112"
+            height="52"
+            decoding="async"
+          />
+        </div>
+        <div class="brand-text">
+          <p class="hero-kicker">Instant insight · stays on your machine</p>
+          <h1>Report viewer</h1>
+          <p class="tagline">MSInfo summary, BSOD / bugcheck hints &amp; GPU-Z — local in your browser</p>
+          <p
+            class="privacy-badge"
+            role="note"
+            title="This viewer does not send your files or pasted text to any server for analysis. Outbound network happens only when you click an external link (e.g. Microsoft documentation)."
+          >
+            No network · analysis stays in this browser tab
+          </p>
+        </div>
+      </div>
+      <p class="lede">
+        <strong>Try it now:</strong> pick a tab, then drop an <code>.nfo</code>, a BSOD / WinDbg text file, or GPU-Z logs
+        (or paste into the BSOD box). Double-click <code>index.html</code> or <code>Open-Report-Viewer.bat</code> — no
+        cloud pipeline, no background uploads, no build step.
+      </p>
+    </header>
+
+    <main class="workspace" id="workspace" tabindex="-1">
+      <p class="workspace-invite">
+        Choose a tool below — <strong>drop a file or paste text</strong> and watch summaries, charts, and hints appear
+        in seconds.
+      </p>
+      <script>
+        (function () {
+          try {
+            var h = (location.hash || "").toLowerCase();
+            var map = { "#system": "#tool-panel-system", "#bsod": "#tool-panel-bsod", "#gpu": "#tool-panel-gpu" };
+            if (map[h]) history.replaceState(null, "", map[h]);
+            else if (!/^#tool-panel-(system|bsod|gpu)$/.test(h)) history.replaceState(null, "", "#tool-panel-system");
+          } catch (e) {}
+        })();
+      </script>
+      <nav class="tool-tabs" role="tablist" aria-label="Report tools">
+        <a
+          class="tool-tab tool-tab--system"
+          id="tab-system"
+          role="tab"
+          href="#tool-panel-system"
+          aria-controls="tool-panel-system"
+          aria-selected="true"
+          tabindex="0"
+          title="Shortcut: Shift+1 (outside text fields)"
+        >
+          <span class="tool-tab__title">System information</span>
+          <span class="tool-tab__desc">Summaries &amp; search · NFO / XML</span>
+          <span class="tool-tab__shortcut" aria-hidden="true">Shift+1</span>
+        </a>
+        <a
+          class="tool-tab tool-tab--bsod"
+          id="tab-bsod"
+          role="tab"
+          href="#tool-panel-bsod"
+          aria-controls="tool-panel-bsod"
+          aria-selected="false"
+          tabindex="-1"
+          title="Shortcut: Shift+2 (outside text fields)"
+        >
+          <span class="tool-tab__title">BSOD &amp; WinDbg</span>
+          <span class="tool-tab__desc">STOP codes &amp; links · paste</span>
+          <span class="tool-tab__shortcut" aria-hidden="true">Shift+2</span>
+        </a>
+        <a
+          class="tool-tab tool-tab--gpu"
+          id="tab-gpu"
+          role="tab"
+          href="#tool-panel-gpu"
+          aria-controls="tool-panel-gpu"
+          aria-selected="false"
+          tabindex="-1"
+          title="Shortcut: Shift+3 (outside text fields)"
+        >
+          <span class="tool-tab__title">GPU-Z logs</span>
+          <span class="tool-tab__desc">Charts &amp; exports · multi-file</span>
+          <span class="tool-tab__shortcut" aria-hidden="true">Shift+3</span>
+        </a>
+      </nav>
+
+      <div class="tool-tab-panels">
+      <section
+        class="panel panel--system tool-panel"
+        id="tool-panel-system"
+        role="tabpanel"
+        aria-labelledby="tab-system"
+        data-panel="system"
+      >
+        <div class="panel__head">
+          <div class="panel__head-inner">
+            <div class="panel__icon-wrap" aria-hidden="true">
+              <svg class="panel-icon panel-icon--system" viewBox="0 0 40 40" focusable="false">
+                <rect
+                  x="5"
+                  y="7"
+                  width="24"
+                  height="17"
+                  rx="2.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  opacity="0.95"
+                />
+                <path
+                  d="M9 13h16M9 17h12M9 21h14"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  opacity="0.85"
+                />
+                <path
+                  d="M15 26v3M19 26v3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                />
+                <path
+                  d="M11 31h12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  opacity="0.9"
+                />
+                <rect x="27" y="9" width="9" height="11" rx="1.5" fill="currentColor" opacity="0.22" />
+                <path
+                  d="M29 12h5M29 15h4M29 18h5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.25"
+                  stroke-linecap="round"
+                  opacity="0.9"
+                />
+              </svg>
+            </div>
+            <div class="panel__head-text">
+              <h2>System information</h2>
+              <p class="panel__hint">Windows MSInfo export — <code>.nfo</code> (usually UTF-16 XML)</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="system-analyzer">
+          <div class="system-analyzer__hero">
+            <h3 class="system-analyzer__title">Turn your MSInfo export into a clear summary</h3>
+            <p class="system-analyzer__subtitle">
+              Drop an <code>.nfo</code> — get sections, search, and recommendations fast. Damaged XML is repaired in
+              memory when possible; keep the raw text one toggle away when you need exact lines.
+            </p>
+          </div>
+
+          <div
+            class="dropzone dropzone--system-analyzer"
+            tabindex="0"
+            role="button"
+            aria-label="Drop system information NFO file here"
+          >
+            <div class="dropzone__inner">
+              <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
+              <p><strong>Choose or drop <code>.nfo</code> / <code>.xml</code></strong></p>
+              <p class="dropzone__sub">Same parsing as msinfo32 export — UTF-16 and UTF-8 handled automatically.</p>
+            </div>
+            <input type="file" class="file-input" accept=".nfo,.xml,text/*" />
+          </div>
+
+          <div class="system-toolbar-wrap" hidden>
+            <div class="toolbar system-toolbar">
+              <span class="file-meta"></span>
+              <label class="toolbar__label">
+                Encoding
+                <select class="encoding-select" aria-label="Encoding for system information file">
+                  <option value="auto">Auto</option>
+                  <option value="utf-16le">UTF-16 LE</option>
+                  <option value="utf-16be">UTF-16 BE</option>
+                  <option value="utf-8">UTF-8</option>
+                  <option value="windows-1252">Windows-1252</option>
+                </select>
+              </label>
+              <button type="button" class="btn btn--secondary btn-pretty">Pretty XML</button>
+              <button type="button" class="btn btn--secondary btn-copy">Copy raw</button>
+              <button type="button" class="btn btn--secondary btn-copy-repaired" hidden>
+                Copy repaired XML
+              </button>
+              <button type="button" class="btn btn--ghost btn-msi-raw-toggle" hidden>
+                Show original file
+              </button>
+              <button type="button" class="btn btn--ghost btn-clear">Clear</button>
+            </div>
+            <div class="system-raw-search-row">
+              <label class="system-raw-search-label">
+                <span class="visually-hidden">Search raw export</span>
+                <input
+                  type="search"
+                  class="system-raw-search"
+                  placeholder="Search raw MSInfo text…"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-label="Search raw MSInfo text"
+                />
+              </label>
+              <button type="button" class="btn btn--ghost system-search-clear" hidden>Clear search</button>
+            </div>
+            <div class="system-search-results" hidden>
+              <div class="system-search-results__head">
+                <span class="system-search-results__title">Matches</span>
+                <button type="button" class="btn btn--ghost system-search-close" aria-label="Close search results">
+                  &times;
+                </button>
+              </div>
+              <div class="system-search-results__body"></div>
+            </div>
+          </div>
+
+          <div class="system-body" hidden>
+            <div class="system-summary-panel">
+              <h3 class="system-summary-panel__title">Report summary</h3>
+              <p class="system-summary-panel__hint">
+                Parsed from your MSInfo export — scroll down for the full <strong>Raw export</strong>.
+              </p>
+              <div class="system-summary" aria-live="polite"></div>
+            </div>
+            <details class="sys-section">
+              <summary class="sys-section__summary">
+                <span class="sys-section__icon sys-section__icon--raw" aria-hidden="true"></span>
+                Raw export
+                <span class="sys-section__chevron" aria-hidden="true"></span>
+              </summary>
+              <div class="sys-section__content sys-section__content--raw">
+                <div class="system-raw__pre-wrap">
+                  <pre class="content content--system" spellcheck="false"></pre>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="panel panel--bsod tool-panel"
+        id="tool-panel-bsod"
+        role="tabpanel"
+        aria-labelledby="tab-bsod"
+        data-panel="bsod"
+      >
+        <div class="panel__head">
+          <div class="panel__head-inner">
+            <div class="panel__icon-wrap" aria-hidden="true">
+              <svg class="panel-icon panel-icon--bsod" viewBox="0 0 40 40" focusable="false">
+                <path
+                  d="M20 6 L34 32 H6 Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                  opacity="0.95"
+                />
+                <path
+                  d="M20 14v9M20 27h.01"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </div>
+            <div class="panel__head-text">
+              <h2>Bluescreen (BSOD) hints</h2>
+              <p class="panel__hint">
+                Drop a text export (Event Viewer details, <code>WinDbg</code> <code>!analyze -v</code> with
+                <code>IMAGE_NAME</code> / arguments, vendor log) or merge MSInfo text. The panel surfaces STOP codes,
+                Microsoft doc links, and parsed fields when present — not a substitute for opening the
+                <code>.dmp</code> in WinDbg.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="bsod-paste">
+          <label class="bsod-paste__label" for="bsod-paste-input">Paste WinDbg or Event Viewer text</label>
+          <p class="bsod-paste__hint" id="bsod-paste-hint">
+            Copy the output of <code>!analyze -v</code> (bugcheck block, arguments, <code>IMAGE_NAME</code>), Event
+            Viewer bugcheck details, or any plain-text BSOD export — then run analysis. No file required.
+          </p>
+          <textarea
+            id="bsod-paste-input"
+            class="bsod-paste__textarea"
+            spellcheck="false"
+            rows="12"
+            placeholder="Example: paste from WinDbg starting at &quot;*******************************************************************************&quot; through &quot;Probably caused by&quot; …"
+            aria-describedby="bsod-paste-hint"
+          ></textarea>
+          <div class="bsod-paste__actions">
+            <button type="button" class="btn btn--primary btn-bsod-analyze">Analyze pasted text</button>
+            <span class="bsod-paste__kbd-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> in the box runs analysis</span>
+          </div>
+        </div>
+        <p class="bsod-or-divider" role="separator"><span>or load a file</span></p>
+        <div
+          class="dropzone dropzone--bsod"
+          tabindex="0"
+          role="button"
+          aria-label="Drop BSOD or bugcheck text file here"
+        >
+          <div class="dropzone__inner">
+            <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
+            <p><strong>Drop a <code>.txt</code> / <code>.log</code> here</strong> or click to browse</p>
+            <p class="dropzone__sub">
+              UTF-8 / UTF-16 auto-detect. Same analysis as paste. After loading, you can still edit the box above and
+              click <strong>Analyze pasted text</strong> to replace the buffer.
+            </p>
+          </div>
+          <input type="file" class="file-input file-input--bsod" accept=".txt,.log,.xml,text/*" />
+        </div>
+        <div class="bsod-toolbar toolbar" hidden>
+          <span class="file-meta bsod-file-meta"></span>
+          <button type="button" class="btn btn--secondary btn-bsod-msinfo">Merge MSInfo text</button>
+          <button type="button" class="btn btn--ghost btn-bsod-clear">Clear</button>
+        </div>
+        <div class="bsod-body" hidden>
+          <div class="bsod-report" aria-live="polite"></div>
+          <details class="bsod-raw">
+            <summary class="bsod-raw__summary">Source text</summary>
+            <div class="bsod-raw__pre-wrap">
+              <pre class="content content--bsod" spellcheck="false"></pre>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <section
+        class="panel panel--gpu tool-panel"
+        id="tool-panel-gpu"
+        role="tabpanel"
+        aria-labelledby="tab-gpu"
+        data-panel="gpu"
+      >
+        <div class="panel__head">
+          <div class="panel__head-inner">
+            <div class="panel__icon-wrap" aria-hidden="true">
+              <svg class="panel-icon panel-icon--gpu" viewBox="0 0 40 40" focusable="false">
+                <rect
+                  x="4"
+                  y="6"
+                  width="32"
+                  height="24"
+                  rx="3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  opacity="0.9"
+                />
+                <path
+                  d="M7 28 L12 19 L17 23 L22 14 L27 16 L33 10"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                  stroke-linecap="round"
+                />
+                <circle cx="12" cy="19" r="1.75" fill="currentColor" />
+                <circle cx="17" cy="23" r="1.75" fill="currentColor" />
+                <circle cx="22" cy="14" r="1.75" fill="currentColor" />
+                <circle cx="27" cy="16" r="1.75" fill="currentColor" />
+                <circle cx="33" cy="10" r="1.75" fill="currentColor" />
+                <path
+                  d="M8 31h24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  opacity="0.45"
+                />
+                <rect x="6" y="9" width="10" height="6" rx="1" fill="currentColor" opacity="0.2" />
+                <path
+                  d="M8 11h6M8 13.5h4"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                  stroke-linecap="round"
+                  opacity="0.75"
+                />
+              </svg>
+            </div>
+            <div class="panel__head-text">
+              <h2>GPU log analyzer</h2>
+              <p class="panel__hint">
+                Add <strong>multiple</strong> GPU-Z sensor <code>.txt</code> files — chart up to twelve metrics, correlation matrix,
+                <strong>timeline CSV export</strong> for Excel, raw text bundle download, and rule-based soft checks
+                (temperature, PCIe-style wording). All processing stays in the browser.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="analyzer-toolbar" hidden>
+          <span class="analyzer-meta file-meta"></span>
+          <button type="button" class="btn btn--secondary btn-gpu-export-csv">Export timeline CSV (Excel)</button>
+          <button type="button" class="btn btn--ghost btn-gpu-export-raw">Export raw text bundle</button>
+          <button type="button" class="btn btn--ghost btn-clear-all">Remove all logs</button>
+        </div>
+        <div class="analyzer-chips" hidden aria-label="Loaded logs"></div>
+        <div
+          class="dropzone dropzone--multi"
+          tabindex="0"
+          role="button"
+          aria-label="Drop GPU-Z text logs here"
+        >
+          <div class="dropzone__inner">
+            <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
+            <p><strong>Drop <code>.txt</code> logs here</strong> or click to browse (multi-select)</p>
+            <p class="dropzone__sub">
+              UTF-8 / UTF-16 auto-detect per file. After the first load, keep dropping or browsing here to add more logs
+              for comparison.
+            </p>
+          </div>
+          <input type="file" class="file-input file-input--multi" accept=".txt,.log,text/*" multiple />
+        </div>
+        <div class="analyzer-controls" hidden>
+          <fieldset class="metric-fieldset">
+            <legend>Metrics <span class="metric-fieldset__hint">(one chart each, up to 12)</span></legend>
+            <div class="metric-checkboxes" aria-label="Metrics to chart"></div>
+          </fieldset>
+          <label class="chart-toggle-label">
+            <input type="checkbox" class="toggle-peaks" checked />
+            Peaks &amp; valleys on charts
+          </label>
+          <label class="chart-toggle-label">
+            <input type="checkbox" class="toggle-insights" checked />
+            Correlation matrix &amp; narrative notes
+          </label>
+        </div>
+        <div class="analyzer-alerts" hidden aria-live="polite"></div>
+        <div class="analyzer-chart-wrap" hidden>
+          <div class="analyzer-insights analyzer-insights--dashboard" hidden aria-live="polite"></div>
+          <div class="analyzer-charts" aria-label="Per-metric comparison charts"></div>
+          <p class="chart-axis-note"></p>
+        </div>
+        <div class="analyzer-stats" hidden></div>
+      </section>
+      </div>
+    </main>
+
+    <dialog class="about-dialog" id="about-dialog" aria-labelledby="about-dialog-title">
+      <div class="about-dialog__inner">
+        <header class="about-dialog__head">
+          <div>
+            <h2 id="about-dialog-title">Report viewer</h2>
+            <p class="about-dialog__version-line">
+              Portable build <span class="about-dialog__version" id="about-dialog-version"></span>
+            </p>
+          </div>
+          <button type="button" class="about-dialog__close" data-about-close aria-label="Close">&times;</button>
+        </header>
+        <div class="about-dialog__body">
+          <section class="about-dialog__section" aria-labelledby="about-purpose">
+            <h3 id="about-purpose">Purpose</h3>
+            <p>
+              Read-only helpers for support workflows: structured MSInfo summaries, quick parsing of BSOD / bugcheck
+              text, and GPU-Z sensor log charts — without sending customer data to a remote service from this page.
+            </p>
+          </section>
+          <section class="about-dialog__section" aria-labelledby="about-privacy">
+            <h3 id="about-privacy">Privacy &amp; data handling</h3>
+            <ul>
+              <li>All parsing runs in this browser tab; files are read locally from disk.</li>
+              <li>No background upload pipeline — network use is only when you follow an outbound documentation link.</li>
+              <li>Clearing the page or closing the tab drops in-memory buffers (nothing is written back to disk by this tool).</li>
+            </ul>
+          </section>
+          <section class="about-dialog__section" aria-labelledby="about-limits">
+            <h3 id="about-limits">Limitations (for accurate expectations)</h3>
+            <ul>
+              <li>BSOD analysis is text-based heuristics and links — not a substitute for kernel debugging with the full dump in WinDbg.</li>
+              <li>GPU charts and “soft checks” are interpretive; validate unusual results against raw logs and hardware context.</li>
+              <li>MSInfo repair covers common XML damage patterns; severely truncated exports may still be incomplete.</li>
+            </ul>
+          </section>
+          <section class="about-dialog__section" aria-labelledby="about-keys">
+            <h3 id="about-keys">Keyboard</h3>
+            <ul>
+              <li>
+                <strong>Tabs:</strong> <kbd>Shift</kbd>+<kbd>1</kbd> System information, <kbd>Shift</kbd>+<kbd>2</kbd> BSOD
+                &amp; WinDbg, <kbd>Shift</kbd>+<kbd>3</kbd> GPU-Z logs (physical row keys; skipped in a text field and while
+                this About dialog is open). With focus on a tab, <kbd>Home</kbd> / <kbd>End</kbd> / arrow keys still move
+                between tools.
+              </li>
+              <li><strong>BSOD panel:</strong> <kbd>Ctrl</kbd>+<kbd>Enter</kbd> in the paste box runs analysis.</li>
+              <li>
+                <strong>This dialog:</strong> <kbd>Shift</kbd>+<kbd>?</kbd> (same as <kbd>Shift</kbd>+<kbd>/</kbd> on a
+                US QWERTY keyboard, outside fields) to open; <kbd>Esc</kbd> closes.
+              </li>
+            </ul>
+          </section>
+          <section class="about-dialog__section" aria-labelledby="about-env">
+            <h3 id="about-env">Deployment</h3>
+            <p>
+              Ships as static assets in one folder (<code>index.html</code>, <code>styles.css</code>, <code>app.js</code>,
+              <code>nvidia-logo.png</code>) — no npm install, no CDN, no remote API for analysis. Suitable for
+              air-gapped or locked-down PCs when policy allows opening local HTML. Use a current evergreen browser
+              (Chromium, Firefox, or Edge). See <code>PORTABLE-HANDOFF.txt</code> in the same folder for a full manifest.
+            </p>
+          </section>
+        </div>
+        <div class="about-dialog__foot">
+          <button type="button" class="btn btn--secondary" data-about-close>Close</button>
+        </div>
+      </div>
+    </dialog>
+
+    <footer class="site-footer">
+      <div class="site-footer__bar">
+        <span class="site-footer__version" id="app-version" aria-live="polite"></span>
+        <button type="button" class="site-footer__about" id="about-dialog-open">
+          About · scope, limits &amp; shortcuts
+        </button>
+      </div>
+      <p>
+        <strong>Local-first</strong> — analysis does not upload your logs; only files in this folder are loaded (<code>index.html</code>,
+        <code>styles.css</code>, <code>app.js</code>, <code>nvidia-logo.png</code>). Damaged <code>.nfo</code> files are
+        repaired in memory when possible (see the recovery note in the summary). If you received a ZIP, use
+        <strong>Extract All…</strong> first; opening or running files from inside the ZIP can fail (Windows uses a temp
+        folder and may not place every file there). No CDN or npm. Optional <code>serve.ps1</code> only if a browser blocks
+        local scripts (PowerShell built in).
+      </p>
+    </footer>
+
+    <!-- Plain script (not ES modules) so file:// works with no local server -->
+    <script src="app.js" charset="utf-8"></script>
+  </body>
+</html>

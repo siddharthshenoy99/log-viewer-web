@@ -1,0 +1,71 @@
+================================================================================
+  Report viewer (log-viewer-web) — run locally with zero external dependencies
+================================================================================
+
+WHAT THIS IS
+  A static web app: HTML + CSS + JavaScript + one logo image. All parsing,
+  charts, and summaries run in the browser from files on disk. No npm, Node,
+  Python, installers, CDN, cloud API, or database.
+
+================================================================================
+  FOLDER MANIFEST (keep these together in ONE directory)
+================================================================================
+  REQUIRED — app will not work if any of these are missing:
+    index.html          Main page
+    styles.css          Layout and theme
+    app.js              All logic (plain <script>, file:// friendly)
+    nvidia-logo.png     Header logo
+
+  OPTIONAL — convenience only; not needed for the app to function:
+    Open-Report-Viewer.bat   Double-click to open index.html (Windows)
+    serve.ps1                Tiny HTTP server (built-in PowerShell / .NET only)
+    PORTABLE-HANDOFF.txt     This file
+
+================================================================================
+  HOW TO RUN (no other system required)
+================================================================================
+  1) If you received a ZIP: use “Extract All…” to a normal folder first.
+     Opening from inside the ZIP often breaks paths.
+
+  2) Double-click index.html
+     — OR —
+     Double-click Open-Report-Viewer.bat (same as opening index.html).
+
+  3) If your browser blocks local scripts or styles under file://, run
+     serve.ps1 (right-click → Run with PowerShell). It binds to 127.0.0.1 only;
+     no packages are downloaded. Open the printed URL. Press Ctrl+C to stop.
+
+  Browser: current Microsoft Edge, Google Chrome, or Mozilla Firefox.
+
+  “Open Windows Update” uses ms-settings: — Windows opens Settings locally; that
+  is not a network call from this page.
+
+================================================================================
+  QUICK VERIFY (all REQUIRED files present)
+================================================================================
+  From this folder in PowerShell:
+    @('index.html','styles.css','app.js','nvidia-logo.png') | ForEach-Object {
+      if (Test-Path $_) { "OK  $_" } else { "MISSING  $_" }
+    }
+  Expect four “OK” lines. There is no package.json, node_modules, or build step.
+
+================================================================================
+  OFFLINE / AIR-GAPPED / LOCKED-DOWN NETWORKS
+================================================================================
+  Core features work with no internet connection: load .nfo / logs, summaries,
+  BSOD hints, GPU charts, export. Outbound https:// URLs exist only as normal
+  hyperlinks (e.g. Microsoft docs) or optional “open vendor / search” actions
+  when someone explicitly clicks them — the app does not auto-fetch those URLs
+  for analysis.
+
+================================================================================
+  SAVE OR SHARE THIS FOLDER
+================================================================================
+  Copy or zip the whole log-viewer-web directory (including all REQUIRED files
+  above). Recipients need only a browser; no install step.
+
+QUESTIONS
+  In the app: footer → “About · scope, limits & shortcuts”, or Shift+? outside
+  a text field.
+
+================================================================================

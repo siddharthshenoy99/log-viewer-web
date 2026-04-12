@@ -1586,6 +1586,86 @@
   }
 
   /**
+   * MSInfo often uses curly quotes around paths; normalize so exe/lnk regexes match.
+   * @param {string} s
+   */
+  function normalizeStartupCommandText(s) {
+    return String(s || "")
+      .replace(/\u00A0/g, " ")
+      .replace(/[\u201C\u201D\u201E\u00AB\u00BB]/g, '"')
+      .replace(/[\u2018\u2019]/g, "'");
+  }
+
+  /**
+   * @param {Record<string, string>} f
+   */
+  function pickStartupNameFromFields(f) {
+    if (!f || typeof f !== "object") return "";
+    return displayFieldByLabels(f, [
+      "Name",
+      "Item",
+      "Program",
+      "Display Name",
+      "Caption",
+      "Friendly name",
+      "Startup Item",
+      "Autostartprogramm",
+      "Élément de démarrage",
+      "Elemento de inicio",
+      "Elemento de inicialização",
+    ]);
+  }
+
+  /**
+   * @param {Record<string, string>} f
+   */
+  function pickStartupCommandFromFields(f) {
+    if (!f || typeof f !== "object") return "";
+    const fromLabels = displayFieldByLabels(f, [
+      "Command",
+      "Command String",
+      "Command line",
+      "Command Line",
+      "Command-line",
+      "Command-Line",
+      "Startup command",
+      "Startup Command",
+      "Befehl",
+      "Befehlszeile",
+      "Befehlszeichenfolge",
+      "Línea de comandos",
+      "Linha de comando",
+    ]);
+    if (fromLabels) return normalizeStartupCommandText(fromLabels).trim();
+    let best = "";
+    for (const [k, v] of Object.entries(f)) {
+      const kt = (k || "").trim();
+      const s = normalizeStartupCommandText(String(v || "").trim());
+      if (!s) continue;
+      if (!/(\.exe|\.lnk|\.bat|\.cmd|\.msi|--processstart)/i.test(s)) continue;
+      if (/^location$/i.test(kt) && /^(HKLM|HKCU|HKU|HKEY_)/i.test(s) && !/\.(exe|lnk)/i.test(s)) continue;
+      if (s.length > best.length) best = s;
+    }
+    return best.trim();
+  }
+
+  /**
+   * @param {Record<string, string>} f
+   */
+  function pickStartupLocationFromFields(f) {
+    if (!f || typeof f !== "object") return "";
+    return displayFieldByLabels(f, ["Location", "Key", "Registry key", "Speicherort", "Ort"]);
+  }
+
+  /**
+   * @param {Record<string, string>} f
+   */
+  function pickStartupUserFromFields(f) {
+    if (!f || typeof f !== "object") return "";
+    return displayFieldByLabels(f, ["User", "User Name", "Benutzer", "Usuario", "Utilisateur"]);
+  }
+
+  /**
    * When MSInfo omits Name/Item, infer a readable label from Command (exe/lnk path, --processStart, etc.).
    * @param {string} rawName
    * @param {string} command
@@ -1594,7 +1674,7 @@
   function deriveStartupProgramName(rawName, command, pathLeaf) {
     const n = String(rawName || "").trim();
     if (n) return n;
-    const cmd = String(command || "").trim();
+    const cmd = normalizeStartupCommandText(String(command || "").trim());
     const leaf = String(pathLeaf || "").trim();
 
     if (!cmd) {
@@ -1623,8 +1703,8 @@
     }
 
     if (!fileName) {
-      const um = cmd.match(/\b([a-z]:\\[^":\r\n]+\.(?:exe|lnk|com|bat|cmd|msi|scr))\b/i);
-      if (um) fileName = um[1].split(/[/\\]/).pop() || um[1];
+      const uq = cmd.match(/\b([a-zA-Z]:[/\\][^"\r\n]+\.(?:exe|lnk|com|bat|cmd|msi|scr))\b/i);
+      if (uq) fileName = uq[1].split(/[/\\]/).pop() || uq[1];
     }
 
     if (!fileName) {
@@ -1691,38 +1771,23 @@
       ) &&
       !/Services|Dienste|Servicios agregados|Task\s*Scheduler|Scheduled\s*Tasks|Geplante Tasks|Tâches planifiées/i.test(p);
 
+    /** Paths where MSInfo hangs startup rows (leaf category or parent). */
+    const startupPathOk = (/** @type {string} */ p) =>
+      /\/(Startup Programs|Autostartprogramme|Autostart|Programme beim Start)\//i.test(p) ||
+      /\/Startup\//i.test(p) ||
+      /\/(Startup Programs|Autostartprogramme|Programme beim Start)\s*$/i.test(p) ||
+      /\/Autostart\s*$/i.test(p);
+
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!startupContext(p)) continue;
-      if (
-        !/\/(Startup Programs|Autostartprogramme|Autostart|Programme beim Start|Startup)\//i.test(p) &&
-        !/\/Startup\//i.test(p)
-      ) {
-        continue;
-      }
+      if (!startupPathOk(p)) continue;
       const f = {};
       for (const k of kvs) {
         if (k.path !== p || !k.item) continue;
         f[k.item.trim()] = (k.value || "").trim();
       }
-      const rawName =
-        f.Name ||
-        f.Item ||
-        f.Program ||
-        f["Display Name"] ||
-        f["Startup Item"] ||
-        f["Autostartprogramm"] ||
-        f["Élément de démarrage"] ||
-        f["Elemento de inicio"] ||
-        f["Elemento de inicialização"] ||
-        "";
-      const cmd =
-        f.Command ||
-        f["Command String"] ||
-        f.Befehl ||
-        f.Befehlszeile ||
-        f["Befehlszeichenfolge"] ||
-        f["Línea de comandos"] ||
-        "";
+      const rawName = pickStartupNameFromFields(f);
+      const cmd = pickStartupCommandFromFields(f);
       const pathLeaf = p.split(" / ").pop() || "";
       if (!rawName.trim() && !cmd.trim()) continue;
       if (seen.has(p)) continue;
@@ -1730,34 +1795,17 @@
       out.push({
         name: deriveStartupProgramName(rawName, cmd, pathLeaf),
         command: cmd,
-        location: f.Location || f.Key || f.Speicherort || f.Ort || "",
-        user: f.User || f["User Name"] || f.Benutzer || "",
+        location: pickStartupLocationFromFields(f),
+        user: pickStartupUserFromFields(f),
         path: p,
       });
     }
 
     for (const r of rows) {
-      if (!startupContext(r.path)) continue;
+      if (!startupContext(r.path) || !startupPathOk(r.path)) continue;
       const f = r.fields;
-      const rawName =
-        f.Name ||
-        f.Item ||
-        f.Program ||
-        f["Display Name"] ||
-        f["Startup Item"] ||
-        f["Autostartprogramm"] ||
-        f["Élément de démarrage"] ||
-        f["Elemento de inicio"] ||
-        f["Elemento de inicialização"] ||
-        "";
-      const cmd =
-        f.Command ||
-        f["Command String"] ||
-        f.Befehl ||
-        f.Befehlszeile ||
-        f["Befehlszeichenfolge"] ||
-        f["Línea de comandos"] ||
-        "";
+      const rawName = pickStartupNameFromFields(f);
+      const cmd = pickStartupCommandFromFields(f);
       if (!rawName.trim() && !cmd.trim()) continue;
       const pathLeaf = r.path.split(" / ").pop() || "";
       const displayName = deriveStartupProgramName(rawName, cmd, pathLeaf);
@@ -1767,8 +1815,8 @@
       out.push({
         name: displayName,
         command: cmd,
-        location: f.Location || f.Key || f.Speicherort || f.Ort || "",
-        user: f.User || f["User Name"] || f.Benutzer || "",
+        location: pickStartupLocationFromFields(f),
+        user: pickStartupUserFromFields(f),
         path: r.path,
       });
     }

@@ -1511,8 +1511,16 @@
     const looksLikeDisk = (/** @type {Record<string, string>} */ f) => {
       const blob = `${Object.keys(f).join(" ")} ${Object.values(f).join(" ")}`.toLowerCase();
       return (
-        !!(f["File System"] || f["Filesystem"]) ||
-        (!!f["Total Size"] && (!!f["Free Space"] || !!f["Available Space"])) ||
+        !!(
+          f["File System"] ||
+          f["Filesystem"] ||
+          f.Dateisystem ||
+          f["Système de fichiers"] ||
+          f["Sistema de archivos"] ||
+          f["Sistema de ficheiros"]
+        ) ||
+        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"]) &&
+          !!(f["Free Space"] || f["Available Space"] || f["Freier Speicherplatz"] || f["Verfügbarer Speicherplatz"] || f["Espace libre"])) ||
         (/ntfs|fat32|refs|exfat/i.test(blob) && /gb|tb|bytes|mb/i.test(blob))
       );
     };
@@ -1523,6 +1531,7 @@
       seen.add(path);
       const title =
         f["Drive"] ||
+        f.Laufwerk ||
         f["Volume"] ||
         f["Name"] ||
         (path.match(/Drive\s+[A-Z]:/i) || [""])[0] ||
@@ -1530,12 +1539,26 @@
         "Drive";
       out.push({
         title: String(title),
-        fileSystem: f["File System"] || f.Filesystem || "",
-        totalSize: f["Total Size"] || f["Size"] || "",
-        freeSpace: f["Free Space"] || f["Available Space"] || "",
-        used: f["Used"] || f["Used(%)"] || f["% Used"] || "",
-        volumeName: f["Volume Name"] || f["Label"] || "",
-        serialNumber: f["Serial Number"] || f["Volume Serial Number"] || "",
+        fileSystem:
+          f["File System"] ||
+          f.Filesystem ||
+          f.Dateisystem ||
+          f["Système de fichiers"] ||
+          f["Sistema de archivos"] ||
+          f["Sistema de ficheiros"] ||
+          "",
+        totalSize: f["Total Size"] || f["Size"] || f["Gesamtgröße"] || f["Kapazität"] || f["Taille totale"] || "",
+        freeSpace:
+          f["Free Space"] ||
+          f["Available Space"] ||
+          f["Freier Speicherplatz"] ||
+          f["Verfügbarer Speicherplatz"] ||
+          f["Espace libre"] ||
+          f["Espace disponible"] ||
+          "",
+        used: f["Used"] || f["Used(%)"] || f["% Used"] || f["Belegt"] || f["Utilisé"] || "",
+        volumeName: f["Volume Name"] || f["Label"] || f["Datenträgerbezeichnung"] || f["Nom de volume"] || "",
+        serialNumber: f["Serial Number"] || f["Volume Serial Number"] || f["Seriennummer"] || "",
         path,
       });
     };
@@ -1563,6 +1586,96 @@
   }
 
   /**
+   * When MSInfo omits Name/Item, infer a readable label from Command (exe/lnk path, --processStart, etc.).
+   * @param {string} rawName
+   * @param {string} command
+   * @param {string} pathLeaf last category segment, if any
+   */
+  function deriveStartupProgramName(rawName, command, pathLeaf) {
+    const n = String(rawName || "").trim();
+    if (n) return n;
+    const cmd = String(command || "").trim();
+    const leaf = String(pathLeaf || "").trim();
+
+    if (!cmd) {
+      if (leaf && !/^[\[{]/.test(leaf)) return leaf;
+      return "(unnamed)";
+    }
+
+    /** @type {string} */
+    let fileName = "";
+
+    const ps = /--processstart\s+["']?([^\s"']+)/i.exec(cmd);
+    if (ps) {
+      const seg = ps[1].replace(/^["']|["']$/g, "");
+      fileName = seg.split(/[/\\]/).pop() || seg;
+    }
+
+    if (!fileName) {
+      const quoted = cmd.match(/"([^"]+\.(?:exe|lnk|com|bat|cmd|msi|scr))"/gi);
+      if (quoted && quoted.length) {
+        const paths = quoted.map((q) => q.slice(1, -1));
+        const prefer = paths.filter((u) => /[/\\]/.test(u));
+        const pool = prefer.length ? prefer : paths;
+        const pick = pool[pool.length - 1];
+        fileName = pick.split(/[/\\]/).pop() || pick;
+      }
+    }
+
+    if (!fileName) {
+      const um = cmd.match(/\b([a-z]:\\[^":\r\n]+\.(?:exe|lnk|com|bat|cmd|msi|scr))\b/i);
+      if (um) fileName = um[1].split(/[/\\]/).pop() || um[1];
+    }
+
+    if (!fileName) {
+      const loose = cmd.match(/([^\s"']+\.(?:exe|lnk|com|bat|cmd|msi|scr))\b/i);
+      if (loose) fileName = loose[1].split(/[/\\]/).pop() || loose[1];
+    }
+
+    if (!fileName) {
+      const bare = /^\s*([^\r\n"]+\.lnk)\s*$/i.exec(cmd);
+      if (bare) fileName = bare[1].split(/[/\\]/).pop() || bare[1];
+    }
+
+    if (!fileName) {
+      if (leaf && !/^[\[{]/.test(leaf)) return leaf;
+      return "(unnamed)";
+    }
+
+    fileName = fileName.replace(/^["']|["']$/g, "");
+    const stem = fileName.replace(/\.(exe|lnk|com|bat|cmd|msi|scr)$/i, "").trim();
+    if (!stem) return "(unnamed)";
+
+    const compact = stem.toLowerCase().replace(/\s+/g, "");
+    /** @type {Record<string, string>} */
+    const known = {
+      onedrive: "OneDrive",
+      steam: "Steam",
+      steamservice: "Steam",
+      ealauncher: "EA Desktop",
+      epicgameslauncher: "Epic Games Launcher",
+      riotclientservices: "Riot Client",
+      discord: "Discord",
+      msedge: "Microsoft Edge",
+      chrome: "Google Chrome",
+      firefox: "Mozilla Firefox",
+      teams: "Microsoft Teams",
+      outlook: "Microsoft Outlook",
+      spotify: "Spotify",
+      slack: "Slack",
+      zoom: "Zoom",
+    };
+    if (known[compact]) return known[compact];
+
+    if (/^sendtoonenote$/i.test(compact) || /^send\s+to\s+onenote$/i.test(stem)) return "Send to OneNote";
+    if (/onenote/i.test(stem)) return "OneNote";
+
+    if (compact === "update" && /discord/i.test(cmd)) return "Discord";
+
+    return stem.replace(/\b([a-z])([a-z]*)\b/gi, (_, a, rest) => a.toUpperCase() + rest.toLowerCase());
+  }
+
+  /**
    * @param {{ path: string, item: string, value: string }[]} kvs
    * @param {{ path: string, fields: Record<string, string> }[]} rows
    */
@@ -1572,28 +1685,53 @@
     const seen = new Set();
 
     const startupContext = (/** @type {string} */ p) =>
-      /Software Environment/i.test(p) &&
-      /Startup Programs|Startup\s*Command/i.test(p) &&
-      !/Services|Task\s*Scheduler|Scheduled\s*Tasks/i.test(p);
+      MSINFO_I18N.softwareEnvPath.test(p) &&
+      /Startup Programs|Startup\s*Command|Autostart|Programme beim Start|Programmes au démarrage|Programas de inicio|Programas de inicialização|Автозагрузка|启动程序/i.test(
+        p
+      ) &&
+      !/Services|Dienste|Servicios agregados|Task\s*Scheduler|Scheduled\s*Tasks|Geplante Tasks|Tâches planifiées/i.test(p);
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!startupContext(p)) continue;
-      if (!/\/Startup Programs\//i.test(p) && !/\/Startup\//i.test(p)) continue;
+      if (
+        !/\/(Startup Programs|Autostartprogramme|Autostart|Programme beim Start|Startup)\//i.test(p) &&
+        !/\/Startup\//i.test(p)
+      ) {
+        continue;
+      }
       const f = {};
       for (const k of kvs) {
         if (k.path !== p || !k.item) continue;
         f[k.item.trim()] = (k.value || "").trim();
       }
-      const name = f.Name || f.Item || p.split(" / ").pop() || "";
-      const cmd = f.Command || f["Command String"] || "";
-      if (!name && !cmd) continue;
+      const rawName =
+        f.Name ||
+        f.Item ||
+        f.Program ||
+        f["Display Name"] ||
+        f["Startup Item"] ||
+        f["Autostartprogramm"] ||
+        f["Élément de démarrage"] ||
+        f["Elemento de inicio"] ||
+        f["Elemento de inicialização"] ||
+        "";
+      const cmd =
+        f.Command ||
+        f["Command String"] ||
+        f.Befehl ||
+        f.Befehlszeile ||
+        f["Befehlszeichenfolge"] ||
+        f["Línea de comandos"] ||
+        "";
+      const pathLeaf = p.split(" / ").pop() || "";
+      if (!rawName.trim() && !cmd.trim()) continue;
       if (seen.has(p)) continue;
       seen.add(p);
       out.push({
-        name: name || "(unnamed)",
+        name: deriveStartupProgramName(rawName, cmd, pathLeaf),
         command: cmd,
-        location: f.Location || f.Key || "",
-        user: f.User || f["User Name"] || "",
+        location: f.Location || f.Key || f.Speicherort || f.Ort || "",
+        user: f.User || f["User Name"] || f.Benutzer || "",
         path: p,
       });
     }
@@ -1601,17 +1739,36 @@
     for (const r of rows) {
       if (!startupContext(r.path)) continue;
       const f = r.fields;
-      const name = f.Name || f.Item || f["Display Name"] || "";
-      const cmd = f.Command || f["Command String"] || "";
-      if (!name && !cmd) continue;
-      const key = `${r.path}|${name}|${cmd}`;
+      const rawName =
+        f.Name ||
+        f.Item ||
+        f.Program ||
+        f["Display Name"] ||
+        f["Startup Item"] ||
+        f["Autostartprogramm"] ||
+        f["Élément de démarrage"] ||
+        f["Elemento de inicio"] ||
+        f["Elemento de inicialização"] ||
+        "";
+      const cmd =
+        f.Command ||
+        f["Command String"] ||
+        f.Befehl ||
+        f.Befehlszeile ||
+        f["Befehlszeichenfolge"] ||
+        f["Línea de comandos"] ||
+        "";
+      if (!rawName.trim() && !cmd.trim()) continue;
+      const pathLeaf = r.path.split(" / ").pop() || "";
+      const displayName = deriveStartupProgramName(rawName, cmd, pathLeaf);
+      const key = `${r.path}|${cmd}`;
       if (seen.has(key)) continue;
       seen.add(key);
       out.push({
-        name: name || "(unnamed)",
+        name: displayName,
         command: cmd,
-        location: f.Location || f.Key || "",
-        user: f.User || f["User Name"] || "",
+        location: f.Location || f.Key || f.Speicherort || f.Ort || "",
+        user: f.User || f["User Name"] || f.Benutzer || "",
         path: r.path,
       });
     }
@@ -1632,36 +1789,65 @@
     const dedupKey = (/** @type {string} */ p, /** @type {string} */ n) => `${p}::${n}`;
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
-      if (!/Software Environment/i.test(p) || !/\/Services\//i.test(p)) continue;
-      if (!/\/Services\/.+/i.test(p)) continue;
-      if (/Drivers$|Enumerators|Print\s*Processors/i.test(p)) continue;
+      if (!MSINFO_I18N.softwareEnvPath.test(p) || !/\/(Services|Dienste)\//i.test(p)) continue;
+      if (!/\/(Services|Dienste)\/.+/i.test(p)) continue;
+      if (/Drivers$|Enumerators|Print\s*Processors|Druckertreiber/i.test(p)) continue;
       const f = {};
       for (const k of kvs) {
         if (k.path !== p || !k.item) continue;
         f[k.item.trim()] = (k.value || "").trim();
       }
       const name =
-        f["Display Name"] || f.Name || f["Service Name"] || f.Service || p.split(" / ").pop() || "";
+        f["Display Name"] ||
+        f["Anzeigename"] ||
+        f.Name ||
+        f["Service Name"] ||
+        f["Dienstname"] ||
+        f.Service ||
+        p.split(" / ").pop() ||
+        "";
       if (!name) continue;
       const k0 = dedupKey(p, name);
       if (seen.has(k0)) continue;
       seen.add(k0);
-      const state = f.State || f.Status || f["Current State"] || "";
-      const startMode = f["Startup Type"] || f["Start Mode"] || f["Start type"] || f.Startup || "";
+      const state = f.State || f.Status || f["Current State"] || f["Aktueller Status"] || f.Zustand || "";
+      const startMode =
+        f["Startup Type"] ||
+        f["Start Mode"] ||
+        f["Start type"] ||
+        f.Startup ||
+        f["Starttyp"] ||
+        f["Startmodus"] ||
+        "";
       all.push({ name, state, startMode, path: p });
     }
 
     for (const r of rows) {
-      if (!/Software Environment/i.test(r.path) || !/Services/i.test(r.path)) continue;
-      if (/Startup|Print\s*Spooler\s*Drivers|Enumerators/i.test(r.path)) continue;
+      if (!MSINFO_I18N.softwareEnvPath.test(r.path) || !/(Services|Dienste)/i.test(r.path)) continue;
+      if (/Startup|Autostart|Print\s*Spooler\s*Drivers|Enumerators/i.test(r.path)) continue;
       const f = r.fields;
-      const name = f.Name || f["Display Name"] || f["Service Name"] || f.Service || f.Item || "";
+      const name =
+        f.Name ||
+        f["Display Name"] ||
+        f["Anzeigename"] ||
+        f["Service Name"] ||
+        f["Dienstname"] ||
+        f.Service ||
+        f.Item ||
+        "";
       if (!name) continue;
       const k0 = dedupKey(r.path, name);
       if (seen.has(k0)) continue;
       seen.add(k0);
-      const state = f.State || f.Status || f["Current State"] || "";
-      const startMode = f["Startup Type"] || f["Start Mode"] || f["Start type"] || f.Startup || "";
+      const state = f.State || f.Status || f["Current State"] || f["Aktueller Status"] || f.Zustand || "";
+      const startMode =
+        f["Startup Type"] ||
+        f["Start Mode"] ||
+        f["Start type"] ||
+        f.Startup ||
+        f["Starttyp"] ||
+        f["Startmodus"] ||
+        "";
       all.push({ name: String(name), state: String(state), startMode: String(startMode), path: r.path });
     }
 
@@ -1670,6 +1856,12 @@
       return (
         /\brunning\b/i.test(st) ||
         /^started$/i.test(st) ||
+        /\bgestartet\b/i.test(st) ||
+        /\bwird ausgeführt\b/i.test(st) ||
+        /\bläuft\b/i.test(st) ||
+        /\ben cours d['']exécution\b/i.test(st) ||
+        /\bfuncionando\b/i.test(st) ||
+        /\bвыполняется\b/i.test(st) ||
         /\boperat(ing|ional)\b/i.test(st) ||
         /service\s+is\s+running/i.test(st)
       );
@@ -1719,6 +1911,88 @@
   }
 
   /**
+   * Localized MSInfo category paths and item labels (de/fr/es/pt/ru/zh + English).
+   * Values stay in the export language; matchers let summaries populate from non-English UI locales.
+   */
+  const MSINFO_I18N = {
+    summaryPath: /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Informações do sistema|Сводка о системе|Сведения о системе|系统摘要|系統摘要/i,
+    softwareEnvPath: /Software Environment|Softwareumgebung|Environnement logiciel|Entorno de software|Ambiente de software|Программная среда|软件环境/i,
+    memoryRowPath: /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Виртуальная память|虚拟内存/i,
+    /** @param {RegExp | RegExp[]} labelRe */
+    itemPatterns(labelRe) {
+      return Array.isArray(labelRe) ? labelRe : [labelRe];
+    },
+  };
+
+  /**
+   * @param {RegExp | RegExp[]} labelRe
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   * @param {{ path: string, fields: Record<string, string> }[]} rows
+   */
+  function pickSummaryMemoryI18n(labelRe, kvs, rows) {
+    const patterns = MSINFO_I18N.itemPatterns(labelRe);
+    for (const labelPat of patterns) {
+      let v = (
+        kvs.find((k) => MSINFO_I18N.summaryPath.test(k.path) && labelPat.test((k.item || "").trim()))?.value || ""
+      ).trim();
+      if (v) return v;
+      v = (kvs.find((k) => labelPat.test((k.item || "").trim()))?.value || "").trim();
+      if (v) return v;
+      for (const r of rows) {
+        if (!MSINFO_I18N.memoryRowPath.test(r.path)) continue;
+        for (const [k, val] of Object.entries(r.fields)) {
+          if (labelPat.test(k.trim()) && String(val).trim()) return String(val).trim();
+        }
+      }
+    }
+    return "";
+  }
+
+  /**
+   * @param {RegExp | RegExp[]} itemRes
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   */
+  function kvFromSummaryI18n(itemRes, kvs) {
+    const patterns = MSINFO_I18N.itemPatterns(itemRes);
+    for (const itemRegex of patterns) {
+      const v = (
+        kvs.find((k) => MSINFO_I18N.summaryPath.test(k.path) && itemRegex.test((k.item || "").trim()))?.value || ""
+      ).trim();
+      if (v) return v;
+    }
+    return "";
+  }
+
+  /**
+   * @param {RegExp | RegExp[]} itemRes
+   * @param {{ path: string, fields: Record<string, string> }[]} rows
+   */
+  function fieldFromRowsI18n(itemRes, rows) {
+    const patterns = MSINFO_I18N.itemPatterns(itemRes);
+    for (const re of patterns) {
+      for (const r of rows) {
+        for (const [k, v] of Object.entries(r.fields)) {
+          if (re.test(k.trim()) && v && String(v).trim()) return String(v).trim();
+        }
+      }
+    }
+    return "";
+  }
+
+  /**
+   * @param {RegExp | RegExp[]} itemRes
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   */
+  function kvValI18n(itemRes, kvs) {
+    for (const re of MSINFO_I18N.itemPatterns(itemRes)) {
+      const x = kvs.find((k) => re.test((k.item || "").trim()));
+      const v = (x?.value || "").trim();
+      if (v) return v;
+    }
+    return "";
+  }
+
+  /**
    * @param {{ kvs: { path: string, item: string, value: string }[], rows: { path: string, fields: Record<string, string> }[] }} data
    */
   function extractSystemSummary(data) {
@@ -1752,33 +2026,55 @@
       }
       return "";
     };
+    const pickBoardML = (/** @type {string[]} */ labels) => {
+      for (const lab of labels) {
+        const v = pickBoard(lab) || pickBoardFromRows(lab);
+        if (v) return v;
+      }
+      return "";
+    };
     let motherboard = {
-      manufacturer: pickBoard("Manufacturer") || pickBoardFromRows("Manufacturer"),
-      product:
-        pickBoard("Product") ||
-        pickBoard("Model") ||
-        pickBoard("Product Name") ||
-        pickBoardFromRows("Product") ||
-        pickBoardFromRows("Model") ||
-        pickBoardFromRows("Product Name"),
-      version:
-        pickBoard("Version") ||
-        pickBoard("Serial Number") ||
-        pickBoardFromRows("Version") ||
-        pickBoardFromRows("Serial Number"),
+      manufacturer: pickBoardML(["Manufacturer", "Hersteller", "Fabricant", "Fabricante", "Производитель", "制造商"]),
+      product: pickBoardML([
+        "Product",
+        "Model",
+        "Product Name",
+        "Produkt",
+        "Modell",
+        "Modèle",
+        "Modelo",
+        "Nombre de producto",
+        "Продукт",
+        "型号",
+      ]),
+      version: pickBoardML([
+        "Version",
+        "Serial Number",
+        "Seriennummer",
+        "Numéro de série",
+        "Número de serie",
+        "Версия",
+        "版本",
+      ]),
     };
     if (!motherboard.manufacturer && !motherboard.product) {
       const anyBoard = (/** @param {RegExp} itemRe */ itemRe) =>
         kvs.find((k) => itemRe.test((k.item || "").trim()));
-      const m = anyBoard(/^BaseBoard Manufacturer$/i);
+      const m =
+        anyBoard(/^BaseBoard Manufacturer$/i) ||
+        anyBoard(/^Mainboardhersteller$/i);
       const p =
         anyBoard(/^BaseBoard Product$/i) ||
         anyBoard(/^BaseBoard Model$/i) ||
-        anyBoard(/^Base Board Product$/i);
+        anyBoard(/^Base Board Product$/i) ||
+        anyBoard(/^Mainboardprodukt$/i) ||
+        anyBoard(/^Mainboardmodell$/i);
       const v =
         anyBoard(/^BaseBoard Version$/i) ||
         anyBoard(/^BaseBoard Serial Number$/i) ||
-        anyBoard(/^Base Board Serial Number$/i);
+        anyBoard(/^Base Board Serial Number$/i) ||
+        anyBoard(/^Mainboardversion$/i) ||
+        anyBoard(/^Mainboardseriennummer$/i);
       motherboard = {
         manufacturer: m?.value?.trim() || "",
         product: p?.value?.trim() || "",
@@ -1788,9 +2084,10 @@
     if (!motherboard.manufacturer && !motherboard.product) {
       for (const r of rows) {
         const f = r.fields;
-        const man = f["BaseBoard Manufacturer"] || f["Base Board Manufacturer"];
-        const prod = f["BaseBoard Product"] || f["Base Board Product"] || f["BaseBoard Model"];
-        const ver = f["BaseBoard Version"] || f["BaseBoard Serial Number"];
+        const man = f["BaseBoard Manufacturer"] || f["Base Board Manufacturer"] || f.Hersteller;
+        const prod =
+          f["BaseBoard Product"] || f["Base Board Product"] || f["BaseBoard Model"] || f.Produkt || f.Modell || f.Modèle;
+        const ver = f["BaseBoard Version"] || f["BaseBoard Serial Number"] || f.Seriennummer;
         if (man || prod || ver) {
           motherboard = {
             manufacturer: String(man || "").trim() || motherboard.manufacturer,
@@ -1809,9 +2106,14 @@
     };
     pushItem(/^System Family$/i);
     pushItem(/Chassis Type/i);
+    pushItem(/^Gehäusetyp$/i);
+    pushItem(/^Type de châssis$/i);
     pushItem(/PC System Type/i);
+    pushItem(/^PC-Systemtyp$/i);
     pushItem(/^Platform Role$/i);
+    pushItem(/^Systemrolle$/i);
     pushItem(/^System SKU$/i);
+    pushItem(/^Systemtyp$/i);
     for (const r of rows) {
       const f = r.fields;
       const blob = [f.Type, f.Chassis, f["Enclosure Type"], f["System Type"], f.Description]
@@ -1820,71 +2122,186 @@
       if (blob) formHints.push(blob);
     }
 
-    const kvVal = (/** @param {RegExp} re */ re) => {
-      const x = kvs.find((k) => re.test((k.item || "").trim()));
-      return (x?.value || "").trim();
-    };
-    /** @param {string} label */
-    const fieldFromRows = (label) => {
-      const re = new RegExp(`^${label}$`, "i");
-      for (const r of rows) {
-        for (const [k, v] of Object.entries(r.fields)) {
-          if (re.test(k.trim()) && v && String(v).trim()) return String(v).trim();
-        }
-      }
-      return "";
-    };
-    const kvFromSummary = (itemRegex) =>
-      (
-        kvs.find((k) => /System Summary/i.test(k.path) && itemRegex.test((k.item || "").trim()))?.value || ""
-      ).trim();
     const osName =
-      kvFromSummary(/^OS Name$/i) || kvVal(/^OS Name$/i) || fieldFromRows("OS Name");
-    let osVersionLine = kvFromSummary(/^Version$/i) || kvVal(/^OS Version$/i) || fieldFromRows("OS Version");
-    if (!osVersionLine) {
-      const verKv = kvs.find(
-        (k) =>
-          /^Version$/i.test((k.item || "").trim()) &&
-          /\b(10|11)\.0\.\d+|Microsoft Windows|Windows \d+/i.test(k.value || "")
+      kvFromSummaryI18n(
+        [
+          /^OS Name$/i,
+          /^Betriebssystemname$/i,
+          /^Nom du système d'exploitation$/i,
+          /^Nombre del sistema operativo$/i,
+          /^Nome do SO$/i,
+          /^Nome do sistema operacional$/i,
+          /^Nom du système$/i,
+          /^Название ОС$/i,
+          /^操作系统名称$/i,
+        ],
+        kvs
+      ) ||
+      kvValI18n([/^OS Name$/i, /^Betriebssystemname$/i], kvs) ||
+      fieldFromRowsI18n(
+        [
+          /^OS Name$/i,
+          /^Betriebssystemname$/i,
+          /^Nom du système d'exploitation$/i,
+          /^Nombre del sistema operativo$/i,
+          /^Название ОС$/i,
+        ],
+        rows
       );
+    let osVersionLine =
+      kvFromSummaryI18n(
+        [
+          /^Version$/i,
+          /^Betriebssystemversion$/i,
+          /^Version du système$/i,
+          /^Version du système d'exploitation$/i,
+          /^Versión del sistema operativo$/i,
+          /^Versão do sistema operacional$/i,
+          /^Версия ОС$/i,
+        ],
+        kvs
+      ) ||
+      kvValI18n(
+        [/^OS Version$/i, /^Betriebssystemversion$/i, /^Version du système d'exploitation$/i],
+        kvs
+      ) ||
+      fieldFromRowsI18n([/^OS Version$/i, /^Betriebssystemversion$/i], rows);
+    if (!osVersionLine) {
+      const verKv = kvs.find((k) => {
+        const it = (k.item || "").trim();
+        const versionish =
+          /^Version$/i.test(it) ||
+          /^Betriebssystemversion$/i.test(it) ||
+          /^OS Version$/i.test(it) ||
+          /^Versión$/i.test(it);
+        return versionish && /\b(10|11)\.0\.\d+|Microsoft Windows|Windows \d+/i.test(k.value || "");
+      });
       osVersionLine = (verKv?.value || "").trim();
     }
-    if (!osVersionLine) osVersionLine = kvVal(/^Version$/i) || fieldFromRows("Version");
+    if (!osVersionLine) {
+      osVersionLine =
+        kvValI18n([/^Version$/i, /^Betriebssystemversion$/i], kvs) ||
+        fieldFromRowsI18n([/^Version$/i, /^Betriebssystemversion$/i], rows);
+    }
     const osBuild = extractWindowsBuildFromVersionLine(osVersionLine);
 
     const systemTypeRaw =
-      (
-        kvs.find((k) => /System Summary/i.test(k.path) && /^System Type$/i.test((k.item || "").trim()))?.value || ""
-      ).trim() ||
-      kvVal(/^System Type$/i) ||
-      fieldFromRows("System Type");
+      kvFromSummaryI18n(
+        [
+          /^System Type$/i,
+          /^Systemtyp$/i,
+          /^Type du système$/i,
+          /^Tipo de sistema$/i,
+          /^Tipo de Sistema$/i,
+          /^Тип системы$/i,
+          /^系统类型$/i,
+        ],
+        kvs
+      ) ||
+      kvValI18n([/^System Type$/i, /^Systemtyp$/i, /^Tipo de sistema$/i], kvs) ||
+      fieldFromRowsI18n(
+        [/^System Type$/i, /^Systemtyp$/i, /^Type du système$/i, /^Tipo de sistema$/i],
+        rows
+      );
     const processor =
-      (
-        kvs.find((k) => /System Summary/i.test(k.path) && /^Processor$/i.test((k.item || "").trim()))?.value || ""
-      ).trim() ||
-      kvVal(/^Processor$/i) ||
-      fieldFromRows("Processor");
+      kvFromSummaryI18n(
+        [
+          /^Processor$/i,
+          /^Processeur$/i,
+          /^Prozessor$/i,
+          /^Procesador$/i,
+          /^Processador$/i,
+          /^Процессор$/i,
+          /^处理器$/i,
+        ],
+        kvs
+      ) ||
+      kvValI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i], kvs) ||
+      fieldFromRowsI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i], rows);
     const timeZone =
-      (
-        kvs.find((k) => /System Summary/i.test(k.path) && /^Time Zone$/i.test((k.item || "").trim()))?.value || ""
-      ).trim() ||
-      kvVal(/^Time Zone$/i) ||
-      fieldFromRows("Time Zone");
+      kvFromSummaryI18n(
+        [
+          /^Time Zone$/i,
+          /^Zeitzone$/i,
+          /^Fuseau horaire$/i,
+          /^Zona horaria$/i,
+          /^Fuso horário$/i,
+          /^Часовой пояс$/i,
+          /^时区$/i,
+        ],
+        kvs
+      ) ||
+      kvValI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i], kvs) ||
+      fieldFromRowsI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i], rows);
     const osInstallDate =
-      (
-        kvs.find(
-          (k) =>
-            /System Summary/i.test(k.path) &&
-            /Original Install Date|Install Date/i.test((k.item || "").trim())
-        )?.value || ""
-      ).trim() ||
-      kvVal(/Original Install Date/i) ||
-      kvVal(/^Install Date$/i) ||
-      fieldFromRows("Original Install Date");
+      kvFromSummaryI18n(
+        [
+          /Original Install Date/i,
+          /Install Date/i,
+          /Ursprüngliches Installationsdatum/i,
+          /^Installationsdatum$/i,
+          /Date d'installation d'origine/i,
+          /Date d'installation originale/i,
+          /Data de instalação original/i,
+          /Data da instalação original/i,
+          /Дата установки/i,
+          /原始安装日期/i,
+        ],
+        kvs
+      ) ||
+      kvValI18n(
+        [
+          /Original Install Date/i,
+          /^Install Date$/i,
+          /Ursprüngliches Installationsdatum/i,
+          /^Installationsdatum$/i,
+          /Date d'installation/i,
+        ],
+        kvs
+      ) ||
+      fieldFromRowsI18n(
+        [/Original Install Date/i, /Ursprüngliches Installationsdatum/i, /Date d'installation d'origine/i],
+        rows
+      );
 
-    let platformRole = kvVal(/^Platform Role$/i) || fieldFromRows("Platform Role");
-    let pcSystemType = kvVal(/^PC System Type$/i) || fieldFromRows("PC System Type");
-    let chassisType = kvVal(/Chassis Type/i) || fieldFromRows("Chassis Type");
+    let platformRole =
+      kvValI18n(
+        [
+          /^Platform Role$/i,
+          /^Systemrolle$/i,
+          /^Plattformrolle$/i,
+          /^Rôle de la plateforme$/i,
+          /^Rol de la plataforma$/i,
+          /^Função da plataforma$/i,
+          /^Роль платформы$/i,
+        ],
+        kvs
+      ) ||
+      fieldFromRowsI18n([/^Platform Role$/i, /^Systemrolle$/i, /^Rôle de la plateforme$/i], rows);
+    let pcSystemType =
+      kvValI18n(
+        [
+          /^PC System Type$/i,
+          /^PC-Systemtyp$/i,
+          /^Type de PC$/i,
+          /^Tipo de PC$/i,
+          /^Тип ПК$/i,
+        ],
+        kvs
+      ) || fieldFromRowsI18n([/^PC System Type$/i, /^PC-Systemtyp$/i, /^Type de PC$/i], rows);
+    let chassisType =
+      kvValI18n(
+        [
+          /Chassis Type/i,
+          /^Gehäusetyp$/i,
+          /^Type de châssis$/i,
+          /^Tipo de chasis$/i,
+          /^Тип корпуса$/i,
+          /^机箱类型$/i,
+        ],
+        kvs
+      ) ||
+      fieldFromRowsI18n([/^Chassis Type$/i, /^Gehäusetyp$/i, /^Type de châssis$/i], rows);
 
     let systemForm = "";
     const pr = platformRole.toLowerCase();
@@ -1927,14 +2344,37 @@
 
     let biosVersion = "";
     let biosDate = "";
-    const biosKv = kvs.find((k) => /^BIOS Version\/Date$/i.test(k.item));
+    const biosKv = kvs.find((k) => {
+      const it = (k.item || "").trim();
+      return (
+        /^BIOS Version\/Date$/i.test(it) ||
+        /^BIOS-Version\/Datum$/i.test(it) ||
+        /^BIOS-Version\s*\/\s*Datum$/i.test(it) ||
+        /^Version du BIOS\/Date$/i.test(it) ||
+        /^Version du BIOS\s*\/\s*Date$/i.test(it) ||
+        /^Versión de BIOS \/ fecha$/i.test(it) ||
+        /^Versão do BIOS \/ data$/i.test(it) ||
+        /^Версия BIOS\/дата$/i.test(it) ||
+        /^BIOS版本\/日期$/i.test(it)
+      );
+    });
     if (biosKv) {
       const parts = biosKv.value.split(",").map((x) => x.trim());
       biosVersion = parts[0] || biosKv.value;
       biosDate = parts.slice(1).join(", ") || "";
     } else {
-      const v = kvs.find((k) => /BIOS Version$/i.test(k.item) && !/date/i.test(k.item));
-      const d = kvs.find((k) => /BIOS.*Date|Release Date/i.test(k.item));
+      const v = kvs.find(
+        (k) =>
+          (/BIOS Version$/i.test((k.item || "").trim()) ||
+            /^BIOS-Version$/i.test((k.item || "").trim()) ||
+            /^Version du BIOS$/i.test((k.item || "").trim())) &&
+          !/date|datum|fecha|дата|日期/i.test((k.item || "").trim())
+      );
+      const d = kvs.find((k) =>
+        /BIOS.*Date|Release Date|BIOS-Datum|Datum du BIOS|fecha del BIOS|Data do BIOS|дата BIOS/i.test(
+          (k.item || "").trim()
+        )
+      );
       biosVersion = v?.value || "";
       biosDate = d?.value || "";
       const pathBios = kvs.filter((k) => /\/BIOS$/i.test(k.path) || /Components.*BIOS/i.test(k.path));
@@ -2030,18 +2470,47 @@
 
     /** @type { { device: string, vendor: string, detail: string }[] } */
     const problems = [];
+    const problemPathRe =
+      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Устройства с проблемами|设备有问题|問題のあるデバイス/i;
     for (const r of rows) {
-      if (!/Problem Devices/i.test(r.path)) continue;
+      if (!problemPathRe.test(r.path)) continue;
       const f = r.fields;
-      const device = f.Device || f.Name || f.Item || f.Description || "";
-      const vendor = f.Vendor || f.Manufacturer || f.Provider || "";
-      const detail = f.Problem || f["Problem Code"] || f.Error || f.Status || "";
+      const device =
+        f.Device ||
+        f.Name ||
+        f.Item ||
+        f.Description ||
+        f.Gerät ||
+        f.Dispositivo ||
+        f.Устройство ||
+        f.デバイス ||
+        "";
+      const vendor =
+        f.Vendor ||
+        f.Manufacturer ||
+        f.Provider ||
+        f.Hersteller ||
+        f.Fabricant ||
+        f.Fabricante ||
+        f.Fournisseur ||
+        f.Производитель ||
+        "";
+      const detail =
+        f.Problem ||
+        f["Problem Code"] ||
+        f.Error ||
+        f.Status ||
+        f["Code de problème"] ||
+        f["Código de problema"] ||
+        f.Fehler ||
+        "";
       if (device || vendor) problems.push({ device, vendor, detail });
     }
     if (!problems.length) {
       for (const k of kvs) {
-        if (!/Problem Devices/i.test(k.path)) continue;
-        if (/^Device$/i.test(k.item) || /^Name$/i.test(k.item)) {
+        if (!problemPathRe.test(k.path)) continue;
+        const it = (k.item || "").trim();
+        if (/^Device$/i.test(it) || /^Name$/i.test(it) || /^Gerät$/i.test(it) || /^Dispositivo$/i.test(it)) {
           problems.push({ device: k.value, vendor: "", detail: "" });
         }
       }
@@ -2049,22 +2518,8 @@
 
     const networkAdapters = summarizeNetworkAdapters(kvs, rows);
 
-    /** @param {RegExp} labelRe */
-    const pickSummaryMemory = (labelRe) => {
-      let v = (
-        kvs.find((k) => /System Summary/i.test(k.path) && labelRe.test((k.item || "").trim()))?.value || ""
-      ).trim();
-      if (v) return v;
-      v = (kvs.find((k) => labelRe.test((k.item || "").trim()))?.value || "").trim();
-      if (v) return v;
-      for (const r of rows) {
-        if (!/System Summary|(^|\/)Memory(\/|$)|Virtual Memory/i.test(r.path)) continue;
-        for (const [k, val] of Object.entries(r.fields)) {
-          if (labelRe.test(k.trim()) && String(val).trim()) return String(val).trim();
-        }
-      }
-      return "";
-    };
+    /** @param {RegExp | RegExp[]} labelRe */
+    const pickSummaryMemory = (labelRe) => pickSummaryMemoryI18n(labelRe, kvs, rows);
 
     /** MSInfo often labels the path as "Page File" (not "Page File Location(s)"). */
     const looksLikePageFilePath = (/** @type {string} */ raw) => {
@@ -2078,39 +2533,134 @@
 
     const pickPageFileLocation = () => {
       let v =
-        pickSummaryMemory(/Page File Location\(s\)?/i) ||
-        pickSummaryMemory(/Paging File Location/i) ||
-        pickSummaryMemory(/Paging Files?:\s*Location/i);
+        pickSummaryMemory([
+          /Page File Location\(s\)?/i,
+          /Paging File Location/i,
+          /Paging Files?:\s*Location/i,
+          /Auslagerungsdateiort/i,
+          /Speicherort der Auslagerungsdatei/i,
+          /Emplacement du fichier d'échange/i,
+          /Ubicación del archivo de paginación/i,
+          /Localização do arquivo de paginação/i,
+          /Расположение файла подкачки/i,
+          /分页文件位置/i,
+        ]) || "";
       if (v) return v;
       for (const k of kvs) {
         const it = (k.item || "").trim();
-        if (/page file location/i.test(it) && k.value.trim()) return k.value.trim();
+        if (
+          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|分页文件位置/i.test(
+            it
+          ) &&
+          k.value.trim()
+        ) {
+          return k.value.trim();
+        }
       }
       for (const k of kvs) {
         const it = (k.item || "").trim();
-        if (/^page file$/i.test(it) && looksLikePageFilePath(k.value)) return k.value.trim();
+        if (
+          (/^page file$/i.test(it) ||
+            /^auslagerungsdatei$/i.test(it) ||
+            /^fichier d'échange$/i.test(it) ||
+            /^archivo de paginación$/i.test(it) ||
+            /^arquivo de paginação$/i.test(it)) &&
+          looksLikePageFilePath(k.value)
+        ) {
+          return k.value.trim();
+        }
       }
       for (const r of rows) {
-        if (!/System Summary|(^|\/)Memory(\/|$)|Virtual Memory|Paging/i.test(r.path)) continue;
+        if (
+          !MSINFO_I18N.memoryRowPath.test(r.path) &&
+          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页/i.test(r.path)
+        ) {
+          continue;
+        }
         for (const [key, val] of Object.entries(r.fields)) {
           const kt = key.trim();
-          if (/page file location/i.test(kt) && String(val).trim()) return String(val).trim();
-          if (/^page file$/i.test(kt) && looksLikePageFilePath(String(val))) return String(val).trim();
+          if (
+            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|分页文件位置/i.test(
+              kt
+            ) &&
+            String(val).trim()
+          ) {
+            return String(val).trim();
+          }
+          if (
+            (/^page file$/i.test(kt) ||
+              /^auslagerungsdatei$/i.test(kt) ||
+              /^fichier d'échange$/i.test(kt) ||
+              /^archivo de paginación$/i.test(kt)) &&
+            looksLikePageFilePath(String(val))
+          ) {
+            return String(val).trim();
+          }
         }
       }
       return "";
     };
 
     const memory = {
-      installedRam:
-        pickSummaryMemory(/Installed Physical Memory \(RAM\)/i) ||
-        pickSummaryMemory(/^Installed Physical Memory$/i) ||
-        pickSummaryMemory(/^Installed RAM$/i),
-      totalPhysical: pickSummaryMemory(/^Total Physical Memory$/i),
-      availablePhysical: pickSummaryMemory(/^Available Physical Memory$/i),
-      totalVirtual: pickSummaryMemory(/^Total Virtual Memory$/i),
-      availableVirtual: pickSummaryMemory(/^Available Virtual Memory$/i),
-      pageFileSpace: pickSummaryMemory(/Page File Space/i) || pickSummaryMemory(/Paging File Space/i),
+      installedRam: pickSummaryMemory([
+        /Installed Physical Memory \(RAM\)/i,
+        /^Installed Physical Memory$/i,
+        /^Installed RAM$/i,
+        /^Installierter physischer Arbeitsspeicher/i,
+        /Physischer Arbeitsspeicher.*RAM/i,
+        /^Mémoire physique installée/i,
+        /^Memoria física instalada/i,
+        /^Memória física instalada/i,
+        /^Установленная оперативная память/i,
+        /^已安装的物理内存/i,
+      ]),
+      totalPhysical: pickSummaryMemory([
+        /^Total Physical Memory$/i,
+        /^Gesamter physischer Arbeitsspeicher$/i,
+        /^Mémoire physique totale$/i,
+        /^Memoria física \(total\)/i,
+        /^Memória física total$/i,
+        /^Всего физической памяти/i,
+        /^物理内存总量$/i,
+      ]),
+      availablePhysical: pickSummaryMemory([
+        /^Available Physical Memory$/i,
+        /^Verfügbarer physischer Arbeitsspeicher$/i,
+        /^Mémoire physique disponible$/i,
+        /^Memoria física disponible$/i,
+        /^Memória física disponível$/i,
+        /^Доступная физическая память/i,
+        /^可用物理内存$/i,
+      ]),
+      totalVirtual: pickSummaryMemory([
+        /^Total Virtual Memory$/i,
+        /^Gesamter virtueller Arbeitsspeicher$/i,
+        /^Mémoire virtuelle totale$/i,
+        /^Memoria virtual \(total\)/i,
+        /^Memória virtual total$/i,
+        /^Всего виртуальной памяти/i,
+        /^虚拟内存总量$/i,
+      ]),
+      availableVirtual: pickSummaryMemory([
+        /^Available Virtual Memory$/i,
+        /^Verfügbarer virtueller Arbeitsspeicher$/i,
+        /^Mémoire virtuelle disponible$/i,
+        /^Memoria virtual disponible$/i,
+        /^Memória virtual disponível$/i,
+        /^Доступная виртуальная память/i,
+        /^可用虚拟内存$/i,
+      ]),
+      pageFileSpace: pickSummaryMemory([
+        /Page File Space/i,
+        /Paging File Space/i,
+        /Auslagerungsdateigröße/i,
+        /Größe der Auslagerungsdatei/i,
+        /Espace du fichier d'échange/i,
+        /Espacio del archivo de paginación/i,
+        /Espaço do arquivo de paginação/i,
+        /Размер файла подкачки/i,
+        /分页文件空间/i,
+      ]),
       pageFileLocation: pickPageFileLocation(),
     };
 

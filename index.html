@@ -37,7 +37,21 @@
         <div class="brand-text">
           <p class="hero-kicker">Instant insight · stays on your machine</p>
           <h1>Report viewer</h1>
-          <p class="tagline">MSInfo summary, BSOD / bugcheck hints &amp; GPU-Z — local in your browser</p>
+          <p class="tagline">
+            <span>MSInfo summary, BSOD / bugcheck hints &amp; GPU-Z</span>
+            <span class="tagline-arrow" aria-hidden="true">
+              <svg class="tagline-arrow__svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span>local in your browser</span>
+          </p>
           <p
             class="privacy-badge"
             role="note"
@@ -56,8 +70,19 @@
 
     <main class="workspace" id="workspace" tabindex="-1">
       <p class="workspace-invite">
-        Choose a tool below — <strong>drop a file or paste text</strong> and watch summaries, charts, and hints appear
-        in seconds.
+        <span>Choose a tool below</span>
+        <span class="tagline-arrow" aria-hidden="true">
+          <svg class="tagline-arrow__svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M5 12h14M13 6l6 6-6 6"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </span>
+        <span><strong>drop a file or paste text</strong> and watch summaries, charts, and hints appear in seconds.</span>
       </p>
       <script>
         (function () {
@@ -492,21 +517,21 @@
             <h3 id="about-purpose">Purpose</h3>
             <p>
               Read-only helpers for support workflows: structured MSInfo summaries, quick parsing of BSOD / bugcheck
-              text, and GPU-Z sensor log charts — without sending customer data to a remote service from this page.
+              text, and GPU-Z sensor log charts, without sending customer data to a remote service from this page.
             </p>
           </section>
           <section class="about-dialog__section" aria-labelledby="about-privacy">
             <h3 id="about-privacy">Privacy &amp; data handling</h3>
             <ul>
               <li>All parsing runs in this browser tab; files are read locally from disk.</li>
-              <li>No background upload pipeline — network use is only when you follow an outbound documentation link.</li>
+              <li>No background upload pipeline, network use is only when you follow an outbound documentation link.</li>
               <li>Clearing the page or closing the tab drops in-memory buffers (nothing is written back to disk by this tool).</li>
             </ul>
           </section>
           <section class="about-dialog__section" aria-labelledby="about-limits">
             <h3 id="about-limits">Limitations (for accurate expectations)</h3>
             <ul>
-              <li>BSOD analysis is text-based heuristics and links — not a substitute for kernel debugging with the full dump in WinDbg.</li>
+              <li>BSOD analysis is text-based heuristics and links, not a substitute for kernel debugging with the full dump in WinDbg.</li>
               <li>GPU charts and “soft checks” are interpretive; validate unusual results against raw logs and hardware context.</li>
               <li>MSInfo repair covers common XML damage patterns; severely truncated exports may still be incomplete.</li>
             </ul>
@@ -531,7 +556,19 @@
             <h3 id="about-env">Deployment</h3>
             <p>
               Ships as static assets in one folder (<code>index.html</code>, <code>styles.css</code>, <code>app.js</code>,
-              <code>nvidia-logo.png</code>) — no npm install, no CDN, no remote API for analysis. Suitable for
+              <code>nvidia-logo.png</code>)
+              <span class="tagline-arrow" aria-hidden="true">
+                <svg class="tagline-arrow__svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M5 12h14M13 6l6 6-6 6"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </span>
+              no npm install, no CDN, no remote API for analysis. Suitable for
               air-gapped or locked-down PCs when policy allows opening local HTML. Use a current evergreen browser
               (Chromium, Firefox, or Edge). See <code>PORTABLE-HANDOFF.txt</code> in the same folder for a full manifest.
             </p>
@@ -551,7 +588,21 @@
         </button>
       </div>
       <p>
-        <strong>Local-first</strong> — analysis does not upload your logs; only files in this folder are loaded (<code>index.html</code>,
+        <span class="footer-local-lead">
+          <strong>Local-first</strong>
+          <span class="tagline-arrow" aria-hidden="true">
+            <svg class="tagline-arrow__svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M5 12h14M13 6l6 6-6 6"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </span>
+        </span>
+        analysis does not upload your logs; only files in this folder are loaded (<code>index.html</code>,
         <code>styles.css</code>, <code>app.js</code>, <code>nvidia-logo.png</code>). Damaged <code>.nfo</code> files are
         repaired in memory when possible (see the recovery note in the summary). If you received a ZIP, use
         <strong>Extract All…</strong> first; opening or running files from inside the ZIP can fail (Windows uses a temp

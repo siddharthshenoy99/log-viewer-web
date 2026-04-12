@@ -1918,44 +1918,287 @@
   }
 
   /**
+   * @typedef {{ time: string, type: string, details: string, severity: 'error'|'warning'|'info', category: string, sourceTitle: string, path: string }} WerTimelineEntry
+   */
+
+  /** @param {Record<string, string>} fields @param {RegExp[]} patterns */
+  function werFirstFieldMatch(fields, patterns) {
+    for (const [k, v] of Object.entries(fields)) {
+      const kt = k.trim();
+      const vv = String(v || "").trim();
+      if (!vv) continue;
+      for (const re of patterns) {
+        if (re.test(kt)) return vv;
+      }
+    }
+    return "";
+  }
+
+  /** @param {Record<string, string>} fields */
+  function werPickTime(fields) {
+    return werFirstFieldMatch(fields, [
+      /^time$/i,
+      /^heure$/i,
+      /^hora$/i,
+      /^zeit$/i,
+      /^data\s*[\/\u2215]\s*ora$/i,
+      /^fecha$/i,
+      /^時間$/i,
+      /^时间$/i,
+      /^время$/i,
+      /^czas$/i,
+      /^čas$/i,
+      /^tid$/i,
+      /^saat$/i,
+    ]);
+  }
+
+  /** @param {Record<string, string>} fields */
+  function werPickType(fields) {
+    const t =
+      werFirstFieldMatch(fields, [
+        /^type$/i,
+        /^tipo$/i,
+        /^typ$/i,
+        /^event\s*name$/i,
+        /^nome\s*evento$/i,
+        /^nom\s*de\s*l['\u2019]?événement$/i,
+        /^事件名称$/i,
+        /^イベント名$/i,
+        /^тип$/i,
+        /^fehlertyp$/i,
+        /^fault\s*bucket$/i,
+        /^bucket\s*id$/i,
+      ]) || "";
+    if (t) return t;
+    const fb = werFirstFieldMatch(fields, [/fault/i, /wer\s*report/i, /problem\s*signature/i]);
+    return fb || "";
+  }
+
+  /** @param {Record<string, string>} fields */
+  function werPickDetails(fields) {
+    const d =
+      werFirstFieldMatch(fields, [
+        /^details$/i,
+        /^détails$/i,
+        /^detalles$/i,
+        /^dettagli$/i,
+        /^detalhes$/i,
+        /^詳細$/i,
+        /^详细信息$/i,
+        /^подробности$/i,
+        /^szczegóły$/i,
+        /^podrobnosti$/i,
+        /^açıklama$/i,
+      ]) || "";
+    if (d) return d;
+    /** @type {string[]} */
+    const skip = [];
+    const time = werPickTime(fields);
+    const typ = werPickType(fields);
+    if (time) skip.push(time);
+    if (typ) skip.push(typ);
+    const parts = [];
+    for (const [k, v] of Object.entries(fields)) {
+      const vv = String(v || "").trim();
+      if (!vv || vv.length > 4000) continue;
+      if (skip.includes(vv)) continue;
+      if (/^response\s*info$/i.test(k.trim()) && vv.length < 20) continue;
+      parts.push(`${k.trim()}: ${vv}`);
+    }
+    return parts.slice(0, 24).join("\n");
+  }
+
+  /** @param {string} type @param {string} details */
+  function werCategorize(type, details) {
+    const t = `${type} ${details}`.toLowerCase();
+    if (/appcrash|application|\.exe|faulting\s*application|app\s*error/i.test(t)) return "Application";
+    if (/bsod|kernel|livekernel|bugcheck|system\s*error|kmode/i.test(t)) return "System";
+    if (/driver|nvlddmkm|dxgmms|sys\b|\.sys/i.test(t)) return "Drivers";
+    if (/hardware|disk|memory|cpu|gpu|device/i.test(t)) return "Hardware";
+    if (/network|tcp|dns|winsock|wifi|ethernet/i.test(t)) return "Network";
+    if (/security|firewall|defender|malware|virus/i.test(t)) return "Security";
+    if (/service\s|svchost|wuauserv/i.test(t)) return "Services";
+    return "Other";
+  }
+
+  /** @param {string} type @param {string} details */
+  function werSeverity(type, details) {
+    const x = `${type} ${details}`.toLowerCase();
+    if (/critical|bsod|bugcheck|livekernel|kernel\s*power|0xc000021a/i.test(x)) return "error";
+    if (/appcrash|application\s*error|exception|fault|driver\s*stopped|stopped\s*responding/i.test(x)) return "warning";
+    return "info";
+  }
+
+  /** @param {string} time @param {string} type @param {string} details @param {string} path @param {string} sourceTitle */
+  function werMakeEntry(time, type, details, path, sourceTitle) {
+    const ti = (time || "").trim() || "Unknown time";
+    const ty = (type || "").trim() || "Windows Error Reporting";
+    const de = (details || "").trim() || "No details in export.";
+    return {
+      time: ti,
+      type: ty,
+      details: de,
+      severity: /** @type {'error'|'warning'|'info'} */ (werSeverity(ty, de)),
+      category: werCategorize(ty, de),
+      sourceTitle: sourceTitle || path.split(" / ").slice(-2).join(" / ") || path,
+      path,
+    };
+  }
+
+  /**
+   * Split Item/Value kvs for one path into multiple records when "Time" (or locale equivalent) repeats.
+   * @param {{ path: string, item: string, value: string }[]} pathKvs
+   * @param {string} path
+   * @param {string} sourceTitle
+   * @returns {WerTimelineEntry[]}
+   */
+  function werEntriesFromSegmentedKvs(pathKvs, path, sourceTitle) {
+    const anchorRes = [
+      /^time$/i,
+      /^heure$/i,
+      /^hora$/i,
+      /^zeit$/i,
+      /^data\s*[\/\u2215]\s*ora$/i,
+      /^時間$/i,
+      /^时间$/i,
+      /^время$/i,
+    ];
+    const isAnchor = (/** @type {string} */ item) => {
+      const it = (item || "").trim();
+      return anchorRes.some((re) => re.test(it));
+    };
+
+    /** @type {Record<string, string>[]} */
+    const chunks = [];
+    /** @type {Record<string, string>} */
+    let cur = {};
+    for (const k of pathKvs) {
+      const item = (k.item || "").trim();
+      if (!item) continue;
+      if (isAnchor(item) && Object.keys(cur).length && cur[item]) {
+        chunks.push(cur);
+        cur = {};
+      }
+      cur[item] = (k.value || "").trim();
+    }
+    if (Object.keys(cur).length) chunks.push(cur);
+
+    if (chunks.length === 0 && pathKvs.length) {
+      const merged = {};
+      for (const k of pathKvs) {
+        const it = (k.item || "").trim();
+        if (!it) continue;
+        merged[it] = (k.value || "").trim();
+      }
+      if (Object.keys(merged).length) chunks.push(merged);
+    }
+
+    /** @type {WerTimelineEntry[]} */
+    const out = [];
+    for (const f of chunks) {
+      const time = werPickTime(f);
+      const typ = werPickType(f);
+      const det = werPickDetails(f);
+      if (!time && !typ && (!det || det.length < 3)) continue;
+      out.push(werMakeEntry(time, typ, det, path, sourceTitle));
+    }
+    if (out.length === 0 && chunks.length) {
+      const merged = chunks.reduce((acc, ch) => ({ ...acc, ...ch }), {});
+      const det =
+        werPickDetails(merged) ||
+        Object.entries(merged)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join("\n")
+          .slice(0, 8000);
+      if (det.length >= 3) {
+        out.push(werMakeEntry(werPickTime(merged), werPickType(merged), det, path, sourceTitle));
+      }
+    }
+    return out;
+  }
+
+  /** @param {Record<string, string>} fields @param {string} path */
+  function werEntryFromRowFields(fields, path) {
+    const time = werPickTime(fields);
+    const typ = werPickType(fields);
+    const det = werPickDetails(fields);
+    const title = path.split(" / ").slice(-2).join(" / ") || path;
+    if (!time && !typ && (!det || det.length < 3)) return null;
+    return werMakeEntry(time, typ, det, path, title);
+  }
+
+  /** @param {WerTimelineEntry[]} entries */
+  function werAnalyze(entries) {
+    let criticalCount = 0;
+    const types = new Set();
+    /** @type {Date[]} */
+    const dates = [];
+    for (const e of entries) {
+      if (e.severity === "error") criticalCount++;
+      if (e.type) types.add(e.type.slice(0, 120));
+      const d = Date.parse(e.time);
+      if (!Number.isNaN(d)) dates.push(new Date(d));
+    }
+    let timeSpan = 0;
+    if (dates.length > 1) {
+      dates.sort((a, b) => a - b);
+      timeSpan = Math.max(1, Math.ceil((dates[dates.length - 1] - dates[0]) / (86400000)));
+    } else if (dates.length === 1) {
+      timeSpan = 1;
+    }
+    return { criticalCount, uniqueTypes: types.size, timeSpan };
+  }
+
+  /**
    * @param {{ path: string, item: string, value: string }[]} kvs
    * @param {{ path: string, fields: Record<string, string> }[]} rows
-   * @returns {{ path: string, title: string, fields: Record<string, string> }[]}
+   * @returns {WerTimelineEntry[]}
    */
   function extractWindowsErrorReports(kvs, rows) {
-    /** @type {{ path: string, title: string, fields: Record<string, string> }[]} */
-    const out = [];
-    const seen = new Set();
-
     const pathOk = (/** @type {string} */ p) =>
       /Windows Error Reporting|Problem Reports|Reliability|WER|Report\s*Archive|Fault\s*Bucket/i.test(p) &&
       !/Group\s*Policy|Registry\s*key/i.test(p);
 
-    for (const p of [...new Set(kvs.map((k) => k.path))]) {
-      if (!pathOk(p)) continue;
-      const f = {};
-      for (const k of kvs) {
-        if (k.path !== p || !k.item) continue;
-        f[k.item.trim()] = (k.value || "").trim();
-      }
-      if (Object.keys(f).length === 0) continue;
-      if (seen.has(p)) continue;
-      seen.add(p);
-      const title = p.split(" / ").slice(-2).join(" / ") || p;
-      out.push({ path: p, title, fields: f });
-    }
+    /** @param {WerTimelineEntry} a @param {WerTimelineEntry} b */
+    const byTimeDesc = (a, b) => {
+      const da = Date.parse(a.time);
+      const db = Date.parse(b.time);
+      if (!Number.isNaN(da) && !Number.isNaN(db)) return db - da;
+      if (!Number.isNaN(da)) return -1;
+      if (!Number.isNaN(db)) return 1;
+      return 0;
+    };
+
+    /** @type {WerTimelineEntry[]} */
+    const list = [];
+    const dedupe = new Set();
+
+    const pushDeduped = (/** @type {WerTimelineEntry} */ e) => {
+      const key = `${e.time}|${e.type}|${e.details.slice(0, 240)}`;
+      if (dedupe.has(key)) return;
+      dedupe.add(key);
+      list.push(e);
+    };
 
     for (const r of rows) {
       if (!pathOk(r.path)) continue;
-      if (seen.has(r.path)) continue;
-      const f = { ...r.fields };
-      if (Object.keys(f).length === 0) continue;
-      seen.add(r.path);
-      const title = r.path.split(" / ").slice(-2).join(" / ") || r.path;
-      out.push({ path: r.path, title, fields: f });
+      const ent = werEntryFromRowFields(r.fields, r.path);
+      if (ent) pushDeduped(ent);
     }
 
-    return out.slice(0, 120);
+    const pathsFromKvs = [...new Set(kvs.map((k) => k.path))].filter(pathOk);
+    for (const p of pathsFromKvs) {
+      const pathKvs = kvs.filter((k) => k.path === p);
+      const title = p.split(" / ").slice(-2).join(" / ") || p;
+      const fromSeg = werEntriesFromSegmentedKvs(pathKvs, p, title);
+      if (fromSeg.length) {
+        for (const e of fromSeg) pushDeduped(e);
+      }
+    }
+
+    list.sort(byTimeDesc);
+    return list.slice(0, 150);
   }
 
   /**
@@ -3485,6 +3728,127 @@
   }
 
   /**
+   * @param {ReturnType<typeof extractWindowsErrorReports>} entries
+   * @param {(s: string) => string} esc
+   */
+  function renderWindowsErrorReportsBody(entries, esc) {
+    if (!entries || entries.length === 0) {
+      return `<p class="summary-empty">No Windows Error Reporting / Problem Reports entries found in this export.</p>`;
+    }
+    const uid = `w${Math.random().toString(36).slice(2, 10)}`;
+    const analysis = werAnalyze(entries);
+    const cats = [...new Set(entries.map((e) => e.category))].sort();
+    const showTabs = cats.length > 1;
+
+    const iconForCat = (/** @type {string} */ c) => {
+      const m = {
+        Application: "📱",
+        System: "⚙️",
+        Drivers: "🔧",
+        Hardware: "🖥️",
+        Network: "🌐",
+        Security: "🔒",
+        Services: "🔄",
+        Other: "❓",
+      };
+      return m[/** @type {keyof typeof m} */ (c)] || "❓";
+    };
+
+    const timeAgo = (/** @type {string} */ timeStr) => {
+      if (!timeStr || timeStr === "Unknown time") return timeStr;
+      const t = Date.parse(timeStr);
+      if (Number.isNaN(t)) return timeStr;
+      const diffMs = Date.now() - t;
+      const diffDays = Math.floor(diffMs / 86400000);
+      if (diffDays < 0) return timeStr;
+      if (diffDays === 0) return "Today";
+      if (diffDays === 1) return "Yesterday";
+      if (diffDays < 7) return `${diffDays} days ago`;
+      if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+      return `${Math.floor(diffDays / 30)} months ago`;
+    };
+
+    const dash = `<div class="wer-dashboard" aria-label="Error analysis summary">
+      <h4 class="wer-dashboard__title">Error analysis summary</h4>
+      <div class="wer-dashboard__stats">
+        <div class="wer-stat"><span class="wer-stat__n">${entries.length}</span><span class="wer-stat__l">Total reports</span></div>
+        <div class="wer-stat"><span class="wer-stat__n">${analysis.criticalCount}</span><span class="wer-stat__l">High severity</span></div>
+        <div class="wer-stat"><span class="wer-stat__n">${analysis.uniqueTypes}</span><span class="wer-stat__l">Unique types</span></div>
+        <div class="wer-stat"><span class="wer-stat__n">${analysis.timeSpan || "—"}</span><span class="wer-stat__l">Day range</span></div>
+      </div>
+    </div>`;
+
+    const radios = showTabs
+      ? `<input class="wer-sr-only" type="radio" name="wer-cat-${uid}" id="wer-${uid}-all" checked>
+      ${cats
+        .map(
+          (c, i) =>
+            `<input class="wer-sr-only" type="radio" name="wer-cat-${uid}" id="wer-${uid}-c${i}">`
+        )
+        .join("")}
+      <div class="wer-cat-tabs" role="tablist" aria-label="Filter by category">
+        <label class="wer-tab wer-tab--all" for="wer-${uid}-all">All</label>
+        ${cats
+          .map(
+            (c, i) =>
+              `<label class="wer-tab" for="wer-${uid}-c${i}">${iconForCat(c)} ${esc(c)}</label>`
+          )
+          .join("")}
+      </div>`
+      : "";
+
+    const timeline = entries
+      .slice(0, 80)
+      .map((e) => {
+        const sevClass = e.severity === "error" ? "wer-item--error" : e.severity === "warning" ? "wer-item--warn" : "wer-item--info";
+        const prev = e.details.length > 140 ? `${esc(e.details.slice(0, 140))}…` : esc(e.details);
+        const cat = esc(e.category);
+        return `<div class="wer-item ${sevClass}" data-wer-cat="${cat}">
+        <div class="wer-item__marker" aria-hidden="true"><span class="wer-item__ico">${iconForCat(e.category)}</span></div>
+        <div class="wer-item__body">
+          <div class="wer-item__head">
+            <span class="wer-item__sev" title="Severity">${e.severity === "error" ? "🔴" : e.severity === "warning" ? "🟡" : "🔵"}</span>
+            <span class="wer-item__type">${esc(e.type)}</span>
+            <span class="wer-item__when">${esc(timeAgo(e.time))}</span>
+          </div>
+          <div class="wer-item__meta"><span class="muted-label">Time</span> ${esc(e.time)} · <span class="muted-label">Source</span> ${esc(
+          e.sourceTitle
+        )}</div>
+          <p class="wer-item__preview">${prev}</p>
+          <details class="wer-details">
+            <summary class="wer-details__sum">Show full details</summary>
+            <pre class="wer-details__pre">${esc(e.details)}</pre>
+          </details>
+        </div>
+      </div>`;
+      })
+      .join("");
+
+    const cssRules = showTabs
+      ? cats
+          .map((c, i) => {
+            const id = `wer-${uid}-c${i}`;
+            const escCat = c.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+            return `#${id}:checked ~ .wer-timeline .wer-item{display:none!important}#${id}:checked ~ .wer-timeline .wer-item[data-wer-cat="${escCat}"]{display:flex!important}`;
+          })
+          .concat([`#wer-${uid}-all:checked ~ .wer-timeline .wer-item{display:flex!important}`])
+          .join("")
+      : "";
+
+    const styleBlock = showTabs ? `<style>#wer-root-${uid}{position:relative}${cssRules}</style>` : "";
+
+    return `${dash}
+<div class="wer-root" id="wer-root-${uid}">
+  ${styleBlock}
+  ${radios}
+  <div class="wer-timeline" aria-label="Windows error reports, most recent first">
+    ${timeline}
+  </div>
+  <p class="wer-footnote">Showing up to <strong>80</strong> of <strong>${entries.length}</strong> parsed report(s). Open the raw export to search the full file.</p>
+</div>`;
+  }
+
+  /**
    * @param {HTMLElement} el
    * @param {ReturnType<typeof extractSystemSummary> | null} sum
    * @param {boolean} ok
@@ -3633,21 +3997,7 @@
     });
 
     const wer = sum.windowsErrorReports || [];
-    const werBody =
-      wer.length > 0
-        ? `<div class="system-ext-stack">${wer
-            .map((it) => {
-              const entries = Object.entries(it.fields).slice(0, 32);
-              const body =
-                entries.length > 0
-                  ? `<dl class="system-summary-dl system-summary-dl--compact">${entries
-                      .map(([k, v]) => `<dt>${esc(k)}</dt><dd class="system-summary-dd--wrap">${esc(String(v))}</dd>`)
-                      .join("")}</dl>`
-                  : '<p class="summary-empty">No fields.</p>';
-              return `<article class="system-storage-card"><h4 class="system-storage-card__title">${esc(it.title)}</h4>${body}</article>`;
-            })
-            .join("")}</div>`
-        : `<p class="summary-empty">No Windows Error Reporting / Problem Reports sections found in this export.</p>`;
+    const werBody = renderWindowsErrorReportsBody(wer, esc);
     const werHtml = renderReportCategoryAccordion("Windows error reports", werBody, esc, {
       count: wer.length || null,
       icon: "wer",

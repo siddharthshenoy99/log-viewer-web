@@ -2013,9 +2013,12 @@
   function werCategorize(type, details) {
     const t = `${type} ${details}`.toLowerCase();
     if (/appcrash|application|\.exe|faulting\s*application|app\s*error/i.test(t)) return "Application";
-    if (/bsod|kernel|livekernel|bugcheck|system\s*error|kmode/i.test(t)) return "System";
     if (/driver|nvlddmkm|dxgmms|sys\b|\.sys/i.test(t)) return "Drivers";
-    if (/hardware|disk|memory|cpu|gpu|device/i.test(t)) return "Hardware";
+    if (
+      /bsod|kernel|livekernel|bugcheck|system\s*error|kmode|hardware|disk|memory|cpu|gpu|device/i.test(t)
+    ) {
+      return "System";
+    }
     if (/network|tcp|dns|winsock|wifi|ethernet/i.test(t)) return "Network";
     if (/security|firewall|defender|malware|virus/i.test(t)) return "Security";
     if (/service\s|svchost|wuauserv/i.test(t)) return "Services";
@@ -3727,6 +3730,30 @@
     </div>`;
   }
 
+  /** @param {string} c */
+  function werNormalizeCategory(c) {
+    return c === "Hardware" ? "System" : c;
+  }
+
+  /** Minimal stroke icons (currentColor) — matches black / green system theme. */
+  const WER_CATEGORY_ICONS = {
+    All: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+    Application: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M2 8h20"/></svg>`,
+    Drivers: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 1 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.77 3.77z"/></svg>`,
+    System: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg>`,
+    Network: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>`,
+    Security: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>`,
+    Services: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="6" rx="1"/><rect x="2" y="15" width="20" height="6" rx="1"/><path d="M6 9v6M10 9v6"/></svg>`,
+    Other: `<svg class="wer-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>`,
+  };
+
+  /** @param {string} cat */
+  function werCategoryIconSvg(cat) {
+    const c = werNormalizeCategory(cat);
+    const k = /** @type {keyof typeof WER_CATEGORY_ICONS} */ (c);
+    return WER_CATEGORY_ICONS[k] || WER_CATEGORY_ICONS.Other;
+  }
+
   /**
    * @param {ReturnType<typeof extractWindowsErrorReports>} entries
    * @param {(s: string) => string} esc
@@ -3737,13 +3764,8 @@
     }
     const uid = `w${Math.random().toString(36).slice(2, 10)}`;
     const analysis = werAnalyze(entries);
-    const cats = [...new Set(entries.map((e) => e.category))].sort();
+    const cats = [...new Set(entries.map((e) => werNormalizeCategory(e.category)))].sort();
     const showTabs = cats.length > 1;
-
-    const catInitial = (/** @type {string} */ c) => {
-      const t = (c || "?").trim();
-      return t ? t.charAt(0).toUpperCase() : "?";
-    };
 
     const timeAgo = (/** @type {string} */ timeStr) => {
       if (!timeStr || timeStr === "Unknown time") return timeStr;
@@ -3778,11 +3800,11 @@
         )
         .join("")}
       <div class="wer-cat-tabs" role="tablist" aria-label="Filter by category">
-        <label class="wer-tab wer-tab--all" for="wer-${uid}-all">All</label>
+        <label class="wer-tab wer-tab--all" for="wer-${uid}-all"><span class="wer-tab__inner">${WER_CATEGORY_ICONS.All}<span class="wer-tab__txt">All</span></span></label>
         ${cats
           .map(
             (c, i) =>
-              `<label class="wer-tab" for="wer-${uid}-c${i}">${esc(c)}</label>`
+              `<label class="wer-tab" for="wer-${uid}-c${i}"><span class="wer-tab__inner">${werCategoryIconSvg(c)}<span class="wer-tab__txt">${esc(c)}</span></span></label>`
           )
           .join("")}
       </div>`
@@ -3796,9 +3818,10 @@
         const sevTitle =
           e.severity === "error" ? "High severity" : e.severity === "warning" ? "Warning" : "Informational";
         const prev = e.details.length > 140 ? `${esc(e.details.slice(0, 140))}…` : esc(e.details);
-        const cat = esc(e.category);
+        const catKey = werNormalizeCategory(e.category);
+        const cat = esc(catKey);
         return `<div class="wer-item ${sevClass}" data-wer-cat="${cat}">
-        <div class="wer-item__marker" aria-hidden="true"><span class="wer-item__ico">${esc(catInitial(e.category))}</span></div>
+        <div class="wer-item__marker" aria-hidden="true">${werCategoryIconSvg(catKey)}</div>
         <div class="wer-item__body">
           <div class="wer-item__head">
             <span class="wer-item__sev" title="${esc(sevTitle)}"><span class="wer-sev-dot wer-sev-dot--${e.severity}"></span></span>

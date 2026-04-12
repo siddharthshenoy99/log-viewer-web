@@ -1746,6 +1746,7 @@ details.sys-section:not([open]) .sys-section__chevron {
 .wer-dashboard {
   border-radius: var(--radius);
   padding: 0.85rem 1rem;
+  margin-bottom: 0.85rem;
   border: 1px solid var(--border);
   background: var(--bg-panel);
 }
@@ -1791,14 +1792,15 @@ details.sys-section:not([open]) .sys-section__chevron {
 .wer-cat-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.55rem;
+  row-gap: 0.55rem;
   align-items: center;
 }
 
 .wer-tab {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.35rem;
   padding: 0.35rem 0.65rem;
   border-radius: 999px;
   font-size: 0.78rem;
@@ -1817,6 +1819,34 @@ details.sys-section:not([open]) .sys-section__chevron {
 
 .wer-tab--all {
   font-weight: 700;
+}
+
+.wer-tab__inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.wer-tab__txt {
+  line-height: 1.2;
+}
+
+.wer-ic {
+  width: 1em;
+  height: 1em;
+  flex-shrink: 0;
+  color: currentColor;
+  opacity: 0.92;
+}
+
+.wer-tab:hover .wer-ic {
+  opacity: 1;
+}
+
+.wer-item__marker .wer-ic {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--system-accent);
 }
 
 .wer-timeline {

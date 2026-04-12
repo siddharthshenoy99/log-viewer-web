@@ -3740,18 +3740,9 @@
     const cats = [...new Set(entries.map((e) => e.category))].sort();
     const showTabs = cats.length > 1;
 
-    const iconForCat = (/** @type {string} */ c) => {
-      const m = {
-        Application: "📱",
-        System: "⚙️",
-        Drivers: "🔧",
-        Hardware: "🖥️",
-        Network: "🌐",
-        Security: "🔒",
-        Services: "🔄",
-        Other: "❓",
-      };
-      return m[/** @type {keyof typeof m} */ (c)] || "❓";
+    const catInitial = (/** @type {string} */ c) => {
+      const t = (c || "?").trim();
+      return t ? t.charAt(0).toUpperCase() : "?";
     };
 
     const timeAgo = (/** @type {string} */ timeStr) => {
@@ -3791,7 +3782,7 @@
         ${cats
           .map(
             (c, i) =>
-              `<label class="wer-tab" for="wer-${uid}-c${i}">${iconForCat(c)} ${esc(c)}</label>`
+              `<label class="wer-tab" for="wer-${uid}-c${i}">${esc(c)}</label>`
           )
           .join("")}
       </div>`
@@ -3800,14 +3791,17 @@
     const timeline = entries
       .slice(0, 80)
       .map((e) => {
-        const sevClass = e.severity === "error" ? "wer-item--error" : e.severity === "warning" ? "wer-item--warn" : "wer-item--info";
+        const sevClass =
+          e.severity === "error" ? "wer-item--error" : e.severity === "warning" ? "wer-item--warning" : "wer-item--info";
+        const sevTitle =
+          e.severity === "error" ? "High severity" : e.severity === "warning" ? "Warning" : "Informational";
         const prev = e.details.length > 140 ? `${esc(e.details.slice(0, 140))}…` : esc(e.details);
         const cat = esc(e.category);
         return `<div class="wer-item ${sevClass}" data-wer-cat="${cat}">
-        <div class="wer-item__marker" aria-hidden="true"><span class="wer-item__ico">${iconForCat(e.category)}</span></div>
+        <div class="wer-item__marker" aria-hidden="true"><span class="wer-item__ico">${esc(catInitial(e.category))}</span></div>
         <div class="wer-item__body">
           <div class="wer-item__head">
-            <span class="wer-item__sev" title="Severity">${e.severity === "error" ? "🔴" : e.severity === "warning" ? "🟡" : "🔵"}</span>
+            <span class="wer-item__sev" title="${esc(sevTitle)}"><span class="wer-sev-dot wer-sev-dot--${e.severity}"></span></span>
             <span class="wer-item__type">${esc(e.type)}</span>
             <span class="wer-item__when">${esc(timeAgo(e.time))}</span>
           </div>

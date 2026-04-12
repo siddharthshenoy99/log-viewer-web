@@ -1771,11 +1771,15 @@
       ) &&
       !/Services|Dienste|Servicios agregados|Task\s*Scheduler|Scheduled\s*Tasks|Geplante Tasks|Tâches planifiées/i.test(p);
 
-    /** Paths where MSInfo hangs startup rows (leaf category or parent). */
+    /**
+     * Paths where MSInfo hangs startup rows. Category paths use " / " between segments,
+     * so allow optional whitespace before each slash (e.g. "Startup Programs / OneDrive").
+     */
     const startupPathOk = (/** @type {string} */ p) =>
-      /\/(Startup Programs|Autostartprogramme|Autostart|Programme beim Start)\//i.test(p) ||
-      /\/Startup\//i.test(p) ||
+      /\/(Startup Programs|Autostartprogramme|Autostart|Programme beim Start)\s*\//i.test(p) ||
+      /\/Startup\s*\//i.test(p) ||
       /\/(Startup Programs|Autostartprogramme|Programme beim Start)\s*$/i.test(p) ||
+      /\/Autostartprogramme\s*$/i.test(p) ||
       /\/Autostart\s*$/i.test(p);
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {

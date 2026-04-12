@@ -110,17 +110,6 @@
     "DHCP-kiszolgáló IPv4",
   ]);
 
-  /** @param {Uint8Array} u */
-  function looksLikeUtf16Text(u) {
-    if (u.length < 4) return false;
-    let nulPairs = 0;
-    const sample = Math.min(u.length, 8000);
-    for (let i = 0; i + 1 < sample; i += 2) {
-      if (u[i + 1] === 0 && u[i] !== 0) nulPairs++;
-    }
-    return nulPairs > sample / 8;
-  }
-
   /** @param {string} s */
   function looksLikeUtf16MisreadAsUtf8(s) {
     const sample = s.slice(0, 2000);
@@ -208,6 +197,43 @@
   }
 
   /**
+   * Bytes after the UTF-16 BOM are not always UTF-16 LE; pick LE, BE, or UTF-8 by MSInfo plausibility score.
+   * @param {Uint8Array} body
+   * @param {'le' | 'be'} bomEndian BOM that was stripped from the original buffer
+   */
+  function decodeUtf16BomBodyWithBestGuess(body, bomEndian) {
+    const le = stripLoneUtf16Surrogates(new TextDecoder("utf-16le").decode(body));
+    const be = stripLoneUtf16Surrogates(new TextDecoder("utf-16be").decode(body));
+    let u8 = "";
+    try {
+      u8 = stripLoneUtf16Surrogates(new TextDecoder("utf-8", { fatal: true }).decode(body));
+    } catch {
+      u8 = stripLoneUtf16Surrogates(new TextDecoder("utf-8", { fatal: false }).decode(body));
+    }
+    const rank = (/** @type {string} */ txt) => {
+      const a = alignMsInfoDecodedTextToXmlStart(txt);
+      return Math.max(scoreMsInfoDecodedText(a), scorePlainTextMsInfoExport(txt));
+    };
+    /** @type {{ t: string, k: "le" | "be" | "utf8"; s: number }[]} */
+    const variants = [
+      { t: le, k: "le", s: rank(le) },
+      { t: be, k: "be", s: rank(be) },
+      { t: u8, k: "utf8", s: rank(u8) },
+    ];
+    variants.sort((a, b) => b.s - a.s);
+    const w = variants[0];
+    let label = bomEndian === "le" ? "UTF-16 LE (BOM)" : "UTF-16 BE (BOM)";
+    if (bomEndian === "le") {
+      if (w.k === "be") label = "UTF-16 BE (auto — content matched better than LE)";
+      else if (w.k === "utf8") label = "UTF-8 (auto — content matched better after LE BOM)";
+    } else {
+      if (w.k === "le") label = "UTF-16 LE (auto — content matched better than BE)";
+      else if (w.k === "utf8") label = "UTF-8 (auto — content matched better after BE BOM)";
+    }
+    return { text: w.t, label };
+  }
+
+  /**
    * @param {ArrayBuffer} buf
    * @param {'system' | 'gpu'} panelKind
    * @param {string} encoding
@@ -216,44 +242,143 @@
     const u = new Uint8Array(buf);
     if (encoding !== "auto") {
       const dec = new TextDecoder(encoding, { fatal: false });
-      return { text: dec.decode(u), label: encoding };
+      return { text: stripLoneUtf16Surrogates(dec.decode(u)), label: encoding };
     }
     if (u.length >= 2 && u[0] === 0xff && u[1] === 0xfe) {
-      return { text: new TextDecoder("utf-16le").decode(u.subarray(2)), label: "UTF-16 LE (BOM)" };
+      return decodeUtf16BomBodyWithBestGuess(u.subarray(2), "le");
     }
     if (u.length >= 2 && u[0] === 0xfe && u[1] === 0xff) {
-      return { text: new TextDecoder("utf-16be").decode(u.subarray(2)), label: "UTF-16 BE (BOM)" };
+      return decodeUtf16BomBodyWithBestGuess(u.subarray(2), "be");
     }
     if (u.length >= 3 && u[0] === 0xef && u[1] === 0xbb && u[2] === 0xbf) {
-      return { text: new TextDecoder("utf-8").decode(u.subarray(3)), label: "UTF-8 (BOM)" };
+      return {
+        text: stripLoneUtf16Surrogates(new TextDecoder("utf-8").decode(u.subarray(3))),
+        label: "UTF-8 (BOM)",
+      };
     }
-    const tryUtf8 = () => {
-      try {
-        const t = new TextDecoder("utf-8", { fatal: true }).decode(u);
-        if (looksLikeUtf16MisreadAsUtf8(t)) return null;
-        return { text: t, label: "UTF-8" };
-      } catch {
-        return null;
-      }
-    };
-    const tryUtf16le = () => {
-      const t = new TextDecoder("utf-16le", { fatal: false }).decode(u);
-      if (!looksLikeUtf16Text(u) && panelKind === "gpu") {
-        const utf8 = tryUtf8();
-        if (utf8) return utf8;
-      }
-      return { text: t, label: "UTF-16 LE" };
-    };
     if (panelKind === "system") {
-      if (looksLikeUtf16Text(u)) return tryUtf16le();
-      const le = tryUtf16le();
-      const trimmedLe = le.text.trimStart().replace(/^\uFEFF/, "");
-      if (trimmedLe.startsWith("<") || trimmedLe.startsWith("<?xml")) return le;
-      const u8 = tryUtf8();
-      if (u8) return u8;
-      return le;
+      return decodeSystemBufferAuto(u);
     }
     return decodeGpuAutodetect(u);
+  }
+
+  /**
+   * Heuristic score: how much decoded text resembles an MSInfo XML export (used to pick encoding).
+   * @param {string} s
+   */
+  function scoreMsInfoDecodedText(s) {
+    const head = s.slice(0, Math.min(s.length, 250000));
+    if (!head.trim()) return -1e9;
+    let sc = 0;
+    const rep = (head.match(/\uFFFD/g) || []).length;
+    const nul = (head.match(/\x00/g) || []).length;
+    sc -= rep * 40;
+    sc -= nul * 14;
+    const t = head.replace(/^\uFEFF/, "").trimStart();
+    if (t.startsWith("<") || t.startsWith("<?xml")) sc += 14;
+    if (/<MsInfo\b/i.test(head)) sc += 85;
+    if (/<Category\b/i.test(head)) sc += 38;
+    if (/<Data\b/i.test(head)) sc += 28;
+    if (/<\/MsInfo\s*>/i.test(head)) sc += 22;
+    /** msinfo32 “text” export (tab-separated, localized) — not XML */
+    if (/システム情報の報告|システム情報\s*の\s*報告/.test(head)) sc += 52;
+    if (/\[システムの要約\]/.test(head)) sc += 48;
+    if (/項目\s*\t+\s*値/.test(head)) sc += 44;
+    if (/system\s+information\s+(report|was\s+written)/i.test(head)) sc += 48;
+    if (/\[\s*system\s+summary\s*\]/i.test(head)) sc += 42;
+    if (/\bitem\s*\t+\s*value\b/i.test(head)) sc += 40;
+    if (/\bItem\s*=/i.test(head) || /\bValue\s*=/i.test(head)) sc += 6;
+    // \b is unreliable before CJK attribute names; allow leading whitespace or start.
+    if (/(?:^|[\s,])項目\s*=/.test(head) || /(?:^|[\s,])値\s*=/.test(head)) sc += 10;
+    return sc;
+  }
+
+  /**
+   * Score decoded text as msinfo32 plain “text” export (tabs + [sections]), for encoding autodetect.
+   * @param {string} s
+   */
+  function scorePlainTextMsInfoExport(s) {
+    const head = s.slice(0, Math.min(500000, s.length));
+    if (!head.includes("\t")) return -1e9;
+    let sc = 0;
+    if (/システム情報|システムの要約|システム名\s*:/.test(head)) sc += 70;
+    if (/項目\s*\t+\s*値/.test(head)) sc += 55;
+    if (/system\s+information\s+(report|was\s+written|saved)/i.test(head) || /\[\s*system\s+summary\s*\]/i.test(head))
+      sc += 65;
+    if (/\bitem\s*\t+\s*value\b/i.test(head)) sc += 50;
+    const lines = head.split(/\r?\n/);
+    let sections = 0;
+    let tabRows = 0;
+    for (const raw of lines) {
+      const ln = raw.trim();
+      if (/^\[[^\]\r\n]{1,200}\]\s*$/.test(ln)) sections++;
+      if (!ln.includes("\t")) continue;
+      const parts = ln.split("\t").filter((p) => String(p).trim().length);
+      if (parts.length >= 2) tabRows++;
+    }
+    sc += Math.min(sections, 40) * 5;
+    sc += Math.min(tabRows, 800);
+    return sc;
+  }
+
+  /**
+   * Pick the best decoding for MSInfo / system information bytes (UTF-8 vs UTF-16 vs Shift_JIS, etc.).
+   * @param {Uint8Array} u
+   * @returns {{ text: string, label: string }}
+   */
+  function decodeSystemBufferAuto(u) {
+    /** @type {{ text: string, label: string, score: number }[]} */
+    const cand = [];
+    const push = (/** @type {string} */ text, /** @type {string} */ label) => {
+      const cleaned = stripLoneUtf16Surrogates(text);
+      const aligned = alignMsInfoDecodedTextToXmlStart(cleaned);
+      cand.push({
+        text: cleaned,
+        label,
+        score: Math.max(scoreMsInfoDecodedText(aligned), scorePlainTextMsInfoExport(cleaned)),
+      });
+    };
+    let utf8Strict = null;
+    try {
+      utf8Strict = new TextDecoder("utf-8", { fatal: true }).decode(u);
+    } catch {
+      utf8Strict = null;
+    }
+    if (utf8Strict !== null && !looksLikeUtf16MisreadAsUtf8(utf8Strict)) {
+      push(utf8Strict, "UTF-8");
+    } else {
+      push(new TextDecoder("utf-8", { fatal: false }).decode(u), "UTF-8 (relaxed)");
+    }
+    push(new TextDecoder("utf-16le", { fatal: false }).decode(u), "UTF-16 LE");
+    push(new TextDecoder("utf-16be", { fatal: false }).decode(u), "UTF-16 BE");
+    try {
+      push(new TextDecoder("windows-1252", { fatal: false }).decode(u), "Windows-1252");
+    } catch {
+      /* ignore */
+    }
+    try {
+      push(new TextDecoder("windows-31j", { fatal: false }).decode(u), "Windows-31J");
+    } catch {
+      /* ignore */
+    }
+    try {
+      push(new TextDecoder("windows-949", { fatal: false }).decode(u), "Windows-949");
+    } catch {
+      /* ignore */
+    }
+    cand.sort((a, b) => b.score - a.score);
+    let best = cand[0] || { text: "", label: "UTF-8 (auto)", score: -1e9 };
+    const utf8Cand = cand.find((c) => c.label === "UTF-8" || c.label === "UTF-8 (relaxed)");
+    if (
+      utf8Cand &&
+      utf8Cand.score >= 55 &&
+      best.score - utf8Cand.score <= 22 &&
+      !/^UTF-8/i.test(best.label) &&
+      !/Windows-31J|Windows-949/i.test(best.label)
+    ) {
+      best = utf8Cand;
+    }
+    return { text: best.text, label: `${best.label} (auto)` };
   }
 
   /** @param {Element} el */
@@ -294,7 +419,11 @@
 
     /** @param {Element} catEl @param {string[]} pathParts */
     function visitCategory(catEl, pathParts) {
-      const nm = catEl.getAttribute("name") || "";
+      const nm =
+        catEl.getAttribute("name") ||
+        catEl.getAttribute("Name") ||
+        catEl.getAttribute("名前") ||
+        "";
       const path = nm ? [...pathParts, nm] : pathParts;
       for (const child of catEl.children) {
         const tag = child.localName;
@@ -308,12 +437,21 @@
             child.getAttribute("Item") ||
             child.getAttribute("item") ||
             child.getAttribute("Key") ||
-            child.getAttribute("key");
+            child.getAttribute("key") ||
+            child.getAttribute("項目") ||
+            child.getAttribute("名称") ||
+            child.getAttribute("항목") ||
+            child.getAttribute("Элемент");
           const attrVal =
             child.getAttribute("Value") ||
             child.getAttribute("value") ||
             child.getAttribute("Val") ||
-            child.getAttribute("val");
+            child.getAttribute("val") ||
+            child.getAttribute("値") ||
+            child.getAttribute("值") ||
+            child.getAttribute("数值") ||
+            child.getAttribute("값") ||
+            child.getAttribute("Значение");
           if (attrItem != null && attrVal != null && (String(attrItem).trim() || String(attrVal).trim())) {
             const norm = (/** @type {string} */ s) => String(s || "").replace(/\s+/g, " ").trim();
             kvs.push({ path: pathStr, item: norm(attrItem), value: norm(attrVal) });
@@ -411,27 +549,48 @@
   function isDriverVersionItem(item) {
     const it = String(item || "").trim();
     if (!it) return false;
-    return /^driver\s*version$/i.test(it) || /^версия\s*драйвера$/i.test(it);
+    return (
+      /^driver\s*version$/i.test(it) ||
+      /^версия\s*драйвера$/i.test(it) ||
+      /^ドライバー\s*の\s*バージョン$/i.test(it) ||
+      /^ドライバーのバージョン$/i.test(it) ||
+      /^ドライバのバージョン$/i.test(it) ||
+      /^ドライバー\s*バージョン$/i.test(it) ||
+      /^ドライバ\s*バージョン$/i.test(it)
+    );
   }
 
   /** MSInfo localized “adapter name” row label (Item column). */
   function isDisplayNameItem(item) {
     const it = String(item || "").trim();
-    return /^name$/i.test(it) || /^имя$/i.test(it) || /^наименование$/i.test(it);
+    return (
+      /^name$/i.test(it) ||
+      /^имя$/i.test(it) ||
+      /^наименование$/i.test(it) ||
+      /^名前$/i.test(it) ||
+      /^名称$/i.test(it)
+    );
   }
 
   /** @param {Record<string, string>} fields */
   function displayAdapterDisplayName(fields) {
     return (
-      displayFieldByLabels(fields, ["Name", "Имя", "Наименование"]) ||
-      String(fields.Name || fields.Имя || fields["Наименование"] || "").trim()
+      displayFieldByLabels(fields, ["Name", "Имя", "Наименование", "名前", "名称"]) ||
+      String(fields.Name || fields.Имя || fields["Наименование"] || fields["名前"] || fields["名称"] || "").trim()
     );
   }
 
   /** MSInfo localized “resolution” row label. */
   function isResolutionItemLabel(item) {
     const it = String(item || "").trim();
-    return /^resolution$/i.test(it) || /^current resolution$/i.test(it) || /^разрешение$/i.test(it);
+    return (
+      /^resolution$/i.test(it) ||
+      /^current resolution$/i.test(it) ||
+      /^разрешение$/i.test(it) ||
+      /^解像度$/i.test(it) ||
+      /^現在の解像度$/i.test(it) ||
+      /^画面の解像度$/i.test(it)
+    );
   }
 
   /**
@@ -475,7 +634,11 @@
     const by15 = candidates.find((k) => hasNvidiaBranch(val(k.value)));
     if (by15) return val(by15.value);
 
-    const nameKv = kvs.find((x) => isDisplayNameItem(x.item) && /NVIDIA/i.test(x.value));
+    const nameKv = kvs.find(
+      (x) =>
+        isDisplayNameItem(x.item) &&
+        (/NVIDIA|GeForce|RTX|Quadro|Tesla/i.test(x.value) || /\bVEN_10DE\b/i.test(x.value))
+    );
     if (nameKv) {
       const onNamePath = candidates.filter((k) => k.path === nameKv.path);
       const ok = onNamePath.find((k) => hasNvidiaBranch(val(k.value))) || onNamePath.find((k) => !isIntelVer(val(k.value)));
@@ -500,7 +663,11 @@
         f.DriverVersion ||
         f["Driver version"] ||
         f["Версия драйвера"] ||
-        f["версия драйвера"];
+        f["версия драйвера"] ||
+        f["ドライバーのバージョン"] ||
+        f["ドライバのバージョン"] ||
+        f["ドライバー バージョン"] ||
+        f["ドライバ バージョン"];
       return dv ? String(dv).trim() : "";
     }
     for (const r of rows) {
@@ -531,6 +698,9 @@
         f["Current Resolution"] ||
         f["Разрешение"] ||
         f["Текущее разрешение"] ||
+        f["解像度"] ||
+        f["現在の解像度"] ||
+        f["画面の解像度"] ||
         ""
       ).trim();
       if (!res || /^not available|^недоступно$/i.test(res)) continue;
@@ -588,10 +758,10 @@
   /** @param {string} path */
   function isMsInfoDisplayRelatedPath(path) {
     return (
-      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт/i.test(
+      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
         path
       ) &&
-      !/USB.*Audio|Sound Driver|Audio Device|Звук|аудио/i.test(path)
+      !/USB.*Audio|Sound Driver|Audio Device|Звук|аудио|オーディオ|サウンド/i.test(path)
     );
   }
 
@@ -629,7 +799,13 @@
         "PNP_Device_ID",
         "ID PNP-устройства",
         "ИД PNP-устройства",
+        "PNP デバイス ID",
+        "PNPデバイス ID",
+        "Plug and Play デバイス ID",
       ]);
+      const vals = Object.values(s.fields).join(" ");
+      if (/VEN_10DE|VEN_8086|VEN_1002|NVIDIA|GeForce|RTX|Quadro|Tesla|Radeon|Intel\s*\(R\)|UHD\s*Graphics|Iris|Arc/i.test(vals))
+        return true;
       return name.length > 0 || pnp.length > 0 || Object.keys(s.fields).length >= 4;
     });
   }
@@ -659,7 +835,15 @@
     const out = [];
     const seen = new Set();
     for (const s of segments) {
-      const pnp = displayFieldByLabels(s.fields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"])
+      const pnp = displayFieldByLabels(s.fields, [
+        "PNP Device ID",
+        "PNP_Device_ID",
+        "ID PNP-устройства",
+        "ИД PNP-устройства",
+        "PNP デバイス ID",
+        "PNPデバイス ID",
+        "Plug and Play デバイス ID",
+      ])
         .replace(/\s+/g, "")
         .toUpperCase();
       const name = displayAdapterDisplayName(s.fields).toLowerCase();
@@ -674,7 +858,7 @@
   /** @param {Record<string, string>} fields */
   function gpuVendorLabelFromAdapterFields(fields) {
     const name = `${displayAdapterDisplayName(fields)}`;
-    const pnp = `${fields["PNP Device ID"] || fields.PNP_Device_ID || fields["ID PNP-устройства"] || fields["ИД PNP-устройства"] || ""}`.toUpperCase();
+    const pnp = `${fields["PNP Device ID"] || fields.PNP_Device_ID || fields["ID PNP-устройства"] || fields["ИД PNP-устройства"] || fields["PNP デバイス ID"] || fields["PNPデバイス ID"] || fields["Plug and Play デバイス ID"] || ""}`.toUpperCase();
     const n = name.toLowerCase();
     if (/nvidia|geforce|rtx|quadro|tesla/.test(n) || /VEN_10DE/.test(pnp)) return "NVIDIA";
     if (/intel|\buhd\b|iris|arc/.test(n) || /VEN_8086/.test(pnp)) return "INTEL";
@@ -697,7 +881,15 @@
       else name = "Display adapter";
     }
 
-    let driverFull = displayFieldByLabels(fields, ["Driver Version", "Версия драйвера"]) || "";
+    let driverFull =
+      displayFieldByLabels(fields, [
+        "Driver Version",
+        "Версия драйвера",
+        "ドライバーのバージョン",
+        "ドライバのバージョン",
+        "ドライバー バージョン",
+        "ドライバ バージョン",
+      ]) || "";
     if (vendorLabel === "NVIDIA") {
       if (!driverFull || isIntelDriverVersionString(driverFull)) {
         const fixed = pickNvidiaDisplayDriverKvs(kvs) || pickNvidiaDriverFromRows(rows);
@@ -714,7 +906,14 @@
       nvidiaDriverFormatted = nvidiaInternalToDisplayVersion(driverFull);
     }
 
-    const nmDriverVer = displayFieldByLabels(fields, ["Driver Version", "Версия драйвера"]);
+    const nmDriverVer = displayFieldByLabels(fields, [
+      "Driver Version",
+      "Версия драйвера",
+      "ドライバーのバージョン",
+      "ドライバのバージョン",
+      "ドライバー バージョン",
+      "ドライバ バージョン",
+    ]);
     let driverVersionDisplay = "";
     if (vendorLabel === "NVIDIA") {
       driverVersionDisplay = nvidiaDriverFormatted || nmDriverVer || driverFull || "";
@@ -722,14 +921,30 @@
       driverVersionDisplay = nmDriverVer || driverFull || "";
     }
 
-    const resRaw = displayFieldByLabels(fields, ["Resolution", "Current Resolution", "Разрешение", "Текущее разрешение"]);
+    const resRaw = displayFieldByLabels(fields, [
+      "Resolution",
+      "Current Resolution",
+      "Разрешение",
+      "Текущее разрешение",
+      "解像度",
+      "現在の解像度",
+      "画面の解像度",
+    ]);
     let resolution = "";
     if (resRaw && String(resRaw).trim() && !/^not available|^n\/a$/i.test(String(resRaw).trim())) {
       resolution = String(resRaw).trim();
     }
 
     const nvidiaDrivesDisplay = vendorLabel === "NVIDIA" && !!resolution;
-    const pnp = displayFieldByLabels(fields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"]);
+    const pnp = displayFieldByLabels(fields, [
+      "PNP Device ID",
+      "PNP_Device_ID",
+      "ID PNP-устройства",
+      "ИД PNP-устройства",
+      "PNP デバイス ID",
+      "PNPデバイス ID",
+      "Plug and Play デバイス ID",
+    ]);
     const devId = pnpToDeviceId(pnp);
 
     return {
@@ -740,11 +955,41 @@
       drivesDisplay: vendorLabel !== "NVIDIA" || nvidiaDrivesDisplay,
       vendorLabel,
       driverVersionDisplay,
-      driverDate: displayFieldByLabels(fields, ["Driver Date", "Дата драйвера"]) || "",
+      driverDate:
+        displayFieldByLabels(fields, [
+          "Driver Date",
+          "Дата драйвера",
+          "ドライバーの日付",
+          "ドライバの日付",
+          "ドライバー 日付",
+          "バージョンの日付",
+          "ドライバー バージョンの日付",
+          "ドライバのバージョンの日付",
+        ]) || "",
       deviceId: devId,
       pciLookupUrl: pciLookupUrlFromDeviceId(devId),
-      adapterType: displayFieldByLabels(fields, ["Adapter Type", "Тип адаптера", "Описание адаптера"]) || "",
-      adapterRam: displayFieldByLabels(fields, ["Adapter RAM", "ОЗУ адаптера", "Память адаптера"]) || "",
+      adapterType:
+        displayFieldByLabels(fields, [
+          "Adapter Type",
+          "Тип адаптера",
+          "Описание адаптера",
+          "アダプターの種類",
+          "アダプター種類",
+          "アダプタの種類",
+          "アダプター タイプ",
+          "製品の種類",
+          "チップの種類",
+          "チップ タイプ",
+        ]) || "",
+      adapterRam:
+        displayFieldByLabels(fields, [
+          "Adapter RAM",
+          "ОЗУ адаптера",
+          "Память адаптера",
+          "アダプター RAM",
+          "アダプタ RAM",
+          "アダプターの RAM",
+        ]) || "",
     };
   }
 
@@ -797,17 +1042,18 @@
     let intelPath = "";
     for (const [path, o] of byPath) {
       const dn = displayAdapterDisplayName(o);
-      const name = `${dn} ${path}`.toLowerCase();
-      if (/nvidia|geforce|rtx|quadro|tesla/.test(name)) {
+      const vals = Object.values(o).join(" ");
+      const name = `${dn} ${path} ${vals}`.toLowerCase();
+      if (/nvidia|geforce|rtx|quadro|tesla|ven_10de/.test(name)) {
         const prevDn = nvidiaPath ? displayAdapterDisplayName(byPath.get(nvidiaPath) || {}) : "";
         if (!nvidiaPath || (dn && dn.length > prevDn.length)) {
           nvidiaPath = path;
         }
       }
       if (
-        /intel/.test(name) &&
-        /uhd|iris|arc|graphics|630|640|770|xe|igpu|integrated/.test(name) &&
-        !/nvidia/.test(name)
+        /intel|インテル/i.test(name) &&
+        /uhd|iris|arc|graphics|630|640|770|xe|igpu|integrated|ven_8086/.test(name) &&
+        !/nvidia|geforce|rtx|quadro|tesla|ven_10de/.test(name)
       ) {
         if (!intelPath || (dn && /UHD|Iris|Arc/i.test(dn))) intelPath = path;
       }
@@ -862,7 +1108,11 @@
     if (!intelRes) intelRes = resolutionFromDisplayRows(rows, "intel");
     if (!nvidiaRes) nvidiaRes = resolutionFromDisplayRows(rows, "nvidia");
 
-    const nvidiaNameFromKv = kvs.find((k) => isDisplayNameItem(k.item) && /NVIDIA/i.test(k.value));
+    const nvidiaNameFromKv = kvs.find(
+      (k) =>
+        isDisplayNameItem(k.item) &&
+        (/NVIDIA|GeForce|RTX|Quadro|Tesla/i.test(k.value) || /\bVEN_10DE\b/i.test(k.value))
+    );
     const nvidiaName =
       (nvidiaPath ? displayAdapterDisplayName(byPath.get(nvidiaPath) || {}) : "") ||
       nvidiaNameFromKv?.value?.trim() ||
@@ -907,11 +1157,53 @@
     let intelBlock = null;
     if (intelPath && (intelName || intelRes || intelDriverFull)) {
       const im = {
-        driverVersion: displayFieldByLabels(intelFields, ["Driver Version", "Версия драйвера"]),
-        driverDate: displayFieldByLabels(intelFields, ["Driver Date", "Дата драйвера"]),
-        pnp: displayFieldByLabels(intelFields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"]),
-        adapterType: displayFieldByLabels(intelFields, ["Adapter Type", "Тип адаптера", "Описание адаптера"]),
-        adapterRam: displayFieldByLabels(intelFields, ["Adapter RAM", "ОЗУ адаптера", "Память адаптера"]),
+        driverVersion: displayFieldByLabels(intelFields, [
+          "Driver Version",
+          "Версия драйвера",
+          "ドライバーのバージョン",
+          "ドライバのバージョン",
+          "ドライバー バージョン",
+          "ドライバ バージョン",
+        ]),
+        driverDate: displayFieldByLabels(intelFields, [
+          "Driver Date",
+          "Дата драйвера",
+          "ドライバーの日付",
+          "ドライバの日付",
+          "ドライバー 日付",
+          "バージョンの日付",
+          "ドライバー バージョンの日付",
+          "ドライバのバージョンの日付",
+        ]),
+        pnp: displayFieldByLabels(intelFields, [
+          "PNP Device ID",
+          "PNP_Device_ID",
+          "ID PNP-устройства",
+          "ИД PNP-устройства",
+          "PNP デバイス ID",
+          "PNPデバイス ID",
+          "Plug and Play デバイス ID",
+        ]),
+        adapterType: displayFieldByLabels(intelFields, [
+          "Adapter Type",
+          "Тип адаптера",
+          "Описание адаптера",
+          "アダプターの種類",
+          "アダプター種類",
+          "アダプタの種類",
+          "アダプター タイプ",
+          "製品の種類",
+          "チップの種類",
+          "チップ タイプ",
+        ]),
+        adapterRam: displayFieldByLabels(intelFields, [
+          "Adapter RAM",
+          "ОЗУ адаптера",
+          "Память адаптера",
+          "アダプター RAM",
+          "アダプタ RAM",
+          "アダプターの RAM",
+        ]),
       };
       const devId = pnpToDeviceId(im.pnp);
       intelBlock = {
@@ -932,11 +1224,53 @@
     let nvidiaBlock = null;
     if (nvidiaName || nvidiaDriverFull || nvidiaPath) {
       const nm = {
-        driverVersion: displayFieldByLabels(nvidiaFields, ["Driver Version", "Версия драйвера"]),
-        driverDate: displayFieldByLabels(nvidiaFields, ["Driver Date", "Дата драйвера"]),
-        pnp: displayFieldByLabels(nvidiaFields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"]),
-        adapterType: displayFieldByLabels(nvidiaFields, ["Adapter Type", "Тип адаптера", "Описание адаптера"]),
-        adapterRam: displayFieldByLabels(nvidiaFields, ["Adapter RAM", "ОЗУ адаптера", "Память адаптера"]),
+        driverVersion: displayFieldByLabels(nvidiaFields, [
+          "Driver Version",
+          "Версия драйвера",
+          "ドライバーのバージョン",
+          "ドライバのバージョン",
+          "ドライバー バージョン",
+          "ドライバ バージョン",
+        ]),
+        driverDate: displayFieldByLabels(nvidiaFields, [
+          "Driver Date",
+          "Дата драйвера",
+          "ドライバーの日付",
+          "ドライバの日付",
+          "ドライバー 日付",
+          "バージョンの日付",
+          "ドライバー バージョンの日付",
+          "ドライバのバージョンの日付",
+        ]),
+        pnp: displayFieldByLabels(nvidiaFields, [
+          "PNP Device ID",
+          "PNP_Device_ID",
+          "ID PNP-устройства",
+          "ИД PNP-устройства",
+          "PNP デバイス ID",
+          "PNPデバイス ID",
+          "Plug and Play デバイス ID",
+        ]),
+        adapterType: displayFieldByLabels(nvidiaFields, [
+          "Adapter Type",
+          "Тип адаптера",
+          "Описание адаптера",
+          "アダプターの種類",
+          "アダプター種類",
+          "アダプタの種類",
+          "アダプター タイプ",
+          "製品の種類",
+          "チップの種類",
+          "チップ タイプ",
+        ]),
+        adapterRam: displayFieldByLabels(nvidiaFields, [
+          "Adapter RAM",
+          "ОЗУ адаптера",
+          "Память адаптера",
+          "アダプター RAM",
+          "アダプタ RAM",
+          "アダプターの RAM",
+        ]),
       };
       const devIdN = pnpToDeviceId(nm.pnp);
       const verDisp =
@@ -971,11 +1305,21 @@
 
   /** @param {Record<string, string>} fields @param {string} path */
   function classifyNetworkMedium(fields, path) {
-    const name = fields.Name || fields.Имя || fields.Device || fields.Item || fields.Description || "";
-    const desc = fields.Description || fields["Product Name"] || fields["Тип продукта"] || "";
+    const name =
+      fields.Name ||
+      fields.Имя ||
+      fields["名前"] ||
+      fields["デバイス名"] ||
+      fields.Device ||
+      fields.Item ||
+      fields.Description ||
+      "";
+    const desc = fields.Description || fields["Product Name"] || fields["Тип продукта"] || fields["製品名"] || "";
     const aType =
       fields["Adapter Type"] ||
       fields["Тип адаптера"] ||
+      fields["アダプターの種類"] ||
+      fields["アダプタの種類"] ||
       fields["Connection Type"] ||
       fields.Type ||
       fields["Interface type"] ||
@@ -990,7 +1334,7 @@
     ) {
       return "Wi-Fi";
     }
-    if (/wi-?fi|wlan|802\.11|wireless(?!.*display)/i.test(hayAll)) {
+    if (/wi-?fi|wlan|802\.11|wireless(?!.*display)|無線lan|ワイヤレスlan|無線\s*lan/i.test(hayAll)) {
       return "Wi-Fi";
     }
     if (/bluetooth|hyper-?v virtual|vmware|virtualbox|loopback|teredo|isatap|6to4|pseudo|miniport|wan miniport/i.test(hayAll)) {
@@ -1016,6 +1360,8 @@
     const raw =
       fields.Name ||
       fields.Имя ||
+      fields["名前"] ||
+      fields["デバイス名"] ||
       fields.Device ||
       fields.Description ||
       fields["Connection Name"] ||
@@ -1357,6 +1703,12 @@
       "DNS servers",
       "DNS-сервер",
       "DNS сервер",
+      "DNS サーバー",
+      "DNSサーバー",
+      "優先 DNS サーバー",
+      "代替 DNS サーバー",
+      "プライマリ DNS サーバー",
+      "セカンダリ DNS サーバー",
       "Preferred DNS",
       "Alternate DNS",
       "Primary DNS",
@@ -1367,6 +1719,8 @@
       "Альтернативный DNS-сервер",
       "Connection-specific DNS Suffix",
       "DNS Suffix",
+      "DNS サフィックス",
+      "接続固有の DNS サフィックス",
     ];
     for (const n of named) {
       const v = getNetworkField(fields, n);
@@ -1387,6 +1741,13 @@
     const p = path || "";
     if (!p.trim()) return false;
     if (/display|graphics|video|printer|audio|bluetooth|personal area network|usb.*audio/i.test(p)) return false;
+    /** CJK path segments: do not rely on \\b (ASCII word chars only in default JS). */
+    if (
+      /ネットワーク|アダプター|アダプタ|tcp\s*\/\s*ip|ワイヤレス|無線lan|有線lan|イーサネット|lan\s*接続|通信|nic|ipconfig/i.test(
+        p
+      )
+    )
+      return true;
     return (
       /\bnetwork|\bnetzwerk|\bréseau|\bnetworking\b|tcp\/ip|ipconfig|wlan|wi-?fi|wifi\b|802\.11|wireless lan|ethernet connection|nic\b|network adapter|win32.*network|remote access|vpn|hyper-?v.*switch/i.test(
         p
@@ -1394,7 +1755,8 @@
       /\bсеть\b|сетев|адаптер|tcp\s*\/\s*ip|беспровод|подключен|удаленн|компоненты.*сеть|сеть.*адапт/i.test(p) ||
       /\b(red|netwerk|netværk|nettverk|verkko|sieć|síť|rețea|ağ|δίκτυο|võrk|网络|網路|ネットワーク|네트워크|شبكة)\b/i.test(
         p
-      )
+      ) ||
+      /网络|網路|ネットワーク|네트워크|شبكة/.test(p)
     );
   }
 
@@ -1453,7 +1815,7 @@
 
   /** Bluetooth / PAN “network” entries are not internet paths; exclude by name/path too. */
   function isBluetoothOrPanAdapter(fields, path) {
-    const blob = `${path} ${fields.Name || ""} ${fields.Имя || ""} ${fields.Nimi || ""} ${fields.Naam || ""} ${fields.Nazwa || ""} ${fields.Nome || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Тип адаптера"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
+    const blob = `${path} ${fields.Name || ""} ${fields.Имя || ""} ${fields["名前"] || ""} ${fields["デバイス名"] || ""} ${fields.Nimi || ""} ${fields.Naam || ""} ${fields.Nazwa || ""} ${fields.Nome || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Тип адаптера"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
     return /\bbluetooth\b|personal area network|bt\s*pan|usb bluetooth network/i.test(blob);
   }
 
@@ -1544,13 +1906,17 @@
     )
       s += 7;
     if (
-      /media state[^\n]*connected|netconnectionstatus.*2|connection.*\bconnected\b|operational status[^\n]*up|подключен|включен/i.test(
+      /media state[^\n]*connected|netconnectionstatus.*2|connection.*\bconnected\b|operational status[^\n]*up|подключен|включен|接続済み|接続されています|状態[^\n]*接続/i.test(
         blob
       )
     ) {
       s += 9;
     }
-    if (/disconnected|disabled|media state[^\n]*disconnected|operational status[^\n]*down|not connected|отключен|остановлен/i.test(blob)) {
+    if (
+      /disconnected|disabled|media state[^\n]*disconnected|operational status[^\n]*down|not connected|отключен|остановлен|切断済み|切断されています/i.test(
+        blob
+      )
+    ) {
       s -= 8;
     }
     if ((/dhcp enabled[^\n]*yes|dhcp.*\byes\b|dhcp.*\bда\b/i.test(blob) && s > 0)) s += 2;
@@ -1655,11 +2021,19 @@
     }
 
     const detailKeyGroups = [
-      ["Connection Name", "NetConnectionID", "Имя подключения"],
-      ["Name", "Имя", "Adapter Name", "Adapter name", "Adapter"],
+      ["Connection Name", "NetConnectionID", "Имя подключения", "接続名", "ネットワーク接続名"],
+      ["Name", "Имя", "名前", "デバイス名", "Adapter Name", "Adapter name", "Adapter", "アダプター名", "アダプタ名"],
       ["Product Type", "Тип продукта", "Тип продукции"],
       ["Installed", "Установлен", "Установлено", "Установлена"],
-      ["PNP Device ID", "ID PNP-устройства", "ИД PNP-устройства", "Код PNP-устройства", "PNP-устройства"],
+      [
+        "PNP Device ID",
+        "ID PNP-устройства",
+        "ИД PNP-устройства",
+        "Код PNP-устройства",
+        "PNP-устройства",
+        "PNP デバイス ID",
+        "PNPデバイス ID",
+      ],
       ["Last Reset", "Последний сброс"],
       ["Index", "Индекс"],
       ["Service Name", "Имя службы"],
@@ -1676,16 +2050,25 @@
         "Срок аренды DHCP получен",
         "Дата получения аренды DHCP",
       ],
-      ["Driver", "Драйвер"],
+      ["Driver", "Драйвер", "ドライブ", "ドライバー", "ドライバ"],
       ["Media State", "Состояние среды передачи"],
       ["Connection Status", "Состояние подключения"],
       ["Operational Status", "Рабочее состояние"],
       ["Subnet Mask", "IP Subnet", "IP-подсеть", "IPv4 Subnet Mask", "Маска подсети"],
-      ["Default Gateway", "Default IP Gateway", "IPv4 Default Gateway", "Шлюз IP по умолчанию", "Шлюз по умолчанию", "Основной шлюз"],
-      ["DHCP Enabled", "DHCP вкл.", "DHCP включен"],
-      ["DHCP Server", "DHCP-сервер", "DHCP сервер", "Сервер DHCP"],
-      ["Adapter Type", "Тип адаптера"],
-      ["MAC Address", "Physical Address", "MAC-адрес", "Физический адрес"],
+      [
+        "Default Gateway",
+        "Default IP Gateway",
+        "IPv4 Default Gateway",
+        "Шлюз IP по умолчанию",
+        "Шлюз по умолчанию",
+        "Основной шлюз",
+        "デフォルト ゲートウェイ",
+        "IPv4 デフォルト ゲートウェイ",
+      ],
+      ["DHCP Enabled", "DHCP вкл.", "DHCP включен", "DHCP 有効", "DHCP を有効にする"],
+      ["DHCP Server", "DHCP-сервер", "DHCP сервер", "Сервер DHCP", "DHCP サーバー", "DHCPサーバー"],
+      ["Adapter Type", "Тип адаптера", "アダプターの種類", "アダプタの種類"],
+      ["MAC Address", "Physical Address", "MAC-адрес", "Физический адрес", "物理アドレス", "MAC アドレス"],
       ["Speed", "Скорость"],
     ];
 
@@ -1706,10 +2089,12 @@
       const name =
         fields.Name ||
         fields.Имя ||
+        fields["名前"] ||
+        fields["デバイス名"] ||
         fields.Device ||
         fields.Item ||
         fields.Description ||
-        getNetworkField(fields, "Adapter Name") ||
+        getNetworkField(fields, "Adapter Name", "アダプター名", "アダプタ名") ||
         path.split(" / ").pop() ||
         "";
       if (!name && Object.keys(fields).length < 2) continue;
@@ -1845,7 +2230,11 @@
         /\/Запоминающие устройства\/.+\/Диск/i.test(s) ||
         /Компоненты.*Запоминающие устройства.*Диски.*\/Диск/i.test(s) ||
         /Компоненты.*Накопител.*\/Диск/i.test(s) ||
-        /\/Диски\/.+/i.test(s)
+        /\/Диски\/.+/i.test(s) ||
+        /ドライブ\s+[A-Z]:/i.test(s) ||
+        /(?:^|[\s/])ドライブ\s+[A-Z]:/i.test(s) ||
+        /(?:^|[\s/])ディスク\s*\d+/i.test(s) ||
+        /ストレージ.*ドライブ|ドライブ.*ストレージ/i.test(s)
       );
     };
 
@@ -1859,20 +2248,21 @@
     };
 
     const looksLikePhysicalDisk = (/** @type {Record<string, string>} */ f) => {
-      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Model"] || ""} ${f["Модель"] || ""}`.toLowerCase();
-      const hasModel = !!(f["Model"] || f["Модель"] || f["Model Number"] || f["Номер модели"]);
-      const hasDesc = !!(f["Описание"] || f["Description"]);
-      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""}`.trim();
+      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Model"] || ""} ${f["Модель"] || ""} ${f["モデル"] || ""} ${f["製品名"] || ""}`.toLowerCase();
+      const hasModel = !!(f["Model"] || f["Модель"] || f["Model Number"] || f["Номер модели"] || f["モデル"] || f["製品名"]);
+      const hasDesc = !!(f["Описание"] || f["Description"] || f["説明"]);
+      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""} ${f["サイズ"] || ""} ${f["合計サイズ"] || ""}`.trim();
       const hasSized =
         sizeBlob.length > 2 &&
         /[\d,\s]+/.test(sizeBlob) &&
-        /(байт|тб|гб|tb|gb|mb|bytes|go|to)/i.test(sizeBlob);
-      const hasSector = !!(f["Bytes/sector"] || f["Bytes per sector"] || f["Байт/сектор"]);
+        /(байт|тб|гб|tb|gb|mb|bytes|go|to|バイト)/i.test(sizeBlob);
+      const hasSector = !!(f["Bytes/sector"] || f["Bytes per sector"] || f["Байт/сектор"] || f["バイト/セクター"] || f["バイト／セクター"]);
       const diskish =
-        /дисков|накопител|hard\s*disk|disk\s+drive|physical\s+drive|hdd|ssd|nvme|scsi|sata|st\d{4,}|wdc|wd\s|seagate|samsung\s+ssd|intel\s+ssd/i.test(
+        /дисков|накопител|hard\s*disk|disk\s+drive|physical\s+drive|hdd|ssd|nvme|scsi|sata|st\d{4,}|wdc|wd\s|seagate|samsung\s+ssd|intel\s+ssd|物理ディスク|固定ディスク|ハード\s*ディスク/i.test(
           desc
         );
-      return hasSized && (hasSector || diskish) && (hasModel || hasDesc);
+      /** JP plain-text disks often list capacity + bytes/sector without a separate model line. */
+      return hasSized && (hasSector || (diskish && (hasModel || hasDesc)));
     };
 
     const looksLikeDisk = (/** @type {Record<string, string>} */ f) => {
@@ -1885,9 +2275,11 @@
           f["Système de fichiers"] ||
           f["Sistema de archivos"] ||
           f["Sistema de ficheiros"] ||
-          f["Файловая система"]
+          f["Файловая система"] ||
+          f["ファイル システム"] ||
+          f["ファイルシステム"]
         ) ||
-        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"]) &&
+        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["合計サイズ"] || f["サイズ"] || f["総容量"]) &&
           !!(
             f["Free Space"] ||
             f["Available Space"] ||
@@ -1896,27 +2288,116 @@
             f["Espace libre"] ||
             f["Свободно"] ||
             f["Свободное место"] ||
-            f["Доступно"]
+            f["Доступно"] ||
+            f["空き領域"] ||
+            f["空き容量"] ||
+            f["使用可能領域"] ||
+            f["使用可能な容量"] ||
+            f["空きの容量"] ||
+            f["未使用領域"]
           )) ||
-        (/ntfs|fat32|refs|exfat/i.test(blob) && /gb|tb|bytes|mb|гб|тб|байт/i.test(blob)) ||
+        (/ntfs|fat32|refs|exfat/i.test(blob) && /gb|tb|bytes|mb|гб|тб|バイト/i.test(blob)) ||
         looksLikePhysicalDisk(f)
       );
     };
 
+    const driveSeenKey = (/** @type {string} */ path, /** @type {Record<string, string>} */ f) => {
+      const tag =
+        (f["ドライブ"] || f["Drive"] || f["Volume"] || f["ディスク"] || f["合計サイズ"] || f["Total Size"] || f["Serial Number"] || f["シリアル番号"] || "")
+          .trim() || Object.keys(f).sort().join(",");
+      return `${path}\u0001${tag}`;
+    };
+
+    /** @param {string} v */
+    const looksLikeDriveSizeValue = (/** @type {string} */ v) => {
+      const s = String(v || "").trim();
+      if (!s || s.length < 2) return false;
+      return /[\d.,]/.test(s) && /(tb|gb|mb|kb|bytes|байт|バイト|go|to|mo|ko)/i.test(s);
+    };
+
+    /** @param {Record<string, string>} f */
+    const pickDriveUsedFromFields = (/** @type {Record<string, string>} */ f) => {
+      if (!f || typeof f !== "object") return "";
+      const direct =
+        f["Used"] ||
+        f["Used(%)"] ||
+        f["% Used"] ||
+        f["Belegt"] ||
+        f["Utilisé"] ||
+        f["Используется"] ||
+        f["使用中"] ||
+        f["使用済み"] ||
+        f["使用中の容量"] ||
+        f["使用済みの容量"] ||
+        f["使用済み容量"] ||
+        f["使用容量"] ||
+        f["占有領域"] ||
+        f["使用中の領域"] ||
+        f["使用領域"] ||
+        "";
+      const d = String(direct || "").trim();
+      if (d) return d;
+      for (const [k, v] of Object.entries(f)) {
+        const kk = String(k || "").trim();
+        const vv = String(v || "").trim();
+        if (!vv || /空き|使用可能|利用可能|未使用|free|available|unused/i.test(kk)) continue;
+        if (/シリアル|serial/i.test(kk)) continue;
+        if (/^使用中|^使用済|^占有/.test(kk) && /(容量|領域|サイズ|スペース|space)/i.test(kk) && looksLikeDriveSizeValue(vv)) return vv;
+        if ((kk === "使用中" || kk === "使用済み") && looksLikeDriveSizeValue(vv)) return vv;
+      }
+      return "";
+    };
+
+    /** @param {Record<string, string>} f */
+    const pickDriveVolumeNameFromFields = (/** @type {Record<string, string>} */ f) => {
+      if (!f || typeof f !== "object") return "";
+      const direct =
+        f["Volume Name"] ||
+        f["Label"] ||
+        f["Datenträgerbezeichnung"] ||
+        f["Nom de volume"] ||
+        f["Метка тома"] ||
+        f["Метка"] ||
+        f["ボリューム ラベル"] ||
+        f["ボリュームラベル"] ||
+        f["ボリューム名"] ||
+        f["ボリューム のラベル"] ||
+        f["ドライブのラベル"] ||
+        f["ドライブ ラベル"] ||
+        "";
+      const d = String(direct || "").trim();
+      if (d) return d;
+      for (const [k, v] of Object.entries(f)) {
+        const kk = String(k || "").trim();
+        const vv = String(v || "").trim();
+        if (!vv || /シリアル|serial/i.test(kk)) continue;
+        if (/ボリューム.*(名|ラベル)|^ラベル$/i.test(kk)) return vv;
+      }
+      return "";
+    };
+
     const pushDrive = (/** @type {string} */ path, /** @type {Record<string, string>} */ f) => {
-      if (seen.has(path)) return;
+      const key = driveSeenKey(path, f);
+      if (seen.has(key)) return;
       if (Object.keys(f).length < 2 || !looksLikeDisk(f)) return;
-      seen.add(path);
-      const title =
+      seen.add(key);
+      let title =
         f["Drive"] ||
         f.Laufwerk ||
         f["Volume"] ||
         f["Name"] ||
         f["Описание"] ||
         f["Модель"] ||
-        (path.match(/Drive\s+[A-Z]:/i) || [""])[0] ||
+        f["ドライブ"] ||
+        f["ディスク"] ||
+        (path.match(/Drive\s+[A-Z]:/i) || path.match(/ドライブ\s+[A-Z]:/i) || [""])[0] ||
         path.split(" / ").pop() ||
         "Drive";
+      const tTrim = String(title).trim();
+      const pathDiskN = String(path || "").match(/ディスク\s*(\d+)/i);
+      const titleDiskN = tTrim.match(/^ディスク\s*(\d+)$/i);
+      if (titleDiskN) title = `Disk ${titleDiskN[1]}`;
+      else if (/^ディスク$/i.test(tTrim) && pathDiskN) title = `Disk ${pathDiskN[1]}`;
       out.push({
         title: String(title),
         fileSystem:
@@ -1927,6 +2408,8 @@
           f["Sistema de archivos"] ||
           f["Sistema de ficheiros"] ||
           f["Файловая система"] ||
+          f["ファイル システム"] ||
+          f["ファイルシステム"] ||
           "",
         totalSize:
           f["Total Size"] ||
@@ -1937,6 +2420,9 @@
           f["Размер"] ||
           f["Полный размер"] ||
           f["Ёмкость"] ||
+          f["合計サイズ"] ||
+          f["サイズ"] ||
+          f["総容量"] ||
           "",
         freeSpace:
           f["Free Space"] ||
@@ -1948,39 +2434,62 @@
           f["Свободно"] ||
           f["Свободное место"] ||
           f["Доступно"] ||
+          f["空き領域"] ||
+          f["空き容量"] ||
+          f["使用可能領域"] ||
+          f["使用可能な容量"] ||
+          f["空きの容量"] ||
+          f["未使用領域"] ||
           "",
-        used: f["Used"] || f["Used(%)"] || f["% Used"] || f["Belegt"] || f["Utilisé"] || f["Используется"] || "",
-        volumeName:
-          f["Volume Name"] ||
-          f["Label"] ||
-          f["Datenträgerbezeichnung"] ||
-          f["Nom de volume"] ||
-          f["Метка тома"] ||
-          f["Метка"] ||
-          "",
+        used: pickDriveUsedFromFields(f),
+        volumeName: pickDriveVolumeNameFromFields(f),
         serialNumber:
-          f["Serial Number"] || f["Volume Serial Number"] || f["Seriennummer"] || f["Серийный номер"] || "",
+          f["Serial Number"] ||
+          f["Volume Serial Number"] ||
+          f["Seriennummer"] ||
+          f["Серийный номер"] ||
+          f["シリアル番号"] ||
+          f["ボリューム シリアル番号"] ||
+          "",
         path,
       });
     };
 
+    /** JP exports split volumes on ドライブ / ローカル ディスク (C:); physical disks repeat ディスク / ディスク 1. */
+    const driveRecordStartRe =
+      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?)$/i;
+    const emitDrivesForPath = (/** @type {string} */ p) => {
+      const chunks = chunkKvsPlainSectionRecords(kvs, p, driveRecordStartRe, 2);
+      let any = false;
+      for (const f of chunks) {
+        if (Object.keys(f).length >= 2 && looksLikeDisk(f)) {
+          pushDrive(p, f);
+          any = true;
+        }
+      }
+      if (!any) pushDrive(p, fieldsFromKvs(p));
+    };
+
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!pathIsDriveNode(p)) continue;
-      pushDrive(p, fieldsFromKvs(p));
+      emitDrivesForPath(p);
     }
     for (const r of rows) {
-      if (!pathIsDriveNode(r.path) || seen.has(r.path)) continue;
+      if (!pathIsDriveNode(r.path)) continue;
+      const key = driveSeenKey(r.path, r.fields);
+      if (seen.has(key)) continue;
       pushDrive(r.path, { ...r.fields });
     }
 
     if (!out.length) {
       for (const p of [...new Set(kvs.map((k) => k.path))]) {
-        if (!/Storage|Запоминающ|Накопител|Диски|Компоненты/i.test(p) || !/Disks?|Logical|Drive|Partition|Диск|Том/i.test(p))
+        if (
+          !/Storage|Запоминающ|Накопител|Диски|Компоненты|ストレージ|ディスク|ドライブ|ボリューム|コンポーネント/i.test(p) ||
+          !/Disks?|Logical|Drive|Partition|Диск|Том|ドライブ|ディスク|ボリューム|パーティション/i.test(p)
+        )
           continue;
         if (/Problem|Printer|Floppy|USB.*Mass|DVD|CD-ROM|Controller\s*Host|Принтер|Накопител.*гибк/i.test(p)) continue;
-        const f = fieldsFromKvs(p);
-        if (Object.keys(f).length < 3) continue;
-        pushDrive(p, f);
+        emitDrivesForPath(p);
       }
     }
 
@@ -2283,6 +2792,46 @@
   }
 
   /**
+   * Plain-text MSInfo sections list many records under one bracket path; merge all rows into one object
+   * only keeps the last record. Split when a new “row” begins (repeated primary column label after ≥N fields).
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   * @param {string} path
+   * @param {RegExp} recordStartKey
+   * @param {number} [minBeforeSplit]
+   * @returns {Record<string, string>[]}
+   */
+  function chunkKvsPlainSectionRecords(kvs, path, recordStartKey, minBeforeSplit) {
+    const minSplit = minBeforeSplit != null && minBeforeSplit > 0 ? minBeforeSplit : 2;
+    /** @type {{ item: string, value: string }[][]} */
+    const chunks = [];
+    /** @type {{ item: string, value: string }[]} */
+    let cur = [];
+    for (const k of kvs) {
+      if (k.path !== path) continue;
+      const it = String(k.item || "").trim();
+      const val = String(k.value || "").trim();
+      if (!it && !val) continue;
+      if (it && recordStartKey.test(it) && cur.length >= minSplit) {
+        chunks.push(cur);
+        cur = [];
+      }
+      cur.push({ item: it, value: val });
+    }
+    if (cur.length) chunks.push(cur);
+    return chunks.map((rows) => {
+      const f = {};
+      for (const r of rows) {
+        if (r.item) {
+          f[r.item] = r.value;
+        } else if (r.value && /(\.exe|\.lnk|\.bat|\.cmd|\.msi|--processstart)/i.test(r.value)) {
+          if (!f.Command || r.value.length > String(f.Command).length) f.Command = r.value;
+        }
+      }
+      return f;
+    });
+  }
+
+  /**
    * @param {{ path: string, item: string, value: string }[]} kvs
    * @param {{ path: string, fields: Record<string, string> }[]} rows
    */
@@ -2309,10 +2858,10 @@
       const s = String(p || "");
       const leaf = startupLeafName(s);
       const startupHint =
-        /Startup Programs|Startup\s*Command|Autostart|Autostartprogramme|Programme beim Start|Programmes au démarrage|Programas de inicio|Programas de inicialização|Programas de arranque|Programmi di avvio|Autostart-programmer|Autostartprogrammer|Oppstartsprogrammer|Käynnistysohjelmat|Opstartprogramma|Opstartprogramma's|Programy startowe|Başlangıç programları|自動実行|スタートアップ|啟動|启动|자동 실행|Käivitusprogrammid|Rendszerindító|Program de pornire|Spouštěcí programy|Spouštěcí aplikace|Автозагрузка|автозагруз|элементы автозагруз|элемент автозагруз|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Запуск программ|启动程序|CurrentVersion\s*[/\\]\s*Run|\/\s*Run\s*(\/|$)/i.test(
+        /Startup Programs|Startup\s*Command|Autostart|Autostartprogramme|Programme beim Start|Programmes au démarrage|Programas de inicio|Programas de inicialização|Programas de arranque|Programmi di avvio|Autostart-programmer|Autostartprogrammer|Oppstartsprogrammer|Käynnistysohjelmat|Opstartprogramma|Opstartprogramma's|Programy startowe|Başlangıç programları|自動実行|スタートアップ\s*プログラム|スタートアッププログラム|スタートアップ|啟動|启动|자동 실행|Käivitusprogrammid|Rendszerindító|Program de pornire|Spouštěcí programy|Spouštěcí aplikace|Автозагрузка|автозагруз|элементы автозагруз|элемент автозагруз|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Запуск программ|启动程序|CurrentVersion\s*[/\\]\s*Run|\/\s*Run\s*(\/|$)/i.test(
           s
         ) ||
-        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe)$/i.test(
+        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe|スタートアップ\s*プログラム|スタートアッププログラム)$/i.test(
           leaf
         );
       if (!startupHint) return false;
@@ -2320,7 +2869,7 @@
         /(^|\/)(Services|Dienste|Службы|Сервисы|Palvelut|Tjenester|Tjänster|Usługi|Hizmetler|الخدمات|服务|服務|서비스|サービス|Teenused|Υπηρεσίες|Szolgáltatások|Servicii|Služby)(\/|$)/i.test(
           s
         ) &&
-        !/автозагруз|autostart|startup\s*programs|элемент|käynnistys|arranque|avvio/i.test(s)
+        !/автозагруз|autostart|startup\s*programs|элемент|käynnistys|arranque|avvio|スタートアップ/i.test(s)
       ) {
         return false;
       }
@@ -2329,40 +2878,34 @@
       return (
         MSINFO_I18N.softwareEnvPath.test(s) ||
         startupPathMentionsRunKey(s) ||
-        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe)$/i.test(
+        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe|スタートアップ\s*プログラム|スタートアッププログラム)$/i.test(
           leaf
         )
       );
     };
 
+    const startupRecordStartRe =
+      /^(名前|名称|表示名|スタートアップ項目|スタートアップ\s*項目|Startup\s*Item|Item|Program|プログラム)$/i;
+
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!startupContext(p)) continue;
-      const f = {};
-      for (const k of kvs) {
-        if (k.path !== p) continue;
-        const it = (k.item || "").trim();
-        const val = (k.value || "").trim();
-        if (it) {
-          f[it] = val;
-        } else if (val) {
-          if (/(\.exe|\.lnk|\.bat|\.cmd|\.msi|--processstart)/i.test(val)) {
-            if (!f.Command || val.length > String(f.Command).length) f.Command = val;
-          }
-        }
+      const fieldMaps = chunkKvsPlainSectionRecords(kvs, p, startupRecordStartRe);
+      for (const f of fieldMaps) {
+        const rawName = pickStartupNameFromFields(f);
+        const cmd = pickStartupCommandFromFields(f);
+        const pathLeaf = p.split(" / ").pop() || "";
+        if (!rawName.trim() && !cmd.trim()) continue;
+        const dedupe = `${p}|${rawName}|${cmd}|${pickStartupLocationFromFields(f)}|${pickStartupUserFromFields(f)}`;
+        if (seen.has(dedupe)) continue;
+        seen.add(dedupe);
+        out.push({
+          name: deriveStartupProgramName(rawName, cmd, pathLeaf),
+          command: cmd,
+          location: pickStartupLocationFromFields(f),
+          user: pickStartupUserFromFields(f),
+          path: p,
+        });
       }
-      const rawName = pickStartupNameFromFields(f);
-      const cmd = pickStartupCommandFromFields(f);
-      const pathLeaf = p.split(" / ").pop() || "";
-      if (!rawName.trim() && !cmd.trim()) continue;
-      if (seen.has(p)) continue;
-      seen.add(p);
-      out.push({
-        name: deriveStartupProgramName(rawName, cmd, pathLeaf),
-        command: cmd,
-        location: pickStartupLocationFromFields(f),
-        user: pickStartupUserFromFields(f),
-        path: p,
-      });
     }
 
     for (const r of rows) {
@@ -2389,7 +2932,7 @@
 
     if (!out.length) {
       const junkPath = (/** @type {string} */ p) =>
-        /(^|\/)(службы|services)(\/|$)/i.test(p) ||
+        /(^|\/)(службы|services|サービス)(\/|$)/i.test(p) ||
         (/memory|память|storage|диск|network|сеть|принтер|printer/i.test(p) &&
           !/автозагруз|startup|run\\/i.test(p));
       for (const r of rows) {
@@ -2424,6 +2967,15 @@
     const seen = new Set();
 
     const dedupKey = (/** @type {string} */ p, /** @type {string} */ n) => `${p}::${n}`;
+
+    /** Plain-text JP exports sometimes merge the table header into the first “service” record. */
+    const looksLikeMsinfoJpServiceTableHeaderGarbage = (/** @type {string} */ name) => {
+      const n = String(name || "").trim();
+      if (!n) return false;
+      if (/名前\s+状態\s+起動モード|起動モード\s+サービス|項目\s+値/.test(n)) return true;
+      if (n.length > 60 && /名前/.test(n) && /起動モード/.test(n) && /状態/.test(n)) return true;
+      return false;
+    };
 
     /** @param {Record<string, string>} f */
     const pickServiceStateFromFields = (f) => {
@@ -2460,6 +3012,7 @@
         f["当前状态"] ||
         f["狀態"] ||
         f["状態"] ||
+        f["現在の状態"] ||
         f["الحالة"] ||
         "";
       const d = String(direct || "").trim();
@@ -2468,7 +3021,11 @@
         const kt = String(k || "").trim();
         const vv = String(v || "").trim();
         if (!vv || /^недоступно$/i.test(vv)) continue;
-        if (/^(state|status|zustand|состояни|статус|текущ|état|estado|stato|stan|tila|tilstand|állapot|durum|κατάσταση|상태|状态|狀態|状態|الحالة)/i.test(kt))
+        if (
+          /^(state|status|zustand|состояни|статус|текущ|état|estado|stato|stan|tila|tilstand|állapot|durum|κατάσταση|상태|状态|狀態|状態|現在の状態|الحالة)/i.test(
+            kt
+          )
+        )
           return vv;
         if (/^состоян/i.test(kt) && !/шаблон|template/i.test(kt)) return vv;
       }
@@ -2509,6 +3066,9 @@
         f["启动类型"] ||
         f["啟動類型"] ||
         f["起動の種類"] ||
+        f["起動モード"] ||
+        f["スタートの種類"] ||
+        f["スタートのモード"] ||
         f["نوع بدء التشغيل"] ||
         "";
       const d = String(direct || "").trim();
@@ -2518,11 +3078,12 @@
         const vv = String(v || "").trim();
         if (!vv || /^недоступно$/i.test(vv)) continue;
         if (
-          /^(startup|start\s*type|starttyp|запуск|тип\s*запуска|typ\s*uruchomienia|spouštěcí|käynnistys|käivitus|opstart|tipo\s*de\s*inicio|tipo\s*di\s*avvio|type\s*de\s*démarrage|başlangıç|indítás|tip\s*pornire|τύπος\s*εκκίνησης|시작|启动|啟動|起動|نوع)/i.test(
+          /^(startup|start\s*type|starttyp|запуск|тип\s*запуска|typ\s*uruchomienia|spouštěcí|käynnistys|käivitus|opstart|tipo\s*de\s*inicio|tipo\s*di\s*avvio|type\s*de\s*démarrage|başlangıç|indítás|tip\s*pornire|τύπος\s*εκκίνησης|시작|启动|啟動|起動|スタート|نوع)/i.test(
             kt
           )
         )
           return vv;
+        if (/起動/.test(kt) && /(種類|モード|タイプ)/.test(kt)) return vv;
         if (/^режим/i.test(kt) && /запуск/i.test(kt)) return vv;
         if (/^тип/i.test(kt) && /запуск/i.test(kt)) return vv;
       }
@@ -2551,7 +3112,9 @@
         f["Nombre para mostrar"] ||
         f["Görünen ad"] ||
         f["Εμφανιζόμενο όνομα"] ||
+        f["サービス名"] ||
         f["表示名"] ||
+        f["名前"] ||
         f["표시 이름"] ||
         f["显示名称"] ||
         f["顯示名稱"] ||
@@ -2623,36 +3186,42 @@
     /** Windows Services table is often "... / Службы" with no per-service path segment; older matchers required another path segment and missed flat tables. */
     const isServicesSectionPath = (/** @type {string} */ p) => {
       if (!MSINFO_I18N.softwareEnvPath.test(p)) return false;
-      if (/startup|autostart|автозагруз|планировщик|task\s*scheduler|scheduled\s*tasks|tâches planifiées|geplante tasks/i.test(p))
+      if (
+        /startup|autostart|автозагруз|планировщик|task\s*scheduler|scheduled\s*tasks|tâches planifiées|geplante tasks|スタートアップ\s*プログラム|スタートアッププログラム/i.test(
+          p
+        )
+      )
         return false;
       if (/print\s*spooler\s*drivers|enumerators|принтер|spooler|druckertreiber/i.test(p)) return false;
       if (/системные драйверы|system\s*drivers/i.test(p)) return false;
       if (/Drivers$|Druckertreiber$/i.test(p)) return false;
       const parts = pathParts(p);
       const idx = parts.findIndex((s) =>
-        /^(services|dienste|servicios|serviços|servizi|службы|сервисы|запущенные\s+службы|работающие\s+службы|palvelut|tjenester|tjänster|usługi|hizmetler|الخدمات|服务|服務|서비스|サービス|teenused|υπηρεσίες|szolgáltatások|servicii|služby|käynnissä\s+olevat\s+palvelut|uruchomione\s+usługi|çalışan\s+hizmetler)$/iu.test(
+        /^(services|dienste|servicios|serviços|servizi|службы|сервисы|запущенные\s+службы|работающие\s+службы|palvelut|tjenester|tjänster|usługi|hizmetler|الخدمات|服务|服務|서비스|サービス|実行中のサービス|起動しているサービス|teenused|υπηρεσίες|szolgáltatások|servicii|služby|käynnissä\s+olevat\s+palvelut|uruchomione\s+usługi|çalışan\s+hizmetler)$/iu.test(
           s
         )
       );
       return idx >= 0;
     };
 
+    const serviceRecordStartRe =
+      /^(表示名|サービス名|Display Name|Service Name|サービス\s*名|Отображаемое имя|Имя службы|Имя\s*службы|Dienstname|Nom du service|Nombre del servicio)$/i;
+
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!isServicesSectionPath(p)) continue;
-      const f = {};
-      for (const k of kvs) {
-        if (k.path !== p || !k.item) continue;
-        f[k.item.trim()] = (k.value || "").trim();
+      const fieldMaps = chunkKvsPlainSectionRecords(kvs, p, serviceRecordStartRe, 3);
+      for (const f of fieldMaps) {
+        const pathLeaf = p.split(" / ").pop() || "";
+        const name = pickServiceNameFromFields(f, pathLeaf);
+        if (!name || !String(name).trim()) continue;
+        if (looksLikeMsinfoJpServiceTableHeaderGarbage(name)) continue;
+        const k0 = dedupKey(p, name);
+        if (seen.has(k0)) continue;
+        seen.add(k0);
+        const state = pickServiceStateFromFields(f);
+        const startMode = pickServiceStartModeFromFields(f);
+        all.push({ name: String(name), state: String(state), startMode: String(startMode), path: p });
       }
-      const pathLeaf = p.split(" / ").pop() || "";
-      const name = pickServiceNameFromFields(f, pathLeaf);
-      if (!name) continue;
-      const k0 = dedupKey(p, name);
-      if (seen.has(k0)) continue;
-      seen.add(k0);
-      const state = pickServiceStateFromFields(f);
-      const startMode = pickServiceStartModeFromFields(f);
-      all.push({ name, state, startMode, path: p });
     }
 
     for (const r of rows) {
@@ -2661,6 +3230,7 @@
       const pathLeaf = r.path.split(" / ").pop() || "";
       const name = pickServiceNameFromFields(f, pathLeaf);
       if (!name) continue;
+      if (looksLikeMsinfoJpServiceTableHeaderGarbage(name)) continue;
       const k0 = dedupKey(r.path, name);
       if (seen.has(k0)) continue;
       seen.add(k0);
@@ -2676,7 +3246,8 @@
       const p = String(s.path || "");
       return (
         !!(s.name || "").trim() &&
-        /\b(запущенн[\s\w,.-]{0,40}служб|работающ[\s\w,.-]{0,40}служб)\b/i.test(p)
+        (/\b(запущенн[\s\w,.-]{0,40}служб|работающ[\s\w,.-]{0,40}служб)\b/i.test(p) ||
+          /実行中のサービス|起動しているサービス/.test(p))
       );
     });
     return { all: all.slice(0, 800), running: running.slice(0, 400) };
@@ -2721,6 +3292,10 @@
       /^aeg$/i,
       /^kellonaika$/i,
       /^وقت$/i,
+      /^日時$/i,
+      /^時刻$/i,
+      /^記録日時$/i,
+      /^記録された日時$/i,
     ]);
   }
 
@@ -2874,6 +3449,10 @@
       /^data\s*[\/\u2215]\s*ora$/i,
       /^時間$/i,
       /^时间$/i,
+      /^日時$/i,
+      /^時刻$/i,
+      /^記録日時$/i,
+      /^記録された日時$/i,
       /^время$/i,
       /^время_/i,
       /^время\b/i,
@@ -2974,6 +3553,7 @@
       const s = String(p || "");
       const hit =
         /Windows Error Reporting|Problem Reports|Reliability|WER|Report\s*Archive|Fault\s*Bucket/i.test(s) ||
+        /Windows\s*エラー報告|エラー\s*報告|ソフトウェア環境.*エラー|エラー\s*コンテナ/i.test(s) ||
         /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
           s
         ) ||
@@ -2981,7 +3561,12 @@
           s
         );
       if (!hit) return false;
-      if (/Group\s*Policy|Registry\s*key|групповых\s*политик|раздел\s*реестра/i.test(s)) return false;
+      if (
+        /Group\s*Policy|Registry\s*key|групповых\s*политик|раздел\s*реестра|グループ\s*ポリシー|レジストリ\s*キー|レジストリのキー/i.test(
+          s
+        )
+      )
+        return false;
       return true;
     };
 
@@ -3032,11 +3617,11 @@
    */
   const MSINFO_I18N = {
     summaryPath:
-      /System Summary|Systemübersicht|Résumé du système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
+      /System Summary|Systemübersicht|Résumé du système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
     softwareEnvPath:
-      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
+      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービス|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
     memoryRowPath:
-      /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件/i,
+      /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件/i,
     /** @param {RegExp | RegExp[]} labelRe */
     itemPatterns(labelRe) {
       return Array.isArray(labelRe) ? labelRe : [labelRe];
@@ -3051,7 +3636,7 @@
   function msinfoSummaryPathMatches(p) {
     const s = String(p || "");
     if (MSINFO_I18N.summaryPath.test(s)) return true;
-    return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения/i.test(
+    return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения|システムの要約/i.test(
       s
     );
   }
@@ -3203,6 +3788,61 @@
       if (v) return v;
     }
     return "";
+  }
+
+  /**
+   * True when a value looks like MSInfo’s “processor driver” / IRQ row, not the CPU model line.
+   * @param {string} v
+   */
+  function valueLooksLikeMsInfoProcessorDriverBlob(v) {
+    const x = String(v || "");
+    if (!x) return false;
+    if (/\\windows\\system32\\drivers\\/i.test(x) && /\.sys\b/i.test(x)) return true;
+    if (/\\systemroot\\system32\\drivers\\/i.test(x) && /\.sys\b/i.test(x)) return true;
+    if (/ドライバー.*\.sys|\.sys.*ドライバー/i.test(x) && /カーネル|kernel/i.test(x)) return true;
+    return false;
+  }
+
+  /**
+   * Prefer the System Summary “Processor” row; never use {@link kvValI18n} here (it matches the first
+   * “Processor”/Cyrillic label anywhere in the file — often a driver row in Japanese text exports).
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   */
+  function pickProcessorSummaryFromKvs(kvs) {
+    const rows = kvs.filter((k) => msinfoSummaryPathMatches(k.path));
+    const itemMatchers = [
+      /^Processor$/i,
+      /^Processeur$/i,
+      /^Prozessor$/i,
+      /^Procesador$/i,
+      /^Processador$/i,
+      /^Процессор$/i,
+      /^处理器$/,
+      /^プロセッサ$/,
+      /^プロセッサー$/,
+    ];
+    const badItem = (/** @type {string} */ it) => /ドライバー|driver$/i.test(String(it || "").trim());
+    /** @type {{ v: string, score: number }[]} */
+    const candidates = [];
+    for (const k of rows) {
+      const it = String(k.item || "").trim();
+      if (!it || badItem(it)) continue;
+      if (!itemMatchers.some((re) => re.test(it))) continue;
+      const v = String(k.value || "").trim();
+      if (!v || valueLooksLikeMsInfoProcessorDriverBlob(v)) continue;
+      let score = 2;
+      if (/^プロセッサ$/.test(it)) score += 8;
+      if (/^(Processor|Процессор)$/i.test(it)) score += 5;
+      if (
+        /intel|amd|apple|qualcomm|snapdragon|core|ryzen|xeon|threadripper|インテル|エイジーエス|\.ghz|ghz|mhz|@|ファミリ/i.test(
+          v
+        )
+      )
+        score += 14;
+      candidates.push({ v, score });
+    }
+    candidates.sort((a, b) => b.score - a.score);
+    return candidates[0]?.v || "";
   }
 
   /**
@@ -3391,10 +4031,15 @@
           /^Название ОС$/i,
           /^Имя ОС$/i,
           /^操作系统名称$/i,
+          /^OS\s*名$/,
+          /^OS名$/,
         ],
         kvs
       ) ||
-      kvValI18n([/^OS Name$/i, /^Betriebssystemname$/i, /^Имя ОС$/i, /^Название ОС$/i], kvs) ||
+      kvValI18n(
+        [/^OS Name$/i, /^Betriebssystemname$/i, /^Имя ОС$/i, /^Название ОС$/i, /^OS\s*名$/, /^OS名$/],
+        kvs
+      ) ||
       fieldFromRowsI18n(
         [
           /^OS Name$/i,
@@ -3403,6 +4048,8 @@
           /^Nombre del sistema operativo$/i,
           /^Название ОС$/i,
           /^Имя ОС$/i,
+          /^OS\s*名$/,
+          /^OS名$/,
         ],
         rows
       );
@@ -3417,14 +4064,27 @@
           /^Versão do sistema operacional$/i,
           /^Версия ОС$/i,
           /^Версия$/i,
+          /^バージョン$/,
+          /^OS\s*バージョン$/,
         ],
         kvs
       ) ||
       kvValI18n(
-        [/^OS Version$/i, /^Betriebssystemversion$/i, /^Version du système d'exploitation$/i, /^Версия$/i, /^Версия ОС$/i],
+        [
+          /^OS Version$/i,
+          /^Betriebssystemversion$/i,
+          /^Version du système d'exploitation$/i,
+          /^Версия$/i,
+          /^Версия ОС$/i,
+          /^バージョン$/,
+          /^OS\s*バージョン$/,
+        ],
         kvs
       ) ||
-      fieldFromRowsI18n([/^OS Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Версия ОС$/i], rows);
+      fieldFromRowsI18n(
+        [/^OS Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Версия ОС$/i, /^バージョン$/, /^OS\s*バージョン$/],
+        rows
+      );
     if (!osVersionLine) {
       const verKv = kvs.find((k) => {
         const it = (k.item || "").trim();
@@ -3460,6 +4120,8 @@
           /^Тип ПК$/i,
           /^Вид системы$/i,
           /^系统类型$/i,
+          /^システムの種類$/,
+          /^システム\s*タイプ$/,
         ],
         kvs
       ) ||
@@ -3506,6 +4168,7 @@
         rows
       );
     const processor =
+      pickProcessorSummaryFromKvs(kvs) ||
       kvFromSummaryI18n(
         [
           /^Processor$/i,
@@ -3515,12 +4178,33 @@
           /^Processador$/i,
           /^Процессор$/i,
           /^处理器$/i,
+          /^プロセッサ$/,
+          /^プロセッサー$/,
         ],
         kvs
       ) ||
-      kvValI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i, /^Процессор$/i], kvs) ||
-      fieldFromRowsSummaryPathOnly([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i, /^Процессор$/i], rows) ||
-      fieldFromRowsI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i, /^Процессор$/i], rows);
+      fieldFromRowsSummaryPathOnly(
+        [
+          /^Processor$/i,
+          /^Processeur$/i,
+          /^Prozessor$/i,
+          /^Процессор$/i,
+          /^プロセッサ$/,
+          /^プロセッサー$/,
+        ],
+        rows
+      ) ||
+      fieldFromRowsI18n(
+        [
+          /^Processor$/i,
+          /^Processeur$/i,
+          /^Prozessor$/i,
+          /^Процессор$/i,
+          /^プロセッサ$/,
+          /^プロセッサー$/,
+        ],
+        rows
+      );
     const timeZone =
       kvFromSummaryI18n(
         [
@@ -3531,12 +4215,24 @@
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
           /^时区$/i,
+          /^タイム\s*ゾーン$/,
+          /^タイムゾーン$/,
+          /^時刻帯$/,
         ],
         kvs
       ) ||
-      kvValI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i], kvs) ||
-      fieldFromRowsSummaryPathOnly([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i], rows) ||
-      fieldFromRowsI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i], rows);
+      kvValI18n(
+        [/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i, /^タイム\s*ゾーン$/, /^タイムゾーン$/, /^時刻帯$/],
+        kvs
+      ) ||
+      fieldFromRowsSummaryPathOnly(
+        [/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i, /^タイム\s*ゾーン$/, /^タイムゾーン$/, /^時刻帯$/],
+        rows
+      ) ||
+      fieldFromRowsI18n(
+        [/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i, /^タイム\s*ゾーン$/, /^タイムゾーン$/, /^時刻帯$/],
+        rows
+      );
     const osInstallDate =
       kvFromSummaryI18n(
         [
@@ -3578,6 +4274,8 @@
           /^Rol de la plataforma$/i,
           /^Função da plataforma$/i,
           /^Роль платформы$/i,
+          /^プラットフォームの役割$/,
+          /^プラットフォーム\s*ロール$/,
         ],
         kvs
       ) ||
@@ -3590,15 +4288,31 @@
           /^Rol de la plataforma$/i,
           /^Função da plataforma$/i,
           /^Роль платформы$/i,
+          /^プラットフォームの役割$/,
+          /^プラットフォーム\s*ロール$/,
         ],
         kvs
       ) ||
       fieldFromRowsSummaryPathOnly(
-        [/^Platform Role$/i, /^Systemrolle$/i, /^Rôle de la plateforme$/i, /^Роль платформы$/i],
+        [
+          /^Platform Role$/i,
+          /^Systemrolle$/i,
+          /^Rôle de la plateforme$/i,
+          /^Роль платформы$/i,
+          /^プラットフォームの役割$/,
+          /^プラットフォーム\s*ロール$/,
+        ],
         rows
       ) ||
       fieldFromRowsI18n(
-        [/^Platform Role$/i, /^Systemrolle$/i, /^Rôle de la plateforme$/i, /^Роль платформы$/i],
+        [
+          /^Platform Role$/i,
+          /^Systemrolle$/i,
+          /^Rôle de la plateforme$/i,
+          /^Роль платформы$/i,
+          /^プラットフォームの役割$/,
+          /^プラットフォーム\s*ロール$/,
+        ],
         rows
       );
     let pcSystemType =
@@ -3743,7 +4457,11 @@
       graphics.adapters.some((a) => a && a.vendorLabel === "NVIDIA");
 
     if (!hasNvidiaInAdapters()) {
-      const nk = kvs.find((k) => isDisplayNameItem(k.item) && /NVIDIA/i.test(k.value));
+      const nk = kvs.find(
+        (k) =>
+          isDisplayNameItem(k.item) &&
+          (/NVIDIA|GeForce|RTX|Quadro|Tesla/i.test(k.value) || /\bVEN_10DE\b/i.test(k.value))
+      );
       if (nk) {
         let drv = pickNvidiaDisplayDriverKvs(kvs) || pickNvidiaDriverFromRows(rows);
         if (!drv) {
@@ -3761,11 +4479,53 @@
           }
           const nvFields = mergePathFields(nk.path, byPathNv, rows);
           const nm = {
-            driverVersion: displayFieldByLabels(nvFields, ["Driver Version"]),
-            driverDate: displayFieldByLabels(nvFields, ["Driver Date"]),
-            pnp: displayFieldByLabels(nvFields, ["PNP Device ID", "PNP_Device_ID"]),
-            adapterType: displayFieldByLabels(nvFields, ["Adapter Type"]),
-            adapterRam: displayFieldByLabels(nvFields, ["Adapter RAM"]),
+            driverVersion: displayFieldByLabels(nvFields, [
+              "Driver Version",
+              "Версия драйвера",
+              "ドライバーのバージョン",
+              "ドライバのバージョン",
+              "ドライバー バージョン",
+              "ドライバ バージョン",
+            ]),
+            driverDate: displayFieldByLabels(nvFields, [
+              "Driver Date",
+              "Дата драйвера",
+              "ドライバーの日付",
+              "ドライバの日付",
+              "ドライバー 日付",
+              "バージョンの日付",
+              "ドライバー バージョンの日付",
+              "ドライバのバージョンの日付",
+            ]),
+            pnp: displayFieldByLabels(nvFields, [
+              "PNP Device ID",
+              "PNP_Device_ID",
+              "ID PNP-устройства",
+              "ИД PNP-устройства",
+              "PNP デバイス ID",
+              "PNPデバイス ID",
+              "Plug and Play デバイス ID",
+            ]),
+            adapterType: displayFieldByLabels(nvFields, [
+              "Adapter Type",
+              "Тип адаптера",
+              "Описание адаптера",
+              "アダプターの種類",
+              "アダプター種類",
+              "アダプタの種類",
+              "アダプター タイプ",
+              "製品の種類",
+              "チップの種類",
+              "チップ タイプ",
+            ]),
+            adapterRam: displayFieldByLabels(nvFields, [
+              "Adapter RAM",
+              "ОЗУ адаптера",
+              "Память адаптера",
+              "アダプター RAM",
+              "アダプタ RAM",
+              "アダプターの RAM",
+            ]),
           };
           const devIdN = pnpToDeviceId(nm.pnp);
           const drvFmt = drv && isNvidiaDriverVersionString(drv) ? nvidiaInternalToDisplayVersion(drv) : "";
@@ -3816,11 +4576,12 @@
     const problems = [];
     /** MSInfo “Problem Devices” lives under Components; Russian builds often use «Устройства с неполадками». */
     const problemPathRe =
-      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス/i;
+      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス/i;
     const pathLooksLikeProblemDevices = (/** @type {string} */ p) => {
       const s = String(p || "");
       if (problemPathRe.test(s)) return true;
       if (/неполадк/i.test(s) && /устройств/i.test(s) && /\s[сС]\s/i.test(s)) return true;
+      if (/問題|不具合|故障/.test(s) && /デバイス|装置/.test(s)) return true;
       return false;
     };
     /** Normalize MSInfo row/item labels (spaces, underscores, NBSP, BOM) for column matching. */
@@ -3852,14 +4613,26 @@
         f.Dispositivo ||
         f.Устройство ||
         f.デバイス ||
-        rowValueByCompactKeys(f, ["device", "name", "item", "description", "устройство", "название"]) ||
+        f["デバイス名"] ||
+        rowValueByCompactKeys(f, [
+          "device",
+          "name",
+          "item",
+          "description",
+          "устройство",
+          "название",
+          "デバイス名",
+          "デバイス",
+        ]) ||
         "";
       const vendor =
         f["PNP Device ID"] ||
         f["PNP_Device_ID"] ||
         f["Код_устройства_PNP"] ||
         f["Код устройства PNP"] ||
-        rowValueByCompactKeys(f, ["pnpdeviceid", "кодустройстваpnp"]) ||
+        f["PNP デバイス ID"] ||
+        f["PNPデバイス ID"] ||
+        rowValueByCompactKeys(f, ["pnpdeviceid", "кодустройстваpnp", "pnpデバイスid", "plugandplayデバイスid"]) ||
         f.Vendor ||
         f.Manufacturer ||
         f.Provider ||
@@ -3874,7 +4647,22 @@
         f["Problem Code"] ||
         f["Код_ошибки"] ||
         f["Код ошибки"] ||
-        rowValueByCompactKeys(f, ["problem", "problemcode", "кодошибки", "error", "status", "fehler"]) ||
+        f["問題"] ||
+        f["問題のコード"] ||
+        f["問題コード"] ||
+        f["エラー コード"] ||
+        rowValueByCompactKeys(f, [
+          "problem",
+          "problemcode",
+          "кодошибки",
+          "error",
+          "status",
+          "fehler",
+          "問題",
+          "問題のコード",
+          "問題コード",
+          "エラーコード",
+        ]) ||
         f.Error ||
         f.Status ||
         f["Code de problème"] ||
@@ -3901,12 +4689,20 @@
           c === "dispositif" ||
           c === "apparaat" ||
           c === "устройство" ||
-          c === "название"
+          c === "название" ||
+          c === "デバイス名" ||
+          c === "デバイス"
         );
       };
       const isPnpItem = (/** @type {string} */ it) => {
         const c = problemFieldKeyCompact(it);
-        return c === "pnpdeviceid" || c === "pnp_device_id" || c === "кодустройстваpnp";
+        return (
+          c === "pnpdeviceid" ||
+          c === "pnp_device_id" ||
+          c === "кодустройстваpnp" ||
+          c === "pnpデバイスid" ||
+          c === "plugandplayデバイスid"
+        );
       };
       const isErrorDetailItem = (/** @type {string} */ it) => {
         const c = problemFieldKeyCompact(it);
@@ -3917,7 +4713,13 @@
           c === "error" ||
           c === "status" ||
           c === "fehler" ||
-          /^кодошиб/.test(c)
+          /^кодошиб/.test(c) ||
+          c === "問題" ||
+          c === "問題のコード" ||
+          c === "問題コード" ||
+          c === "エラーコード" ||
+          /^問題/.test(c) ||
+          /^エラー/.test(c)
         );
       };
       for (const k of kvs) {
@@ -3973,12 +4775,15 @@
           /Расположение файла подкачки/i,
           /Файл подкачки/i,
           /分页文件位置/i,
+          /ページ\s*ファイルの場所/i,
+          /ページング\s*ファイルの場所/i,
+          /ページ\s*ファイル\s*の\s*場所/i,
         ]) || "";
       if (v) return v;
       for (const k of kvs) {
         const it = (k.item || "").trim();
         if (
-          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置/i.test(
+          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所/i.test(
             it
           ) &&
           k.value.trim()
@@ -3994,7 +4799,9 @@
             /^fichier d'échange$/i.test(it) ||
             /^archivo de paginación$/i.test(it) ||
             /^arquivo de paginação$/i.test(it) ||
-            /^файл подкачки$/i.test(it)) &&
+            /^файл подкачки$/i.test(it) ||
+            /^ページ\s*ファイル$/i.test(it) ||
+            /^ページング\s*ファイル$/i.test(it)) &&
           looksLikePageFilePath(k.value)
         ) {
           return k.value.trim();
@@ -4003,14 +4810,14 @@
       for (const r of rows) {
         if (
           !MSINFO_I18N.memoryRowPath.test(r.path) &&
-          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页|подкачк/i.test(r.path)
+          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页|подкачк|ページ|メモリ/i.test(r.path)
         ) {
           continue;
         }
         for (const [key, val] of Object.entries(r.fields)) {
           const kt = key.trim();
           if (
-            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置/i.test(
+            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所/i.test(
               kt
             ) &&
             String(val).trim()
@@ -4022,7 +4829,9 @@
               /^auslagerungsdatei$/i.test(kt) ||
               /^fichier d'échange$/i.test(kt) ||
               /^archivo de paginación$/i.test(kt) ||
-              /^файл подкачки$/i.test(kt)) &&
+              /^файл подкачки$/i.test(kt) ||
+              /^ページ\s*ファイル$/i.test(kt) ||
+              /^ページング\s*ファイル$/i.test(kt)) &&
             looksLikePageFilePath(String(val))
           ) {
             return String(val).trim();
@@ -4047,6 +4856,8 @@
         /объём\s+оперативн[\w\s,.-]*памят/i,
         /объем\s+оперативн[\w\s,.-]*памят/i,
         /^已安装的物理内存/i,
+        /^インストール済み(?:の)?物理メモリ/i,
+        /物理メモリ.*RAM|RAM.*物理メモリ/i,
       ]),
       totalPhysical: pickSummaryMemory([
         /^Total Physical Memory$/i,
@@ -4057,6 +4868,9 @@
         /^Всего физической памяти/i,
         /Полный объем физической памяти/i,
         /^物理内存总量$/i,
+        /^合計の物理メモリ/i,
+        /^合計\s*物理メモリ/i,
+        /^物理メモリの合計/i,
       ]),
       availablePhysical: pickSummaryMemory([
         /^Available Physical Memory$/i,
@@ -4067,6 +4881,8 @@
         /^Доступная физическая память/i,
         /Доступно физической памяти/i,
         /^可用物理内存$/i,
+        /^利用可能な物理メモリ/i,
+        /^使用可能な物理メモリ/i,
       ]),
       totalVirtual: pickSummaryMemory([
         /^Total Virtual Memory$/i,
@@ -4076,6 +4892,9 @@
         /^Memória virtual total$/i,
         /^Всего виртуальной памяти/i,
         /^虚拟内存总量$/i,
+        /^合計の仮想メモリ/i,
+        /^合計\s*仮想メモリ/i,
+        /^仮想メモリの合計/i,
       ]),
       availableVirtual: pickSummaryMemory([
         /^Available Virtual Memory$/i,
@@ -4086,6 +4905,8 @@
         /^Доступная виртуальная память/i,
         /Доступно виртуальной памяти/i,
         /^可用虚拟内存$/i,
+        /^利用可能な仮想メモリ/i,
+        /^使用可能な仮想メモリ/i,
       ]),
       pageFileSpace: pickSummaryMemory([
         /Page File Space/i,
@@ -4097,6 +4918,9 @@
         /Espaço do arquivo de paginação/i,
         /Размер файла подкачки/i,
         /分页文件空间/i,
+        /^ページ\s*ファイルのサイズ/i,
+        /^ページング\s*ファイルのサイズ/i,
+        /^ページ\s*ファイル\s*空間/i,
       ]),
       pageFileLocation: pickPageFileLocation(),
     };
@@ -4162,6 +4986,39 @@
   }
 
   /**
+   * Some exports include a binary preamble, double BOMs, or zero‑width characters before the first tag.
+   * @param {string} s
+   */
+  function alignMsInfoDecodedTextToXmlStart(s) {
+    let u = stripLoneUtf16Surrogates(String(s ?? ""));
+    u = u.replace(/^[\uFEFF\u200B\u200C\u200D\u2060\u180E]+/g, "");
+    u = u.replace(/^[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/g, "");
+    u = u.trimStart();
+    if (u.startsWith("<") || u.startsWith("＜")) return u;
+    const scanMax = Math.min(524288, u.length);
+    const scan = u.slice(0, scanMax);
+    const low = scan.toLowerCase();
+    const needles = ["<?xml", "<msinfo", "<category", "<data"];
+    let cut = -1;
+    for (const nd of needles) {
+      const j = low.indexOf(nd);
+      if (j >= 0 && (cut < 0 || j < cut)) cut = j;
+    }
+    if (cut < 0) {
+      /** Mis-decoded UTF-16 often yields stray 0x3C; do not trim to a random “<” unless it looks like a real tag. */
+      const fw = scan.indexOf("＜");
+      if (fw >= 0) cut = fw;
+      if (cut < 0) {
+        const tagish = /<(?:\?xml|[\w.\-]+)(\s|>|\/)/i;
+        const m = tagish.exec(scan);
+        if (m && m.index !== undefined) cut = m.index;
+      }
+    }
+    if (cut > 0) return u.slice(cut);
+    return u;
+  }
+
+  /**
    * Light repair for lightly corrupted MSInfo / system information (.nfo) XML.
    * @param {string} text
    * @returns {{ text: string, repairs: string[] }}
@@ -4169,7 +5026,7 @@
   function repairMsInfoXmlText(text) {
     /** @type {string[]} */
     const repairs = [];
-    let t = text.replace(/^\uFEFF/, "").trimStart();
+    let t = alignMsInfoDecodedTextToXmlStart(text.replace(/^\uFEFF/, "").trimStart());
     if (!t.startsWith("<")) return { text: t, repairs };
 
     const sur = stripLoneUtf16Surrogates(t);
@@ -4182,6 +5039,12 @@
     if (stripped !== t) {
       t = stripped;
       repairs.push("Removed illegal XML 1.0 control characters.");
+    }
+
+    const entNorm = normalizeUnsupportedNamedEntitiesInXml(t);
+    if (entNorm !== t) {
+      t = entNorm;
+      repairs.push("Replaced HTML-style named entities (e.g. &nbsp;) with XML-safe forms.");
     }
 
     const msOpen = t.match(/<MsInfo\b/i);
@@ -4226,8 +5089,9 @@
    * @returns {Document | null} After in-parser repair, the document may carry {@code _msinfoRepairs}.
    */
   function parseMsInfoDocument(text) {
-    const trimmed = text.replace(/^\uFEFF/, "").trimStart();
+    let trimmed = alignMsInfoDecodedTextToXmlStart(text.replace(/^\uFEFF/, "").trimStart());
     if (!trimmed.startsWith("<")) return null;
+    trimmed = normalizeUnsupportedNamedEntitiesInXml(trimmed);
     const parser = new DOMParser();
     /** @type {Document} */
     let doc = parser.parseFromString(trimmed, "application/xml");
@@ -4258,6 +5122,44 @@
    */
   function escapeBareAmpersandsForXml(s) {
     return s.replace(/&(?!([a-zA-Z][a-zA-Z0-9]*|#[0-9]+|#x[0-9a-fA-F]+);)/g, "&amp;");
+  }
+
+  /**
+   * XML built-ins are only amp, lt, gt, apos, quot. HTML names like {@code &nbsp;} make DOMParser fail.
+   * Known names become numeric refs; unknown {@code &Name;} become {@code &amp;Name;} so the tree can load.
+   * @param {string} s
+   */
+  function normalizeUnsupportedNamedEntitiesInXml(s) {
+    const predefined = new Set(["amp", "lt", "gt", "apos", "quot"]);
+    /** @type {Record<string, string>} */
+    const map = {
+      nbsp: "&#160;",
+      copy: "&#169;",
+      reg: "&#174;",
+      trade: "&#8482;",
+      micro: "&#181;",
+      para: "&#182;",
+      middot: "&#183;",
+      bull: "&#8226;",
+      hellip: "&#8230;",
+      ndash: "&#8211;",
+      mdash: "&#8212;",
+      ldquo: "&#8220;",
+      rdquo: "&#8221;",
+      lsquo: "&#8216;",
+      rsquo: "&#8217;",
+      deg: "&#176;",
+      frac12: "&#189;",
+      euro: "&#8364;",
+      pound: "&#163;",
+      yen: "&#165;",
+    };
+    return s.replace(/&([a-zA-Z][a-zA-Z0-9]*);/g, (full, name) => {
+      const low = String(name).toLowerCase();
+      if (predefined.has(low)) return full;
+      if (map[low]) return map[low];
+      return `&amp;${name};`;
+    });
   }
 
   /**
@@ -4299,19 +5201,19 @@
     let value = "";
     const im = attrBlob.match(/\bItem\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (im) item = im[2] != null ? im[2] : im[3] || "";
-    const imRu = attrBlob.match(/\bЭлемент\s*=\s*("([^"]*)"|'([^']*)')/i);
+    const imRu = attrBlob.match(/(?:^|[\s,])Элемент\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (!item.trim() && imRu) item = imRu[2] != null ? imRu[2] : imRu[3] || "";
-    const imFr = attrBlob.match(/\bÉlément\s*=\s*("([^"]*)"|'([^']*)')/i);
+    const imFr = attrBlob.match(/(?:^|[\s,])Élément\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (!item.trim() && imFr) item = imFr[2] != null ? imFr[2] : imFr[3] || "";
-    const imJa = attrBlob.match(/\b項目\s*=\s*("([^"]*)"|'([^']*)')/);
+    const imJa = attrBlob.match(/(?:^|[\s,])項目\s*=\s*("([^"]*)"|'([^']*)')/);
     if (!item.trim() && imJa) item = imJa[2] != null ? imJa[2] : imJa[3] || "";
     const vm = attrBlob.match(/\bValue\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (vm) value = vm[2] != null ? vm[2] : vm[3] || "";
-    const vmRu = attrBlob.match(/\bЗначение\s*=\s*("([^"]*)"|'([^']*)')/i);
+    const vmRu = attrBlob.match(/(?:^|[\s,])Значение\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (!value.trim() && vmRu) value = vmRu[2] != null ? vmRu[2] : vmRu[3] || "";
-    const vmFr = attrBlob.match(/\bValeur\s*=\s*("([^"]*)"|'([^']*)')/i);
+    const vmFr = attrBlob.match(/(?:^|[\s,])Valeur\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (!value.trim() && vmFr) value = vmFr[2] != null ? vmFr[2] : vmFr[3] || "";
-    const vmJa = attrBlob.match(/\b値\s*=\s*("([^"]*)"|'([^']*)')/);
+    const vmJa = attrBlob.match(/(?:^|[\s,])値\s*=\s*("([^"]*)"|'([^']*)')/);
     if (!value.trim() && vmJa) value = vmJa[2] != null ? vmJa[2] : vmJa[3] || "";
     return { item: norm(item), value: norm(decodeXmlishText(value)) };
   }
@@ -4358,32 +5260,37 @@
     let i = 0;
     const n = text.length;
     while (i < n) {
-      const rest = text.slice(i);
+      const lt = text.indexOf("<", i);
+      if (lt < 0) break;
+      const rest = text.slice(lt);
 
       let m = rest.match(/^<Category\b[^>]*\bname\s*=\s*("([^"]*)"|'([^']*)')[^>]*>/i);
+      if (!m) m = rest.match(/^<Category\b[^>]*名前\s*=\s*("([^"]*)"|'([^']*)')[^>]*>/);
       if (m) {
         const name = (m[2] != null ? m[2] : m[3] || "").replace(/\s+/g, " ").trim();
         if (name) stack.push(name);
-        i += m[0].length;
+        i = lt + m[0].length;
         continue;
       }
 
       m = rest.match(/^<\/Category\s*>/i);
       if (m) {
         if (stack.length) stack.pop();
-        i += m[0].length;
+        i = lt + m[0].length;
         continue;
       }
 
-      m = rest.match(/^<Data\b([^>]*?)\/\s*>/i);
+      m = rest.match(/^<(?:[\w.\-]+:)?Data\b([^>]*?)\/\s*>/i);
+      if (!m) m = rest.match(/^<(?:[\w.\-]+:)?データ\b([^>]*?)\/\s*>/);
       if (m) {
         const { item, value } = parseDataAttrBlob(m[1] || "");
         if (item || value) kvs.push({ path: pathStr(), item, value });
-        i += m[0].length;
+        i = lt + m[0].length;
         continue;
       }
 
-      m = rest.match(/^<Data\b([^>]*)>([\s\S]*?)<\/Data\s*>/i);
+      m = rest.match(/^<(?:[\w.\-]+:)?Data\b([^>]*)>([\s\S]*?)<\/(?:[\w.\-]+:)?Data\s*>/i);
+      if (!m) m = rest.match(/^<(?:[\w.\-]+:)?データ\b([^>]*)>([\s\S]*?)<\/(?:[\w.\-]+:)?データ\s*>/);
       if (m) {
         const inner = m[2] || "";
         let { item, value } = looseDataInnerToItemValue(inner);
@@ -4394,14 +5301,124 @@
           value = p.value;
         }
         if (item || value) kvs.push({ path: pathStr(), item, value });
-        i += m[0].length;
+        i = lt + m[0].length;
         continue;
       }
 
-      i += 1;
+      i = lt + 1;
     }
 
     return { kvs, rows };
+  }
+
+  /**
+   * msinfo32 can save a plain-text, tab-separated report (not XML) — common for Japanese UI exports.
+   * @param {string} s
+   */
+  function looksLikeMsInfoPlainTextTabExport(s) {
+    const t = String(s || "");
+    const head = t.slice(0, Math.min(250000, t.length));
+    if (!head.includes("\t")) return false;
+    const ja =
+      /システム情報/.test(head) ||
+      /\[システムの要約\]/.test(head) ||
+      (/項目/.test(head) && /値/.test(head) && /\t/.test(head));
+    const en =
+      /system\s+information\s+(report|was\s+written|saved)/i.test(head) ||
+      /\[\s*system\s+summary\s*\]/i.test(head) ||
+      /\bitem\s*\t+\s*value\b/i.test(head);
+    const zh = /系统信息/.test(head) || (/项目/.test(head) && /值/.test(head));
+    const ko = /시스템\s*정보/.test(head) || (/항목/.test(head) && /값/.test(head));
+    if (ja || en || zh || ko) return true;
+    /** Locale-neutral: many bracketed sections + tab-separated rows (common msinfo text export shape). */
+    const lines = head.split(/\r?\n/);
+    let sections = 0;
+    let tabRows = 0;
+    for (const raw of lines) {
+      const ln = raw.trim();
+      if (/^\[[^\]\r\n]{1,200}\]\s*$/.test(ln)) sections++;
+      if (!ln.includes("\t")) continue;
+      const parts = ln.split("\t").filter((p) => String(p).trim().length);
+      if (parts.length >= 2) tabRows++;
+    }
+    return sections >= 2 && tabRows >= 4;
+  }
+
+  /**
+   * Parse msinfo32 plain-text export: section lines "[Name]", optional "Item\tValue" header, then "item\tvalue" rows.
+   * @param {string} text
+   * @returns {{ kvs: { path: string, item: string, value: string }[], rows: { path: string, fields: Record<string, string> }[] }}
+   */
+  function extractMsInfoPlainTextTabExport(text) {
+    /** @type {{ path: string, item: string, value: string }[]} */
+    const kvs = [];
+    /** @type {{ path: string, fields: Record<string, string> }[]} */
+    const rows = [];
+    const norm = (/** @type {string} */ x) => String(x || "").replace(/\r/g, "").trim();
+    const isHeaderPair = (/** @type {string} */ item, /** @type {string} */ val) => {
+      const a = item.normalize("NFKC").toLowerCase();
+      const b = val.normalize("NFKC").toLowerCase();
+      const pairs = [
+        ["項目", "値"],
+        ["项目", "值"],
+        ["item", "value"],
+        ["항목", "값"],
+        ["элемент", "значение"],
+        ["élément", "valeur"],
+        ["element", "wert"],
+        ["elemento", "valor"],
+      ];
+      return pairs.some(([p, q]) => a === p && b === q);
+    };
+    let section = "";
+    let seenSection = false;
+    const lines = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+    for (let raw of lines) {
+      const line = raw.replace(/\uFEFF/g, "");
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      const sec = trimmed.match(/^\[(.+)\]\s*$/);
+      if (sec) {
+        section = norm(sec[1]);
+        seenSection = true;
+        continue;
+      }
+
+      if (trimmed.includes("\t")) {
+        const parts = trimmed.split("\t");
+        while (parts.length && norm(parts[parts.length - 1]) === "") parts.pop();
+        if (parts.length < 2) continue;
+        const item = norm(parts[0]);
+        const value = norm(parts.slice(1).join("\t"));
+        if (!item && !value) continue;
+        if (isHeaderPair(item, value)) continue;
+        const pathStr = section;
+        kvs.push({ path: pathStr, item, value });
+        continue;
+      }
+
+      if (!seenSection) {
+        const kv = trimmed.match(/^([^:\t：]+)[:：]\s*(.*)$/);
+        if (kv) {
+          const item = norm(kv[1]);
+          const value = norm(kv[2]);
+          if (item && value) kvs.push({ path: "", item, value });
+        }
+      }
+    }
+    return { kvs, rows };
+  }
+
+  /**
+   * @param {string} src
+   * @param {{ kvs: { path: string, item: string, value: string }[], rows: unknown[] }} data
+   */
+  function shouldAcceptPlainMsInfoExtract(src, data) {
+    if (data.kvs.length >= 2) return true;
+    if (looksLikeMsInfoPlainTextTabExport(src) && data.kvs.length >= 1) return true;
+    if (scorePlainTextMsInfoExport(src) >= 48 && data.kvs.length >= 1) return true;
+    return false;
   }
 
   /**
@@ -4409,7 +5426,7 @@
    * @returns {{
    *   doc: Document | null,
    *   data: { kvs: { path: string, item: string, value: string }[], rows: { path: string, fields: Record<string, string> }[] } | null,
-   *   mode: "xml" | "repaired" | "loose" | "none",
+   *   mode: "xml" | "repaired" | "loose" | "plaintext" | "none",
    *   notes: string[],
    *   repairedText: string | null,
    *   rawDisplayText: string
@@ -4419,11 +5436,16 @@
     /** @type {string[]} */
     const notes = [];
     let repairedText = /** @type {string | null} */ (null);
-    const baseline = original.replace(/^\uFEFF/, "").trimStart();
+    const sourceDecoded = stripLoneUtf16Surrogates(String(original ?? ""));
+    const baseline = alignMsInfoDecodedTextToXmlStart(sourceDecoded.replace(/^\uFEFF/, "").trimStart());
+    const leadTrim = sourceDecoded.replace(/^[\uFEFF\u200B\u200C\u200D\u2060]+/g, "").trimStart();
+    if (baseline.startsWith("<") && !leadTrim.startsWith("<")) {
+      notes.push("Skipped leading characters before the first “<” so MSInfo XML could be read.");
+    }
 
     const tryDom = (/** @type {string} */ t) => parseMsInfoDocument(t);
 
-    let doc = tryDom(original);
+    let doc = tryDom(baseline);
     if (doc) {
       const fixedSrc = /** @type {any} */ (doc)._msinfoFixedSource || null;
       const rawDisplayText = fixedSrc || baseline;
@@ -4442,20 +5464,61 @@
       };
     }
 
+    const plainEarly = extractMsInfoPlainTextTabExport(sourceDecoded);
+    const xmlHead = sourceDecoded.slice(0, Math.min(500000, sourceDecoded.length));
+    const hasXmlExportShape =
+      /<\?xml\b|<MsInfo\b|<Category\b|<Data\b|<\/MsInfo>|<\/Category>/i.test(xmlHead);
+    if (!hasXmlExportShape && shouldAcceptPlainMsInfoExtract(sourceDecoded, plainEarly)) {
+      notes.push(
+        "Decoded as msinfo32 plain-text / tab export (not XML). Sections “[…]” become category paths; “Item” and “Value” columns are tab-separated rows."
+      );
+      return {
+        doc: null,
+        data: plainEarly,
+        mode: "plaintext",
+        notes,
+        repairedText: null,
+        rawDisplayText: sourceDecoded,
+      };
+    }
+
     let t = baseline;
     if (!t.startsWith("<")) {
-      const loose0 = extractMsInfoLooseFromText(original);
+      const tryPlain = (/** @type {string} */ src, /** @type {string} */ rawDisp) => {
+        const data = extractMsInfoPlainTextTabExport(src);
+        if (!shouldAcceptPlainMsInfoExtract(src, data)) return null;
+        notes.push(
+          "Decoded as msinfo32 plain-text / tab export (not XML). Sections “[…]” become category paths; “Item” and “Value” columns are tab-separated rows."
+        );
+        return { doc: null, data, mode: "plaintext", notes, repairedText: null, rawDisplayText: rawDisp };
+      };
+      const plain0 = tryPlain(baseline, baseline);
+      if (plain0) return plain0;
+      const plain1 = tryPlain(sourceDecoded, sourceDecoded);
+      if (plain1) return plain1;
+
+      const loose0 = extractMsInfoLooseFromText(baseline);
       if (loose0.kvs.length) {
         notes.push("File does not look like complete XML; built a partial summary from visible <Data> rows.");
         return { doc: null, data: loose0, mode: "loose", notes, repairedText: null, rawDisplayText: baseline };
       }
+      const loose1 = extractMsInfoLooseFromText(sourceDecoded);
+      if (loose1.kvs.length) {
+        notes.push("File does not look like complete XML; built a partial summary from visible <Data> rows.");
+        return { doc: null, data: loose1, mode: "loose", notes, repairedText: null, rawDisplayText: sourceDecoded };
+      }
+      /** @type {string[]} */
+      const noneNotes = [
+        "Not recognized as MSInfo / XML text (no opening “<” tag in the decoded content).",
+        "If this is a text export from msinfo32, re-save as .nfo XML, or try Encoding → UTF-16 BE / UTF-8 / Windows-31J.",
+      ];
       return {
         doc: null,
         data: null,
         mode: "none",
-        notes: ["Not recognized as MSInfo / XML text."],
+        notes: notes.length ? notes.concat(noneNotes) : noneNotes,
         repairedText: null,
-        rawDisplayText: baseline,
+        rawDisplayText: sourceDecoded,
       };
     }
 
@@ -4463,6 +5526,12 @@
     const s0 = stripXmlIllegalControls(working);
     if (s0 !== working) notes.push("Removed illegal XML control characters (NUL / other C0 codes).");
     working = s0;
+
+    const sEnt = normalizeUnsupportedNamedEntitiesInXml(working);
+    if (sEnt !== working) {
+      notes.push("Replaced HTML-style named entities (e.g. &nbsp;) with XML-safe numeric or escaped forms.");
+    }
+    working = sEnt;
 
     const s1 = escapeBareAmpersandsForXml(working);
     if (s1 !== working) notes.push("Escaped bare “&” characters that were not valid XML entities.");
@@ -4482,12 +5551,35 @@
     }
 
     let loose = extractMsInfoLooseFromText(working);
-    if (!loose.kvs.length) loose = extractMsInfoLooseFromText(original);
+    let rawLoose = working;
+    if (!loose.kvs.length) {
+      loose = extractMsInfoLooseFromText(baseline);
+      rawLoose = baseline;
+    }
+    if (!loose.kvs.length) {
+      loose = extractMsInfoLooseFromText(sourceDecoded);
+      rawLoose = sourceDecoded;
+    }
     if (loose.kvs.length) {
       notes.push(
         "XML is still not well-formed; extracted fields using a tolerant tag scan (some rows may be missing). The raw area shows the best-effort cleaned text used for that scan."
       );
-      return { doc: null, data: loose, mode: "loose", notes, repairedText: null, rawDisplayText: working };
+      return { doc: null, data: loose, mode: "loose", notes, repairedText: null, rawDisplayText: rawLoose };
+    }
+
+    const plainTail = extractMsInfoPlainTextTabExport(sourceDecoded);
+    if (shouldAcceptPlainMsInfoExtract(sourceDecoded, plainTail)) {
+      notes.push(
+        "XML parsing failed, but a msinfo32-style plain-text / tab report was detected and parsed instead."
+      );
+      return {
+        doc: null,
+        data: plainTail,
+        mode: "plaintext",
+        notes,
+        repairedText: null,
+        rawDisplayText: sourceDecoded,
+      };
     }
 
     return {
@@ -5406,12 +6498,82 @@
     ["データがありません", "No data"],
     ["問題の署名:", "Problem signature:"],
     ["添付ファイル:", "Attached files:"],
+    ["x64-ベース PC", "x64-based PC"],
     ["x64 ベース PC", "x64-based PC"],
+    ["x86-ベース PC", "x86-based PC"],
+    ["x86 ベース PC", "x86-based PC"],
+    ["ARM64-ベース PC", "ARM64-based PC"],
+    ["ARM64 ベース PC", "ARM64-based PC"],
+    ["プロセッサ ドライバー", "Processor driver"],
+    ["カーネル ドライバー", "Kernel driver"],
+    ["カーネル ドライバ", "Kernel driver"],
+    ["手動停止 OK", "Manual stop OK"],
+    ["手動停止", "Manual stop"],
+    ["インストール済みの物理メモリ (RAM)", "Installed Physical Memory (RAM)"],
     ["インストール済み物理メモリ (RAM)", "Installed Physical Memory (RAM)"],
+    ["合計の物理メモリ", "Total Physical Memory"],
+    ["利用可能な物理メモリ", "Available Physical Memory"],
+    ["合計の仮想メモリ", "Total Virtual Memory"],
+    ["利用可能な仮想メモリ", "Available Virtual Memory"],
+    ["ページ ファイルのサイズ", "Page File Space"],
+    ["ページング ファイルのサイズ", "Paging File Space"],
+    ["ページ ファイルの場所", "Page File Location(s)"],
+    ["ページング ファイルの場所", "Page File Location(s)"],
+    ["プラットフォームの役割", "Platform Role"],
+    ["タイム ゾーン", "Time Zone"],
+    ["タイムゾーン", "Time Zone"],
+    ["デスクトップ", "Desktop"],
+    ["モバイル", "Mobile"],
+    ["タブレット", "Tablet"],
+    ["ノート PC", "Laptop"],
+    ["ノートパソコン", "Laptop"],
+    ["ワークステーション", "Workstation"],
+    ["サーバー", "Server"],
+    ["マルチセッション限定", "Multi-session limited"],
+    ["東京 (標準時)", "Tokyo (Standard Time)"],
+    ["大阪、札幌、東京 (標準時)", "Osaka, Sapporo, Tokyo (Standard Time)"],
+    ["標準時", "Standard Time"],
+    ["夏時間", "Daylight Time"],
+    ["個のロジカル プロセッサ", " logical processors"],
+    ["個のコア", " cores"],
+    ["ロジカル プロセッサ", "logical processors"],
     ["ファイル システム", "File System"],
+    ["物理ディスク", "Physical disk"],
+    ["固定ディスク", "Fixed disk"],
+    ["ハード ディスク", "Hard disk"],
+    ["ハードディスク", "Hard disk"],
+    ["ローカル ディスク", "Local Disk"],
+    ["ローカルディスク", "Local Disk"],
+    ["テラバイト", "TB"],
+    ["ギガバイト", "GB"],
+    ["メガバイト", "MB"],
+    ["キロバイト", "KB"],
+    ["バイト/セクター", "bytes per sector"],
+    ["バイト／セクター", "bytes per sector"],
+    ["ディスク", "Disk"],
     ["総容量", "Total Size"],
     ["空き容量", "Free Space"],
+    ["使用中の容量", "Space in use"],
+    ["使用済みの容量", "Space in use"],
+    ["使用可能な容量", "Available space"],
     ["使用中", "Used"],
+    ["実行中のサービス", "Running Services"],
+    ["起動しているサービス", "Running Services"],
+    ["共有プロセス", "Shared process"],
+    ["個別プロセス", "Own process"],
+    ["ローカル システム", "Local System"],
+    ["ローカルシステム", "Local System"],
+    ["ローカル サービス", "Local Service"],
+    ["ローカルサービス", "Local Service"],
+    ["ネットワーク サービス", "Network Service"],
+    ["ネットワークサービス", "Network Service"],
+    ["ビルド", "Build"],
+    ["起動モード", "Startup mode"],
+    ["起動の種類", "Startup type"],
+    ["現在の状態", "Current state"],
+    ["一時停止", "Paused"],
+    ["開始待ち", "Start pending"],
+    ["停止済み", "Stopped"],
     ["実行中", "Running"],
     ["停止", "Stopped"],
     ["無効", "Disabled"],
@@ -5419,6 +6581,94 @@
     ["手動", "Manual"],
     ["はい", "Yes"],
     ["いいえ", "No"],
+    // --- Japanese: network adapter / IP (MSInfo Components → Network) ---
+    ["DHCP リースの有効期限", "DHCP lease expires"],
+    ["DHCP リース取得", "DHCP lease obtained"],
+    ["接続固有の DNS サフィックス", "Connection-specific DNS suffix"],
+    ["既定の IP ゲートウェイ", "Default IP gateway"],
+    ["ネットワーク接続名", "Network connection name"],
+    ["メモリ アドレス", "Memory address"],
+    ["IRQ チャネル", "IRQ channel"],
+    ["アダプターの種類", "Adapter type"],
+    ["アダプター種類", "Adapter type"],
+    ["製品の種類", "Product type"],
+    ["インストール済み", "Installed"],
+    ["最終リセット", "Last reset"],
+    ["インデックス", "Index"],
+    ["サービス名", "Service name"],
+    ["IP アドレス", "IP address"],
+    ["IP サブネット", "IP subnet"],
+    ["I/O ポート", "I/O port"],
+    ["メディアの状態", "Media state"],
+    ["接続の速度", "Connection speed"],
+    ["接続名", "Connection name"],
+    ["イーサネット 802.3", "Ethernet 802.3"],
+    ["イーサネット802.3", "Ethernet 802.3"],
+    ["ワイヤレス 802.11", "Wireless 802.11"],
+    ["ワイヤレス802.11", "Wireless 802.11"],
+    ["システム ドライブ", "System drive"],
+    ["システムドライブ", "System drive"],
+    ["起動ドライブ", "Boot drive"],
+    ["ドライバー", "Driver"],
+    ["ドライバ", "Driver"],
+    ["ドライブ", "Driver"],
+    ["表示ドライバー", "Display driver"],
+    ["共有システム メモリ", "Shared system memory"],
+    ["共有システムメモリ", "Shared system memory"],
+    ["カラー深度", "Color depth"],
+    ["リフレッシュ レート", "Refresh rate"],
+    ["リフレッシュレート", "Refresh rate"],
+    ["解像度の詳細", "Resolution details"],
+    ["現在の解像度", "Current resolution"],
+    ["PNP デバイス ID", "PNP Device ID"],
+    ["DHCP サーバー", "DHCP Server"],
+    ["DHCPサーバー", "DHCP Server"],
+    ["DHCP を有効にする", "DHCP enabled"],
+    ["DHCP 有効", "DHCP enabled"],
+    ["物理アドレス", "Physical address"],
+    ["MAC アドレス", "MAC address"],
+    ["MACアドレス", "MAC address"],
+    ["IPv4 アドレス", "IPv4 address"],
+    ["IPv4アドレス", "IPv4 address"],
+    ["IPv6 アドレス", "IPv6 address"],
+    ["IPv6アドレス", "IPv6 address"],
+    ["IPv6 デフォルト ゲートウェイ", "IPv6 default gateway"],
+    ["DNS サーバー", "DNS server"],
+    ["DNSサーバー", "DNS server"],
+    ["優先 DNS サーバー", "Preferred DNS server"],
+    ["代替 DNS サーバー", "Alternate DNS server"],
+    ["プライマリ DNS サーバー", "Primary DNS server"],
+    ["セカンダリ DNS サーバー", "Secondary DNS server"],
+    ["DNS サフィックス", "DNS suffix"],
+    ["アダプター RAM", "Adapter RAM"],
+    ["アダプタ RAM", "Adapter RAM"],
+    ["アダプターの RAM", "Adapter RAM"],
+    ["利用できません", "Not available"],
+    ["利用可能", "Available"],
+    // --- Japanese: Windows Error Reporting fault strings (Additional Information / Details body) ---
+    ["Faulting パッケージ相対アプリケーション ID", "Faulting package-relative application ID"],
+    ["Faulting パッケージの完全名", "Faulting package full name"],
+    ["障害が発生しているアプリケーション名", "Faulting application name"],
+    ["障害が発生したモジュール名", "Faulting module name"],
+    ["アプリケーションのフォールトの開始時刻", "Faulting application start time"],
+    ["アプリケーションのフォルトの開始時刻", "Faulting application start time"],
+    ["Faulting アプリケーション パス", "Faulting application path"],
+    ["Faulting モジュール パス", "Faulting module path"],
+    ["フォールト プロセス ID", "Faulting process id"],
+    ["フォルト プロセス ID", "Faulting process id"],
+    ["フォールト オフセット", "Fault offset"],
+    ["フォルト オフセット", "Fault offset"],
+    ["例外コード", "Exception code"],
+    ["タイム スタンプ", "Time stamp"],
+    ["タイムスタンプ", "Time stamp"],
+    ["バージョン:", "Version:"],
+    ["バージョン：", "Version:"],
+    ["モジュール バージョン", "Module version"],
+    ["モジュールバージョン", "Module version"],
+    ["レポートの種類", "Report type"],
+    ["レポートの状態", "Report status"],
+    ["追加情報", "Additional information"],
+    ["詳細情報", "Detailed information"],
     // --- Korean (ko) ---
     ["소프트웨어 환경 / Windows 오류 보고", "Software Environment / Windows Error Reporting"],
     ["Windows 오류 보고", "Windows Error Reporting"],
@@ -5451,9 +6701,36 @@
     )
   );
 
+  /**
+   * Decode numeric HTML character references (e.g. &#x969c;) so CJK in some MSInfo/WER exports is visible
+   * to locale detection and phrase replacement (otherwise the string can look ASCII-only).
+   * @param {string} s
+   */
+  function decodeMsinfoNumericHtmlEntities(s) {
+    return String(s ?? "")
+      .replace(/&#x([0-9a-fA-F]{1,6});/gi, (_, h) => {
+        const cp = parseInt(h, 16);
+        if (!Number.isFinite(cp) || cp < 0 || cp > 0x10ffff) return "";
+        try {
+          return String.fromCodePoint(cp);
+        } catch {
+          return "";
+        }
+      })
+      .replace(/&#(\d{1,7});/g, (_, d) => {
+        const cp = parseInt(d, 10);
+        if (!Number.isFinite(cp) || cp < 0 || cp > 0x10ffff) return "";
+        try {
+          return String.fromCodePoint(cp);
+        } catch {
+          return "";
+        }
+      });
+  }
+
   /** Decode common MSInfo / WER HTML-style line breaks so Russian tokens match across “&#x000d;&#x000a;”. */
   function normalizeMsinfoLineBreakEntities(s) {
-    return String(s ?? "")
+    return decodeMsinfoNumericHtmlEntities(String(s ?? ""))
       .replace(/&#x000d;&#x000a;/gi, "\n")
       .replace(/&#000d;&#000a;/gi, "\n")
       .replace(/&#13;&#10;/gi, "\n")
@@ -5469,12 +6746,37 @@
   /** @param {string} s */
   function translateMsinfoI18nTokensToEnglish(s) {
     let out = normalizeMsinfoLineBreakEntities(String(s ?? ""));
+    /** JP volume lines use 「ドライブ C:」; do not let the standalone 「ドライブ」→「Driver」 pair corrupt those. */
+    out = out.replace(/ドライブ\s*([A-Z])[：:]/gi, "Drive $1:");
     for (const pair of MSINFO_I18N_EN_TOKEN_PAIRS) {
       const from = pair[0];
       const to = pair[1];
       if (!from || out.indexOf(from) === -1) continue;
       out = out.split(from).join(to);
     }
+    /** Spacing in MSInfo text exports varies; apply regex fallbacks after phrase table. */
+    out = out
+      .replace(/プロセッサ\s+ドライバー/g, "Processor driver")
+      .replace(/カーネル\s+ドライバー?/g, "Kernel driver")
+      .replace(/手動停止\s*OK/gi, "Manual stop OK")
+      .replace(/x64\s*[-–]\s*ベース\s*PC/gi, "x64-based PC")
+      .replace(/x86\s*[-–]\s*ベース\s*PC/gi, "x86-based PC")
+      .replace(/共有プロセス/g, "Shared process")
+      .replace(/個別プロセス/g, "Own process")
+      .replace(/起動モード/g, "Startup mode")
+      .replace(/システムが生成/g, "System generated")
+      .replace(/システムにより開始/g, "System started")
+      .replace(/\s*個のロジカル\s*プロセッサ/g, " logical processors")
+      .replace(/\s*個のコア/g, " cores")
+      .replace(/([\d,]+)\s+バイト/g, "$1 bytes")
+      .replace(/([\d,]+)バイト(?=[\s),]|$)/g, "$1 bytes")
+      .replace(/\)\s*バイト/g, ") bytes")
+      .replace(/\uff09\s*バイト/g, ") bytes")
+      .replace(/\s+ヘルツ/g, " Hz")
+      .replace(/(\d)\s*ヘルツ/g, "$1 Hz")
+      .replace(/(\d+)\s*ビット/g, "$1-bit")
+      .replace(/、/g, ", ")
+      .replace(/\bMhz\b/gi, "MHz");
     return out;
   }
 
@@ -5488,7 +6790,7 @@
 
   /**
    * Wraps export-sourced values so section-level Translate can swap to offline English where mapped.
-   * @param {string | null | undefined} raw full export string (stored on data-export)
+   * @param {string | null | undefined} raw full export string (stored on data-i18n-enc / data-export)
    * @param {(s: string) => string} escFn
    * @param {string | null | undefined} [displayOverride] visible text when different from raw (e.g. WER preview truncation)
    */
@@ -5497,8 +6799,15 @@
     if (!s) return escFn("—");
     const inner = displayOverride != null ? String(displayOverride) : s;
     const innerShown = normalizeMsinfoLineBreakEntities(inner);
-    if (!localeScriptLooksNonEnglishListed(s)) return escFn(innerShown);
-    return `<span class="sum-i18n" data-export="${escFn(s)}">${escFn(innerShown)}</span>`;
+    if (!localeScriptLooksNonEnglishListed(normalizeMsinfoLineBreakEntities(s))) return escFn(innerShown);
+    let enc = "";
+    try {
+      enc = encodeURIComponent(s);
+    } catch {
+      enc = "";
+    }
+    const encAttr = enc ? ` data-i18n-enc="${enc}"` : "";
+    return `<span class="sum-i18n"${encAttr} data-export="${escFn(s)}">${escFn(innerShown)}</span>`;
   }
 
   /**
@@ -5518,7 +6827,10 @@
       count != null
         ? `<span class="report-category__count" aria-label="${count} item(s)">${esc(String(count))}</span>`
         : "";
-    const plainForDetect = bodyHtml.replace(/<[^>]+>/g, " ").replace(/&(?:#(?:x[\da-fA-F]+|\d+)|[a-zA-Z]+);/g, " ");
+    const plainForDetect = decodeMsinfoNumericHtmlEntities(bodyHtml.replace(/<[^>]+>/g, " ")).replace(
+      /&[a-zA-Z]+;/g,
+      " "
+    );
     const needsTranslate = localeScriptLooksNonEnglishListed(plainForDetect);
     const translateBtn = needsTranslate
       ? `<button type="button" class="report-category__translate" aria-pressed="false">Translate</button>`
@@ -8219,7 +9531,17 @@
           btn.setAttribute("aria-pressed", showEn ? "true" : "false");
           btn.textContent = showEn ? "Original" : "Translate";
           root.querySelectorAll(".sum-i18n").forEach((span) => {
-            const raw = span.getAttribute("data-export") || "";
+            const enc = span.getAttribute("data-i18n-enc");
+            let raw = "";
+            if (enc) {
+              try {
+                raw = decodeURIComponent(enc);
+              } catch {
+                raw = span.getAttribute("data-export") || "";
+              }
+            } else {
+              raw = span.getAttribute("data-export") || "";
+            }
             span.textContent = showEn ? translateExportValueToEnglish(raw) : raw;
           });
         },

@@ -1,9 +1,10 @@
 ================================================================================
-  Report Viewer (log-viewer-web) — run locally with zero external dependencies
+  NVIDIA Report Viewer (log-viewer-web) — run locally with zero external dependencies
 ================================================================================
 
 WHAT THIS IS
-  A static web app: HTML + CSS + JavaScript + one logo image. All parsing,
+  A static web app: HTML + CSS + JavaScript + one logo image. The browser tab
+  title is "NVIDIA Report Viewer" (see index.html <title>). All parsing,
   charts, and summaries run in the browser from files on disk. No npm, Node,
   Python, installers, CDN, cloud API, or database.
 

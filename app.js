@@ -15,6 +15,101 @@
     "#ff6b6b",
   ];
 
+  /** Localized MSInfo “default IPv4 gateway” column titles (see hasDnsOrInfrastructureHint). */
+  const MSINFO_IPV4_GATEWAY_LABELS = Object.freeze([
+    "Default Gateway",
+    "Default IP Gateway",
+    "IPv4 Default Gateway",
+    "Gateway",
+    "Шлюз IP по умолчанию",
+    "Шлюз по умолчанию",
+    "Основной шлюз",
+    "Passerelle par défaut",
+    "Passerelle d'accès par défaut",
+    "Passerelle IPv4 par défaut",
+    "Standardgateway",
+    "Standaardgateway",
+    "Standardgateway IPv4",
+    "Standard-gateway",
+    "Standardrouter",
+    "Standardruter",
+    "Standardruttare",
+    "Standaard IPv4-gateway",
+    "Standaard router",
+    "Router",
+    "Router par défaut",
+    "Brána",
+    "Výchozí brána",
+    "Predvolená brána",
+    "Brama domyślna",
+    "Brama IPv4",
+    "Poarta implicită",
+    "Poarta de ieșire implicită",
+    "Oletusyhdyskäytävä",
+    "IPv4-yhdyskäytävä",
+    "IPv4 oletusyhdyskäytävä",
+    "Standard gateway",
+    "IPv4 Default gateway",
+    "IPv4-Standardgateway",
+    "IPv4-standardgateway",
+    "Yhdyskäytävä",
+    "Yhdyskäytävän IP-osoite",
+    "Varsayılan ağ geçidi",
+    "Varsayılan ağ geçidi IPv4",
+    "Προεπιλεγμένη πύλη",
+    "Προεπιλεγμένη πύλη IPv4",
+    "Puerta de enlace predeterminada",
+    "Puerta de enlace predeterminada IPv4",
+    "Gateway predefinito",
+    "Gateway predefinito IPv4",
+    "Porta de ligação predefinida",
+    "Porta de entrada predefinida",
+    "IPv4-gateway",
+    "IPv4-router",
+    "IP-router",
+    "Vaikimisi lüüs",
+    "Vaikimisi marsruutija",
+    "Alapértelmezett átjáró",
+    "Alapértelmezett átjáró IPv4",
+    "IPv4 默认网关",
+    "默认网关",
+    "IPv4 預設閘道",
+    "預設閘道",
+    "IPv4 기본 게이트웨이",
+    "기본 게이트웨이",
+    "IPv4 デフォルト ゲートウェイ",
+    "デフォルト ゲートウェイ",
+    "البوابة الافتراضية",
+    "البوابة الافتراضية لبروتوكول IPv4",
+  ]);
+
+  const MSINFO_DHCP_SERVER_LABELS = Object.freeze([
+    "DHCP Server",
+    "DHCP-сервер",
+    "DHCP сервер",
+    "Сервер DHCP",
+    "Serveur DHCP",
+    "DHCP-Server",
+    "DHCP server",
+    "DHCP-server",
+    "Servidor DHCP",
+    "Servidor de DHCP",
+    "Serwer DHCP",
+    "Server DHCP",
+    "DHCP-palvelin",
+    "DHCP-palvelimen osoite",
+    "DHCP Sunucusu",
+    "Sunucu DHCP",
+    "Διακομιστής DHCP",
+    "خادم DHCP",
+    "DHCP 服务器",
+    "DHCPサーバー",
+    "DHCP サーバー",
+    "DHCP 서버",
+    "DHCP-kiszolgáló",
+    "DHCP-kiszolgáló IPv4",
+  ]);
+
   /** @param {Uint8Array} u */
   function looksLikeUtf16Text(u) {
     if (u.length < 4) return false;
@@ -176,6 +271,27 @@
     /** @type {{ path: string, fields: Record<string, string> }[]} */
     const rows = [];
 
+    /** MSInfo .nfo often uses localized column tag names (e.g. Russian Element/Value element names in XML). */
+    const normXmlTag = (/** @type {string} */ name) => {
+      try {
+        return String(name || "").normalize("NFKC").toLowerCase();
+      } catch {
+        return String(name || "").toLowerCase();
+      }
+    };
+    const msinfoDataChildIsItemLike = (/** @type {string} */ localName) => {
+      const n = normXmlTag(localName);
+      return /^(item|name|key|eintrag|property|элемент|elemento|élément|položka|pozycja|öğe|عنصر|στοιχείο|elementti|項目|名称|항목)$/u.test(
+        n
+      );
+    };
+    const msinfoDataChildIsValueLike = (/** @type {string} */ localName) => {
+      const n = normXmlTag(localName);
+      return /^(value|val|wert|data|inhalt|значение|valor|valeur|waarde|hodnota|wartość|arvo|érték|valoare|değer|قيمة|τιμή|值|数值|値|값|väärtus)$/u.test(
+        n
+      );
+    };
+
     /** @param {Element} catEl @param {string[]} pathParts */
     function visitCategory(catEl, pathParts) {
       const nm = catEl.getAttribute("name") || "";
@@ -204,12 +320,8 @@
             continue;
           }
 
-          const itemIdx = kids.findIndex((c) =>
-            /^(item|name|key|eintrag|property)$/i.test(c.localName)
-          );
-          const valIdx = kids.findIndex((c) =>
-            /^(value|val|wert|data|inhalt)$/i.test(c.localName)
-          );
+          const itemIdx = kids.findIndex((c) => msinfoDataChildIsItemLike(c.localName));
+          const valIdx = kids.findIndex((c) => msinfoDataChildIsValueLike(c.localName));
           if (itemIdx >= 0 && valIdx >= 0) {
             kvs.push({
               path: pathStr,
@@ -221,8 +333,8 @@
 
           if (
             kids.length >= 2 &&
-            kids[0].localName === "Item" &&
-            kids[1].localName === "Value"
+            msinfoDataChildIsItemLike(kids[0].localName) &&
+            msinfoDataChildIsValueLike(kids[1].localName)
           ) {
             kvs.push({ path: pathStr, item: xmlText(kids[0]), value: xmlText(kids[1]) });
             continue;
@@ -297,7 +409,29 @@
 
   /** @param {string} item */
   function isDriverVersionItem(item) {
-    return !!(item && /^driver\s*version$/i.test(item.trim()));
+    const it = String(item || "").trim();
+    if (!it) return false;
+    return /^driver\s*version$/i.test(it) || /^версия\s*драйвера$/i.test(it);
+  }
+
+  /** MSInfo localized “adapter name” row label (Item column). */
+  function isDisplayNameItem(item) {
+    const it = String(item || "").trim();
+    return /^name$/i.test(it) || /^имя$/i.test(it) || /^наименование$/i.test(it);
+  }
+
+  /** @param {Record<string, string>} fields */
+  function displayAdapterDisplayName(fields) {
+    return (
+      displayFieldByLabels(fields, ["Name", "Имя", "Наименование"]) ||
+      String(fields.Name || fields.Имя || fields["Наименование"] || "").trim()
+    );
+  }
+
+  /** MSInfo localized “resolution” row label. */
+  function isResolutionItemLabel(item) {
+    const it = String(item || "").trim();
+    return /^resolution$/i.test(it) || /^current resolution$/i.test(it) || /^разрешение$/i.test(it);
   }
 
   /**
@@ -326,7 +460,7 @@
     if (branchMatches.length === 1) return val(branchMatches[0].value);
     const onNvidiaPath = branchMatches.find((k) => isNvidiaGraphicsPath(k.path));
     if (onNvidiaPath) return val(onNvidiaPath.value);
-    const onDisplayPath = branchMatches.find((k) => /display|graphics|video|monitor|videocontroller/i.test(k.path));
+    const onDisplayPath = branchMatches.find((k) => isMsInfoDisplayRelatedPath(k.path));
     if (onDisplayPath) return val(onDisplayPath.value);
     if (branchMatches.length > 0) return val(branchMatches[0].value);
 
@@ -335,13 +469,13 @@
       if (/USB.*Audio|Sound Driver|Audio Device/i.test(k.path)) return false;
       if (excludedPath(k.path)) return false;
       const pl = k.path.toLowerCase();
-      return /display|monitor|graphics|video|videocontroller|3d render/.test(pl);
+      return isMsInfoDisplayRelatedPath(k.path) || /3d render/i.test(pl);
     });
 
     const by15 = candidates.find((k) => hasNvidiaBranch(val(k.value)));
     if (by15) return val(by15.value);
 
-    const nameKv = kvs.find((x) => /^Name$/i.test(x.item) && /NVIDIA/i.test(x.value));
+    const nameKv = kvs.find((x) => isDisplayNameItem(x.item) && /NVIDIA/i.test(x.value));
     if (nameKv) {
       const onNamePath = candidates.filter((k) => k.path === nameKv.path);
       const ok = onNamePath.find((k) => hasNvidiaBranch(val(k.value))) || onNamePath.find((k) => !isIntelVer(val(k.value)));
@@ -361,18 +495,23 @@
   function pickNvidiaDriverFromRows(rows) {
     /** @param {Record<string, string>} f */
     function driverFromFields(f) {
-      const dv = f["Driver Version"] || f.DriverVersion || f["Driver version"];
+      const dv =
+        f["Driver Version"] ||
+        f.DriverVersion ||
+        f["Driver version"] ||
+        f["Версия драйвера"] ||
+        f["версия драйвера"];
       return dv ? String(dv).trim() : "";
     }
     for (const r of rows) {
-      if (!/Display|Graphics|Video|Monitor/i.test(r.path)) continue;
+      if (!isMsInfoDisplayRelatedPath(r.path)) continue;
       const dv = driverFromFields(r.fields);
       if (!dv || !/\b3[12]\.0\.15\.\d+/.test(dv) || isIntelDriverVersionString(dv)) continue;
-      const nm = `${r.fields.Name || ""} ${r.path}`;
+      const nm = `${displayAdapterDisplayName(r.fields)} ${r.path}`;
       if (/NVIDIA|GeForce|RTX|Quadro|Tesla/i.test(nm)) return dv;
     }
     for (const r of rows) {
-      if (!/Display|Graphics|Video|Monitor/i.test(r.path)) continue;
+      if (!isMsInfoDisplayRelatedPath(r.path)) continue;
       const dv = driverFromFields(r.fields);
       if (dv && /\b3[12]\.0\.15\.\d+/.test(dv) && !isIntelDriverVersionString(dv)) return dv;
     }
@@ -385,11 +524,17 @@
    */
   function resolutionFromDisplayRows(rows, which) {
     for (const r of rows) {
-      if (!/Display|Graphics|Video|Monitor/i.test(r.path)) continue;
+      if (!isMsInfoDisplayRelatedPath(r.path)) continue;
       const f = r.fields;
-      const res = (f.Resolution || f["Current Resolution"] || "").trim();
-      if (!res || /^not available$/i.test(res)) continue;
-      const nm = `${f.Name || ""} ${r.path}`;
+      const res = (
+        f.Resolution ||
+        f["Current Resolution"] ||
+        f["Разрешение"] ||
+        f["Текущее разрешение"] ||
+        ""
+      ).trim();
+      if (!res || /^not available|^недоступно$/i.test(res)) continue;
+      const nm = `${displayAdapterDisplayName(f)} ${r.path}`;
       if (which === "nvidia" && /NVIDIA|GeForce|RTX|Quadro|Tesla/i.test(nm)) return res;
       if (which === "intel" && /Intel|UHD|Iris|Arc/i.test(nm) && !/NVIDIA/i.test(nm)) return res;
     }
@@ -443,8 +588,10 @@
   /** @param {string} path */
   function isMsInfoDisplayRelatedPath(path) {
     return (
-      /Display|Monitor|Graphics|Video|VideoController|Videocontroller/i.test(path) &&
-      !/USB.*Audio|Sound Driver|Audio Device/i.test(path)
+      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт/i.test(
+        path
+      ) &&
+      !/USB.*Audio|Sound Driver|Audio Device|Звук|аудио/i.test(path)
     );
   }
 
@@ -464,8 +611,7 @@
 
     for (const k of flat) {
       const itemTrim = (k.item || "").trim();
-      const isName = /^name$/i.test(itemTrim);
-      if (isName) {
+      if (isDisplayNameItem(itemTrim)) {
         if (cur && Object.keys(cur.fields).length > 0) segments.push(cur);
         cur = { path: k.path, fields: {} };
       } else if (!cur) {
@@ -477,8 +623,13 @@
     if (cur && Object.keys(cur.fields).length > 0) segments.push(cur);
 
     return segments.filter((s) => {
-      const name = (s.fields.Name || "").trim();
-      const pnp = displayFieldByLabels(s.fields, ["PNP Device ID", "PNP_Device_ID"]);
+      const name = displayAdapterDisplayName(s.fields);
+      const pnp = displayFieldByLabels(s.fields, [
+        "PNP Device ID",
+        "PNP_Device_ID",
+        "ID PNP-устройства",
+        "ИД PNP-устройства",
+      ]);
       return name.length > 0 || pnp.length > 0 || Object.keys(s.fields).length >= 4;
     });
   }
@@ -493,7 +644,7 @@
     for (const r of rows) {
       if (!isMsInfoDisplayRelatedPath(r.path)) continue;
       const f = r.fields;
-      const name = String(f.Name || f.Device || "").trim();
+      const name = String(displayAdapterDisplayName(f) || f.Device || "").trim();
       if (!name) continue;
       out.push({ path: r.path, fields: { ...f } });
     }
@@ -508,10 +659,10 @@
     const out = [];
     const seen = new Set();
     for (const s of segments) {
-      const pnp = displayFieldByLabels(s.fields, ["PNP Device ID", "PNP_Device_ID"])
+      const pnp = displayFieldByLabels(s.fields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"])
         .replace(/\s+/g, "")
         .toUpperCase();
-      const name = (s.fields.Name || "").trim().toLowerCase();
+      const name = displayAdapterDisplayName(s.fields).toLowerCase();
       const key = pnp || `name:${name}|path:${s.path}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -522,8 +673,8 @@
 
   /** @param {Record<string, string>} fields */
   function gpuVendorLabelFromAdapterFields(fields) {
-    const name = `${fields.Name || ""}`;
-    const pnp = `${fields["PNP Device ID"] || fields.PNP_Device_ID || ""}`.toUpperCase();
+    const name = `${displayAdapterDisplayName(fields)}`;
+    const pnp = `${fields["PNP Device ID"] || fields.PNP_Device_ID || fields["ID PNP-устройства"] || fields["ИД PNP-устройства"] || ""}`.toUpperCase();
     const n = name.toLowerCase();
     if (/nvidia|geforce|rtx|quadro|tesla/.test(n) || /VEN_10DE/.test(pnp)) return "NVIDIA";
     if (/intel|\buhd\b|iris|arc/.test(n) || /VEN_8086/.test(pnp)) return "INTEL";
@@ -539,14 +690,14 @@
    */
   function displayAdapterBlockFromFields(fields, kvs, rows) {
     const vendorLabel = gpuVendorLabelFromAdapterFields(fields);
-    let name = (fields.Name || "").trim();
+    let name = displayAdapterDisplayName(fields);
     if (!name) {
       if (vendorLabel === "INTEL") name = "Intel graphics";
       else if (vendorLabel === "NVIDIA") name = "NVIDIA GPU";
       else name = "Display adapter";
     }
 
-    let driverFull = displayFieldByLabels(fields, ["Driver Version"]) || "";
+    let driverFull = displayFieldByLabels(fields, ["Driver Version", "Версия драйвера"]) || "";
     if (vendorLabel === "NVIDIA") {
       if (!driverFull || isIntelDriverVersionString(driverFull)) {
         const fixed = pickNvidiaDisplayDriverKvs(kvs) || pickNvidiaDriverFromRows(rows);
@@ -563,7 +714,7 @@
       nvidiaDriverFormatted = nvidiaInternalToDisplayVersion(driverFull);
     }
 
-    const nmDriverVer = displayFieldByLabels(fields, ["Driver Version"]);
+    const nmDriverVer = displayFieldByLabels(fields, ["Driver Version", "Версия драйвера"]);
     let driverVersionDisplay = "";
     if (vendorLabel === "NVIDIA") {
       driverVersionDisplay = nvidiaDriverFormatted || nmDriverVer || driverFull || "";
@@ -571,14 +722,14 @@
       driverVersionDisplay = nmDriverVer || driverFull || "";
     }
 
-    const resRaw = displayFieldByLabels(fields, ["Resolution", "Current Resolution"]);
+    const resRaw = displayFieldByLabels(fields, ["Resolution", "Current Resolution", "Разрешение", "Текущее разрешение"]);
     let resolution = "";
     if (resRaw && String(resRaw).trim() && !/^not available|^n\/a$/i.test(String(resRaw).trim())) {
       resolution = String(resRaw).trim();
     }
 
     const nvidiaDrivesDisplay = vendorLabel === "NVIDIA" && !!resolution;
-    const pnp = displayFieldByLabels(fields, ["PNP Device ID", "PNP_Device_ID"]);
+    const pnp = displayFieldByLabels(fields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"]);
     const devId = pnpToDeviceId(pnp);
 
     return {
@@ -589,11 +740,11 @@
       drivesDisplay: vendorLabel !== "NVIDIA" || nvidiaDrivesDisplay,
       vendorLabel,
       driverVersionDisplay,
-      driverDate: displayFieldByLabels(fields, ["Driver Date"]) || "",
+      driverDate: displayFieldByLabels(fields, ["Driver Date", "Дата драйвера"]) || "",
       deviceId: devId,
       pciLookupUrl: pciLookupUrlFromDeviceId(devId),
-      adapterType: displayFieldByLabels(fields, ["Adapter Type"]) || "",
-      adapterRam: displayFieldByLabels(fields, ["Adapter RAM"]) || "",
+      adapterType: displayFieldByLabels(fields, ["Adapter Type", "Тип адаптера", "Описание адаптера"]) || "",
+      adapterRam: displayFieldByLabels(fields, ["Adapter RAM", "ОЗУ адаптера", "Память адаптера"]) || "",
     };
   }
 
@@ -637,8 +788,7 @@
     /** @type {Map<string, Record<string, string>>} */
     const byPath = new Map();
     for (const k of kvs) {
-      if (!/Display|Monitor|Graphics|Video|VideoController|Videocontroller/i.test(k.path)) continue;
-      if (/USB.*Audio|Sound Driver|Audio Device/i.test(k.path)) continue;
+      if (!isMsInfoDisplayRelatedPath(k.path)) continue;
       if (!byPath.has(k.path)) byPath.set(k.path, {});
       byPath.get(k.path)[k.item] = k.value;
     }
@@ -646,9 +796,11 @@
     let nvidiaPath = "";
     let intelPath = "";
     for (const [path, o] of byPath) {
-      const name = `${o.Name || ""} ${path}`.toLowerCase();
+      const dn = displayAdapterDisplayName(o);
+      const name = `${dn} ${path}`.toLowerCase();
       if (/nvidia|geforce|rtx|quadro|tesla/.test(name)) {
-        if (!nvidiaPath || (o.Name && o.Name.length > (byPath.get(nvidiaPath)?.Name || "").length)) {
+        const prevDn = nvidiaPath ? displayAdapterDisplayName(byPath.get(nvidiaPath) || {}) : "";
+        if (!nvidiaPath || (dn && dn.length > prevDn.length)) {
           nvidiaPath = path;
         }
       }
@@ -657,7 +809,7 @@
         /uhd|iris|arc|graphics|630|640|770|xe|igpu|integrated/.test(name) &&
         !/nvidia/.test(name)
       ) {
-        if (!intelPath || (o.Name && /UHD|Iris|Arc/i.test(o.Name))) intelPath = path;
+        if (!intelPath || (dn && /UHD|Iris|Arc/i.test(dn))) intelPath = path;
       }
     }
 
@@ -680,8 +832,8 @@
     let nvidiaRes = "";
     let intelRes = "";
     for (const k of kvs) {
-      if (!/^Resolution$|^Current Resolution$/i.test(k.item)) continue;
-      if (!/Display|Graphics|Video|Monitor/i.test(k.path)) continue;
+      if (!isResolutionItemLabel(k.item)) continue;
+      if (!isMsInfoDisplayRelatedPath(k.path)) continue;
       const pl = k.path.toLowerCase();
       if (isNvidiaGraphicsPath(k.path) || /nvidia|geforce|rtx|quadro/.test(pl)) {
         nvidiaRes = nvidiaRes || k.value.trim();
@@ -690,16 +842,14 @@
       }
     }
     for (const k of kvs) {
-      if (!/^Resolution$|^Current Resolution$/i.test(k.item)) continue;
+      if (!isResolutionItemLabel(k.item)) continue;
       if (k.path === nvidiaPath && !nvidiaRes) nvidiaRes = k.value.trim();
       if (k.path === intelPath && !intelRes) intelRes = k.value.trim();
     }
 
     if (!intelRes && !nvidiaRes) {
       const rlist = kvs.filter(
-        (k) =>
-          /^Resolution$|^Current Resolution$/i.test(k.item) &&
-          /Display|Graphics|Video|Monitor/i.test(k.path)
+        (k) => isResolutionItemLabel(k.item) && isMsInfoDisplayRelatedPath(k.path)
       );
       if (rlist.length === 1) {
         const r = rlist[0].value.trim();
@@ -712,12 +862,12 @@
     if (!intelRes) intelRes = resolutionFromDisplayRows(rows, "intel");
     if (!nvidiaRes) nvidiaRes = resolutionFromDisplayRows(rows, "nvidia");
 
-    const nvidiaNameFromKv = kvs.find((k) => /^Name$/i.test(k.item) && /NVIDIA/i.test(k.value));
+    const nvidiaNameFromKv = kvs.find((k) => isDisplayNameItem(k.item) && /NVIDIA/i.test(k.value));
     const nvidiaName =
-      (nvidiaPath ? byPath.get(nvidiaPath)?.Name?.trim() : "") ||
+      (nvidiaPath ? displayAdapterDisplayName(byPath.get(nvidiaPath) || {}) : "") ||
       nvidiaNameFromKv?.value?.trim() ||
       "";
-    const intelName = intelPath ? byPath.get(intelPath)?.Name?.trim() || "" : "";
+    const intelName = intelPath ? displayAdapterDisplayName(byPath.get(intelPath) || {}) : "";
 
     let nvidiaDriverFull = pickNvidiaDisplayDriverKvs(kvs) || pickNvidiaDriverFromRows(rows);
     if (!nvidiaDriverFull && nvidiaPath) {
@@ -757,11 +907,11 @@
     let intelBlock = null;
     if (intelPath && (intelName || intelRes || intelDriverFull)) {
       const im = {
-        driverVersion: displayFieldByLabels(intelFields, ["Driver Version"]),
-        driverDate: displayFieldByLabels(intelFields, ["Driver Date"]),
-        pnp: displayFieldByLabels(intelFields, ["PNP Device ID", "PNP_Device_ID"]),
-        adapterType: displayFieldByLabels(intelFields, ["Adapter Type"]),
-        adapterRam: displayFieldByLabels(intelFields, ["Adapter RAM"]),
+        driverVersion: displayFieldByLabels(intelFields, ["Driver Version", "Версия драйвера"]),
+        driverDate: displayFieldByLabels(intelFields, ["Driver Date", "Дата драйвера"]),
+        pnp: displayFieldByLabels(intelFields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"]),
+        adapterType: displayFieldByLabels(intelFields, ["Adapter Type", "Тип адаптера", "Описание адаптера"]),
+        adapterRam: displayFieldByLabels(intelFields, ["Adapter RAM", "ОЗУ адаптера", "Память адаптера"]),
       };
       const devId = pnpToDeviceId(im.pnp);
       intelBlock = {
@@ -782,11 +932,11 @@
     let nvidiaBlock = null;
     if (nvidiaName || nvidiaDriverFull || nvidiaPath) {
       const nm = {
-        driverVersion: displayFieldByLabels(nvidiaFields, ["Driver Version"]),
-        driverDate: displayFieldByLabels(nvidiaFields, ["Driver Date"]),
-        pnp: displayFieldByLabels(nvidiaFields, ["PNP Device ID", "PNP_Device_ID"]),
-        adapterType: displayFieldByLabels(nvidiaFields, ["Adapter Type"]),
-        adapterRam: displayFieldByLabels(nvidiaFields, ["Adapter RAM"]),
+        driverVersion: displayFieldByLabels(nvidiaFields, ["Driver Version", "Версия драйвера"]),
+        driverDate: displayFieldByLabels(nvidiaFields, ["Driver Date", "Дата драйвера"]),
+        pnp: displayFieldByLabels(nvidiaFields, ["PNP Device ID", "PNP_Device_ID", "ID PNP-устройства", "ИД PNP-устройства"]),
+        adapterType: displayFieldByLabels(nvidiaFields, ["Adapter Type", "Тип адаптера", "Описание адаптера"]),
+        adapterRam: displayFieldByLabels(nvidiaFields, ["Adapter RAM", "ОЗУ адаптера", "Память адаптера"]),
       };
       const devIdN = pnpToDeviceId(nm.pnp);
       const verDisp =
@@ -821,9 +971,15 @@
 
   /** @param {Record<string, string>} fields @param {string} path */
   function classifyNetworkMedium(fields, path) {
-    const name = fields.Name || fields.Device || fields.Item || fields.Description || "";
-    const desc = fields.Description || fields["Product Name"] || "";
-    const aType = fields["Adapter Type"] || fields["Connection Type"] || fields.Type || fields["Interface type"] || "";
+    const name = fields.Name || fields.Имя || fields.Device || fields.Item || fields.Description || "";
+    const desc = fields.Description || fields["Product Name"] || fields["Тип продукта"] || "";
+    const aType =
+      fields["Adapter Type"] ||
+      fields["Тип адаптера"] ||
+      fields["Connection Type"] ||
+      fields.Type ||
+      fields["Interface type"] ||
+      "";
     const hayName = `${name} ${path}`.toLowerCase();
     const hayAll = `${name} ${desc} ${aType} ${path}`.toLowerCase();
 
@@ -859,6 +1015,7 @@
   function networkAdapterIdentityKey(fields) {
     const raw =
       fields.Name ||
+      fields.Имя ||
       fields.Device ||
       fields.Description ||
       fields["Connection Name"] ||
@@ -894,7 +1051,13 @@
   function pickIpv4FromFields(fields) {
     const tryVal = (v) => {
       const t = String(v || "").trim();
-      if (!t || /^not available|^n\/a$/i.test(t)) return "";
+      if (
+        !t ||
+        /^(?:not available|n\/a|недоступно|nicht verfügbar|niet beschikbaar|indisponível|indisponible|non disponibile|ikke tilgængelig|ej tillgänglig|ikke tilgjengelig|ei käytettävissä|ei saatavilla|yok|غير متوفر|無法使用|不可用|사용할 수 없음|利用できません)$/i.test(
+          t
+        )
+      )
+        return "";
       const all = t.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g) || [];
       for (const ip of all) {
         if (isUsableInternetIpv4(ip)) return ip;
@@ -905,18 +1068,67 @@
       fields,
       "IP Address",
       "IP address",
+      "IP-адрес",
       "IPv4 Address",
       "IPv4 address",
-      "Address"
+      "IPv4-адрес",
+      "Address",
+      "Adresse IP",
+      "Adresse IPv4",
+      "IPv4-Adresse",
+      "IP-Adresse",
+      "IP-adresse",
+      "IP-adress",
+      "IPv4-adress",
+      "IP-osoite",
+      "IPv4-osoite",
+      "IP-adres",
+      "IPv4-adres",
+      "Indirizzo IP",
+      "Indirizzo IPv4",
+      "Dirección IP",
+      "Dirección IPv4",
+      "Endereço IP",
+      "Endereço IPv4",
+      "Adres IP",
+      "Adres IPv4",
+      "Adresa IP",
+      "Adresa IPv4",
+      "IP-adresa",
+      "IPv4 adresa",
+      "IP-cím",
+      "IPv4-cím",
+      "IP adresi",
+      "IPv4 adresi",
+      "Adresă IP",
+      "Adresă IPv4",
+      "IP-aadress",
+      "IPv4-aadress",
+      "IP-adress (IPv4)",
+      "Διεύθυνση IP",
+      "Διεύθυνση IPv4",
+      "IP アドレス",
+      "IPv4 アドレス",
+      "IP 주소",
+      "IPv4 주소",
+      "IP 地址",
+      "IPv4 地址",
+      "عنوان IP",
+      "عنوان IPv4"
     );
     let hit = tryVal(direct);
     if (hit) return hit;
     for (const [k, v] of Object.entries(fields)) {
       if (!v || !String(v).trim()) continue;
       const kl = k.toLowerCase();
+      const addrHint =
+        /address|адрес|adres|addr|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(
+          kl
+        );
       if (
-        (kl.includes("ipv4") && kl.includes("address")) ||
-        (kl.includes("ip") && kl.includes("address") && !kl.includes("ipv6"))
+        (kl.includes("ipv4") && addrHint) ||
+        (kl.includes("ip") && addrHint && !kl.includes("ipv6")) ||
+        (/ipv4/i.test(kl) && addrHint && !kl.includes("ipv6"))
       ) {
         hit = tryVal(v);
         if (hit) return hit;
@@ -949,7 +1161,13 @@
         .replace(/^\[|\]$/g, "")
         .replace(/%\d+$/, "")
         .trim();
-      if (!u || /^not available|^n\/a$/i.test(u)) return;
+      if (
+        !u ||
+        /^(?:not available|n\/a|недоступно|nicht verfügbar|niet beschikbaar|indisponível|indisponible|non disponibile|ikke tilgængelig|ej tillgänglig|ikke tilgjengelig|ei käytettävissä|ei saatavilla|yok|غير متوفر|無法使用|不可用|사용할 수 없음|利用できません)$/i.test(
+          u
+        )
+      )
+        return;
       if (!isIpv6LiteralForDisplay(u)) return;
       const low = u.toLowerCase();
       if (seen.has(low)) return;
@@ -961,10 +1179,44 @@
       const s = stripMsInfoNoise(raw);
       for (const token of s.split(/[,\n;]+/)) pushTok(token.trim());
     };
-    scan(getNetworkField(fields, "IP Address", "IP address"));
+    scan(
+      getNetworkField(
+        fields,
+        "IP Address",
+        "IP address",
+        "IP-адрес",
+        "IPv4-адрес",
+        "IPv4 Address",
+        "IPv4 address",
+        "Adresse IP",
+        "Adresse IPv4",
+        "IPv4-Adresse",
+        "IP-Adresse",
+        "IP-adresse",
+        "IP-adress",
+        "IPv4-adress",
+        "IP-osoite",
+        "IPv4-osoite",
+        "IP-adres",
+        "IPv4-adres",
+        "Indirizzo IP",
+        "Indirizzo IPv4",
+        "Dirección IP",
+        "Dirección IPv4",
+        "Endereço IP",
+        "Endereço IPv4",
+        "Adres IP",
+        "Adres IPv4",
+        "IP 주소",
+        "IPv4 주소",
+        "IP 地址",
+        "IPv4 地址"
+      )
+    );
     for (const name of [
       "IPv6 Address",
       "IPv6 address",
+      "IPv6-адрес",
       "Global IPv6 Address",
       "Temporary IPv6 Address",
       "Link-local IPv6 Address",
@@ -976,7 +1228,17 @@
       if (!v || !String(v).trim()) continue;
       const kl = k.toLowerCase();
       if (/dns|multicast|gateway/i.test(kl)) continue;
-      if (/^ip\s*address$/i.test(kl) || (/ipv6/i.test(kl) && /address|addr/i.test(kl))) scan(v);
+      if (
+        /^ip\s*address$/i.test(kl) ||
+        (/ipv6/i.test(kl) && /address|addr|адрес|adres|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(kl))
+      )
+        scan(v);
+      if (
+        /ip/i.test(kl) &&
+        /адрес|adres|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(kl) &&
+        !/ipv6|dns|шлюз|gateway/i.test(kl)
+      )
+        scan(v);
     }
     return parts.join(", ");
   }
@@ -1021,6 +1283,7 @@
     const keyHints = [
       "IPv6 Address",
       "IPv6 address",
+      "IPv6-адрес",
       "Global IPv6 Address",
       "Temporary IPv6 Address",
     ];
@@ -1031,7 +1294,7 @@
         if (hit) return hit;
       }
     }
-    for (const n of ["IP Address", "IP address", "Addresses"]) {
+    for (const n of ["IP Address", "IP address", "IP-адрес", "Addresses"]) {
       const v = getNetworkField(fields, n) || fields[n];
       if (v) {
         const hit = tryValue(v);
@@ -1041,9 +1304,13 @@
     for (const [k, v] of Object.entries(fields)) {
       if (!v || !String(v).trim()) continue;
       const kl = k.toLowerCase();
+      if (/ip/i.test(kl) && /адрес/i.test(kl) && !/ipv6|dns|шлюз|gateway/i.test(kl)) {
+        const hit = tryValue(v);
+        if (hit) return hit;
+      }
       if (!kl.includes("ipv6")) continue;
       if (/(dns|gateway|multicast)/i.test(kl)) continue;
-      if (!/(address|addr\.?)/i.test(kl) && !/^ipv6 address$/i.test(k)) continue;
+      if (!/(address|addr\.?|адрес)/i.test(kl) && !/^ipv6 address$/i.test(k)) continue;
       const hit = tryValue(v);
       if (hit) return hit;
     }
@@ -1056,7 +1323,7 @@
    */
   function dnsValueListsResolver(value) {
     const s = stripMsInfoNoise(value);
-    if (!s || /^not available|^n\/a$/i.test(s)) return false;
+    if (!s || /^not available|^n\/a|^недоступно$/i.test(s)) return false;
     const v4s = s.match(/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/g) || [];
     for (const ip of v4s) {
       if (isUsableInternetIpv4(ip)) return true;
@@ -1078,7 +1345,7 @@
     const seen = new Set();
     const push = (k, v) => {
       const t = String(v || "").trim();
-      if (!t || /^not available|^n\/a$/i.test(t)) return;
+      if (!t || /^not available|^n\/a|^недоступно$/i.test(t)) return;
       const key = `${k}\0${t}`;
       if (seen.has(key)) return;
       seen.add(key);
@@ -1088,12 +1355,16 @@
       "DNS Server",
       "DNS Servers",
       "DNS servers",
+      "DNS-сервер",
+      "DNS сервер",
       "Preferred DNS",
       "Alternate DNS",
       "Primary DNS",
       "Secondary DNS",
       "Preferred DNS server",
       "Alternate DNS server",
+      "Предпочитаемый DNS-сервер",
+      "Альтернативный DNS-сервер",
       "Connection-specific DNS Suffix",
       "DNS Suffix",
     ];
@@ -1119,6 +1390,10 @@
     return (
       /\bnetwork|\bnetzwerk|\bréseau|\bnetworking\b|tcp\/ip|ipconfig|wlan|wi-?fi|wifi\b|802\.11|wireless lan|ethernet connection|nic\b|network adapter|win32.*network|remote access|vpn|hyper-?v.*switch/i.test(
         p
+      ) ||
+      /\bсеть\b|сетев|адаптер|tcp\s*\/\s*ip|беспровод|подключен|удаленн|компоненты.*сеть|сеть.*адапт/i.test(p) ||
+      /\b(red|netwerk|netværk|nettverk|verkko|sieć|síť|rețea|ağ|δίκτυο|võrk|网络|網路|ネットワーク|네트워크|شبكة)\b/i.test(
+        p
       )
     );
   }
@@ -1133,10 +1408,40 @@
     const out = [];
     /** @type {Record<string, string>} */
     let cur = {};
+    const isAdapterNameItem = (/** @type {string} */ item) => {
+      const it = String(item || "").trim();
+      return (
+        /^name$/i.test(it) ||
+        /^namn$/i.test(it) ||
+        /^nimi$/i.test(it) ||
+        /^nome$/i.test(it) ||
+        /^naam$/i.test(it) ||
+        /^navn$/i.test(it) ||
+        /^název$/i.test(it) ||
+        /^nazwa$/i.test(it) ||
+        /^nombre$/i.test(it) ||
+        /^имя$/i.test(it) ||
+        /^наименование$/i.test(it) ||
+        /^名称$/i.test(it) ||
+        /^名稱$/i.test(it) ||
+        /^名前$/i.test(it) ||
+        /^이름$/i.test(it) ||
+        /^الاسم$/i.test(it) ||
+        /^όνομα$/iu.test(it)
+      );
+    };
+    const recordHasAdapterNameKey = (/** @type {Record<string, string>} */ rec) => {
+      for (const k of Object.keys(rec)) {
+        if (!rec[k]) continue;
+        if (isAdapterNameItem(k)) return true;
+      }
+      return Object.prototype.hasOwnProperty.call(rec, "Name") || Object.prototype.hasOwnProperty.call(rec, "Имя");
+    };
     for (const k of pathKvs) {
       const item = (k.item || "").trim();
       if (!item) continue;
-      if (/^Name$/i.test(item) && Object.prototype.hasOwnProperty.call(cur, "Name")) {
+      const nameKeyPresent = recordHasAdapterNameKey(cur);
+      if (isAdapterNameItem(item) && nameKeyPresent) {
         out.push(cur);
         cur = {};
       }
@@ -1148,7 +1453,7 @@
 
   /** Bluetooth / PAN “network” entries are not internet paths; exclude by name/path too. */
   function isBluetoothOrPanAdapter(fields, path) {
-    const blob = `${path} ${fields.Name || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
+    const blob = `${path} ${fields.Name || ""} ${fields.Имя || ""} ${fields.Nimi || ""} ${fields.Naam || ""} ${fields.Nazwa || ""} ${fields.Nome || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Тип адаптера"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
     return /\bbluetooth\b|personal area network|bt\s*pan|usb bluetooth network/i.test(blob);
   }
 
@@ -1157,7 +1462,12 @@
     const t = String(ip || "").trim();
     if (!t || !/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(t)) return false;
     if (/^169\.254\./.test(t) || /^0\.0\.0\.0$/i.test(t)) return false;
-    if (/not available|n\/a/i.test(t)) return false;
+    if (
+      /not available|n\/a|недоступно|nicht verfügbar|nicht zutreffend|niet beschikbaar|indisponível|indisponible|non disponibile|ikke tilgængelig|ej tillgänglig|ikke tilgjengelig|ei käytettävissä|ei saatavilla|nav pieejams|pole saadaval|nincs megadva|brak|n\/d|n\.d\.|n\/v|n\/k|yok|غير متوفر|無法使用|不可用|사용할 수 없음|利用できません/i.test(
+        t
+      )
+    )
+      return false;
     return true;
   }
 
@@ -1187,15 +1497,8 @@
    */
   function hasDnsOrInfrastructureHint(fields) {
     if (hasDnsServersInExport(fields)) return true;
-    const gw =
-      getNetworkField(
-        fields,
-        "Default Gateway",
-        "Default IP Gateway",
-        "IPv4 Default Gateway",
-        "Gateway"
-      ) || fields["Default IP Gateway"];
-    const dhcpSrv = getNetworkField(fields, "DHCP Server") || fields["DHCP Server"];
+    const gw = getNetworkField(fields, ...MSINFO_IPV4_GATEWAY_LABELS) || fields["Default IP Gateway"];
+    const dhcpSrv = getNetworkField(fields, ...MSINFO_DHCP_SERVER_LABELS) || fields["DHCP Server"];
     const blob = `${gw || ""} ${dhcpSrv || ""}`;
     const ips = blob.match(/\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g) || [];
     return ips.some((ip) => isUsableInternetIpv4(ip));
@@ -1225,20 +1528,32 @@
       /^\s*\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\s*$/i.test(ip.trim()) &&
       !/^169\.254\./.test(ip.trim()) &&
       !/^0\.0\.0\.0$/i.test(ip.trim()) &&
-      !/not available|n\/a/i.test(ip)
+      !/not available|n\/a|недоступно|nicht verfügbar|niet beschikbaar|indisponível|indisponible|non disponibile|ikke tilgængelig|ej tillgänglig|ikke tilgjengelig|ei käytettävissä|ei saatavilla|yok|غير متوفر|無法使用|不可用|사용할 수 없음|利用できません/i.test(
+        ip
+      )
     ) {
       s += 14;
     }
-    const gw =
-      getNetworkField(fields, "Default Gateway", "Default IP Gateway", "IPv4 Default Gateway", "Gateway") || "";
-    if (gw && /\d+\.\d+\.\d+\.\d+/.test(gw) && !/not available|n\/a/i.test(gw)) s += 7;
-    if (/media state[^\n]*connected|netconnectionstatus.*2|connection.*\bconnected\b|operational status[^\n]*up/i.test(blob)) {
+    const gw = getNetworkField(fields, ...MSINFO_IPV4_GATEWAY_LABELS) || "";
+    if (
+      gw &&
+      /\d+\.\d+\.\d+\.\d+/.test(gw) &&
+      !/not available|n\/a|недоступно|nicht verfügbar|niet beschikbaar|indisponível|indisponible|non disponibile|ikke tilgængelig|ej tillgänglig|ikke tilgjengelig|ei käytettävissä|ei saatavilla|yok|غير متوفر|無法使用|不可用|사용할 수 없음|利用できません/i.test(
+        gw
+      )
+    )
+      s += 7;
+    if (
+      /media state[^\n]*connected|netconnectionstatus.*2|connection.*\bconnected\b|operational status[^\n]*up|подключен|включен/i.test(
+        blob
+      )
+    ) {
       s += 9;
     }
-    if (/disconnected|disabled|media state[^\n]*disconnected|operational status[^\n]*down|not connected/i.test(blob)) {
+    if (/disconnected|disabled|media state[^\n]*disconnected|operational status[^\n]*down|not connected|отключен|остановлен/i.test(blob)) {
       s -= 8;
     }
-    if (/dhcp enabled[^\n]*yes|dhcp.*\byes\b/i.test(blob) && s > 0) s += 2;
+    if ((/dhcp enabled[^\n]*yes|dhcp.*\byes\b|dhcp.*\bда\b/i.test(blob) && s > 0)) s += 2;
     if (pickUsableIpv6FromFields(fields)) s += 12;
     return s;
   }
@@ -1249,6 +1564,7 @@
     const v6Keys = [
       "IPv6 Address",
       "IPv6 address",
+      "IPv6-адрес",
       "Global IPv6 Address",
       "Temporary IPv6 Address",
       "Link-local IPv6 Address",
@@ -1260,7 +1576,7 @@
     const addrs = [];
     for (const key of v6Keys) {
       const v = getNetworkField(fields, key) || fields[key];
-      if (v && !/^not available|^n\/a|^none$/i.test(String(v).trim()))
+      if (v && !/^not available|^n\/a|^none$|^недоступно$/i.test(String(v).trim()))
         addrs.push(`${key}: ${String(v).trim()}`);
     }
 
@@ -1338,25 +1654,48 @@
       for (const fields of list) flat.push({ path, fields });
     }
 
-    const detailKeys = [
-      "Connection Name",
-      "NetConnectionID",
-      "Media State",
-      "Connection Status",
-      "Operational Status",
-      "Subnet Mask",
-      "IP Subnet",
-      "IPv4 Subnet Mask",
-      "Default Gateway",
-      "Default IP Gateway",
-      "IPv4 Default Gateway",
-      "DHCP Enabled",
-      "DHCP Server",
-      "Adapter Type",
-      "MAC Address",
-      "Physical Address",
-      "Speed",
+    const detailKeyGroups = [
+      ["Connection Name", "NetConnectionID", "Имя подключения"],
+      ["Name", "Имя", "Adapter Name", "Adapter name", "Adapter"],
+      ["Product Type", "Тип продукта", "Тип продукции"],
+      ["Installed", "Установлен", "Установлено", "Установлена"],
+      ["PNP Device ID", "ID PNP-устройства", "ИД PNP-устройства", "Код PNP-устройства", "PNP-устройства"],
+      ["Last Reset", "Последний сброс"],
+      ["Index", "Индекс"],
+      ["Service Name", "Имя службы"],
+      ["IP addresses", "IP-адрес", "IP Address"],
+      [
+        "DHCP Lease Expires",
+        "DHCP-аренда истекает",
+        "Срок аренды DHCP истекает",
+        "Дата окончания аренды DHCP",
+      ],
+      [
+        "DHCP Lease Obtained",
+        "DHCP-аренда получена",
+        "Срок аренды DHCP получен",
+        "Дата получения аренды DHCP",
+      ],
+      ["Driver", "Драйвер"],
+      ["Media State", "Состояние среды передачи"],
+      ["Connection Status", "Состояние подключения"],
+      ["Operational Status", "Рабочее состояние"],
+      ["Subnet Mask", "IP Subnet", "IP-подсеть", "IPv4 Subnet Mask", "Маска подсети"],
+      ["Default Gateway", "Default IP Gateway", "IPv4 Default Gateway", "Шлюз IP по умолчанию", "Шлюз по умолчанию", "Основной шлюз"],
+      ["DHCP Enabled", "DHCP вкл.", "DHCP включен"],
+      ["DHCP Server", "DHCP-сервер", "DHCP сервер", "Сервер DHCP"],
+      ["Adapter Type", "Тип адаптера"],
+      ["MAC Address", "Physical Address", "MAC-адрес", "Физический адрес"],
+      ["Speed", "Скорость"],
     ];
+
+    const detailKeySet = new Set();
+    for (const kg of detailKeyGroups) {
+      for (const x of kg) {
+        detailKeySet.add(x);
+        detailKeySet.add(x.trim().toLowerCase());
+      }
+    }
 
     /** @type {{ path: string, name: string, medium: string, ipv4Display: string, ipv6Display: string, ipv6: { summary: string, lines: string[] }, details: { k: string, v: string }[], score: number, primary: boolean }[]} */
     const out = [];
@@ -1366,6 +1705,7 @@
 
       const name =
         fields.Name ||
+        fields.Имя ||
         fields.Device ||
         fields.Item ||
         fields.Description ||
@@ -1383,10 +1723,11 @@
       /** @type { { k: string, v: string }[] } */
       const details = [];
 
-      for (const dk of detailKeys) {
-        const v = getNetworkField(fields, dk) || fields[dk];
+      for (const keyGroup of detailKeyGroups) {
+        const v = getNetworkField(fields, ...keyGroup);
+        const label = keyGroup[0];
         if (v && String(v).trim() && !/^not available|^n\/a$/i.test(String(v).trim())) {
-          details.push({ k: dk, v: String(v).trim() });
+          details.push({ k: label, v: String(v).trim() });
         }
       }
 
@@ -1394,11 +1735,11 @@
         if (!details.some((x) => x.k === d.k && x.v === d.v)) details.push(d);
       }
 
-      const detailKeySet = new Set(detailKeys);
       for (const [k, v] of Object.entries(fields)) {
         if (!v || !String(v).trim()) continue;
         if (/^Item$/i.test(k) || /^Value$/i.test(k)) continue;
-        if (detailKeySet.has(k)) continue;
+        const kNorm = k.trim().toLowerCase();
+        if (detailKeySet.has(k) || detailKeySet.has(kNorm)) continue;
         if (/^IPv6/i.test(k)) continue;
         if (/^ip/i.test(k.toLowerCase()) && k.toLowerCase().includes("address") && !/ipv6/i.test(k)) continue;
         if (/dns|suffix/i.test(k.toLowerCase())) continue;
@@ -1494,10 +1835,19 @@
     const out = [];
     const seen = new Set();
 
-    const pathIsDriveNode = (/** @type {string} */ p) =>
-      /\/Disks\/Drive\s+[A-Z]:/i.test(p) ||
-      /\/Storage\/.*\/Drive\s+[A-Z]:/i.test(p) ||
-      /Components.*Storage.*\/Drive\s+[A-Z]:/i.test(p);
+    const pathIsDriveNode = (/** @type {string} */ p) => {
+      const s = String(p || "");
+      return (
+        /\/Disks\/Drive\s+[A-Z]:/i.test(s) ||
+        /\/Storage\/.*\/Drive\s+[A-Z]:/i.test(s) ||
+        /Components.*Storage.*\/Drive\s+[A-Z]:/i.test(s) ||
+        /\/Диски\/Диск\b/i.test(s) ||
+        /\/Запоминающие устройства\/.+\/Диск/i.test(s) ||
+        /Компоненты.*Запоминающие устройства.*Диски.*\/Диск/i.test(s) ||
+        /Компоненты.*Накопител.*\/Диск/i.test(s) ||
+        /\/Диски\/.+/i.test(s)
+      );
+    };
 
     const fieldsFromKvs = (/** @type {string} */ path) => {
       const f = {};
@@ -1506,6 +1856,23 @@
         f[k.item.trim()] = (k.value || "").trim();
       }
       return f;
+    };
+
+    const looksLikePhysicalDisk = (/** @type {Record<string, string>} */ f) => {
+      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Model"] || ""} ${f["Модель"] || ""}`.toLowerCase();
+      const hasModel = !!(f["Model"] || f["Модель"] || f["Model Number"] || f["Номер модели"]);
+      const hasDesc = !!(f["Описание"] || f["Description"]);
+      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""}`.trim();
+      const hasSized =
+        sizeBlob.length > 2 &&
+        /[\d,\s]+/.test(sizeBlob) &&
+        /(байт|тб|гб|tb|gb|mb|bytes|go|to)/i.test(sizeBlob);
+      const hasSector = !!(f["Bytes/sector"] || f["Bytes per sector"] || f["Байт/сектор"]);
+      const diskish =
+        /дисков|накопител|hard\s*disk|disk\s+drive|physical\s+drive|hdd|ssd|nvme|scsi|sata|st\d{4,}|wdc|wd\s|seagate|samsung\s+ssd|intel\s+ssd/i.test(
+          desc
+        );
+      return hasSized && (hasSector || diskish) && (hasModel || hasDesc);
     };
 
     const looksLikeDisk = (/** @type {Record<string, string>} */ f) => {
@@ -1517,11 +1884,22 @@
           f.Dateisystem ||
           f["Système de fichiers"] ||
           f["Sistema de archivos"] ||
-          f["Sistema de ficheiros"]
+          f["Sistema de ficheiros"] ||
+          f["Файловая система"]
         ) ||
-        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"]) &&
-          !!(f["Free Space"] || f["Available Space"] || f["Freier Speicherplatz"] || f["Verfügbarer Speicherplatz"] || f["Espace libre"])) ||
-        (/ntfs|fat32|refs|exfat/i.test(blob) && /gb|tb|bytes|mb/i.test(blob))
+        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"]) &&
+          !!(
+            f["Free Space"] ||
+            f["Available Space"] ||
+            f["Freier Speicherplatz"] ||
+            f["Verfügbarer Speicherplatz"] ||
+            f["Espace libre"] ||
+            f["Свободно"] ||
+            f["Свободное место"] ||
+            f["Доступно"]
+          )) ||
+        (/ntfs|fat32|refs|exfat/i.test(blob) && /gb|tb|bytes|mb|гб|тб|байт/i.test(blob)) ||
+        looksLikePhysicalDisk(f)
       );
     };
 
@@ -1534,6 +1912,8 @@
         f.Laufwerk ||
         f["Volume"] ||
         f["Name"] ||
+        f["Описание"] ||
+        f["Модель"] ||
         (path.match(/Drive\s+[A-Z]:/i) || [""])[0] ||
         path.split(" / ").pop() ||
         "Drive";
@@ -1546,8 +1926,18 @@
           f["Système de fichiers"] ||
           f["Sistema de archivos"] ||
           f["Sistema de ficheiros"] ||
+          f["Файловая система"] ||
           "",
-        totalSize: f["Total Size"] || f["Size"] || f["Gesamtgröße"] || f["Kapazität"] || f["Taille totale"] || "",
+        totalSize:
+          f["Total Size"] ||
+          f["Size"] ||
+          f["Gesamtgröße"] ||
+          f["Kapazität"] ||
+          f["Taille totale"] ||
+          f["Размер"] ||
+          f["Полный размер"] ||
+          f["Ёмкость"] ||
+          "",
         freeSpace:
           f["Free Space"] ||
           f["Available Space"] ||
@@ -1555,10 +1945,21 @@
           f["Verfügbarer Speicherplatz"] ||
           f["Espace libre"] ||
           f["Espace disponible"] ||
+          f["Свободно"] ||
+          f["Свободное место"] ||
+          f["Доступно"] ||
           "",
-        used: f["Used"] || f["Used(%)"] || f["% Used"] || f["Belegt"] || f["Utilisé"] || "",
-        volumeName: f["Volume Name"] || f["Label"] || f["Datenträgerbezeichnung"] || f["Nom de volume"] || "",
-        serialNumber: f["Serial Number"] || f["Volume Serial Number"] || f["Seriennummer"] || "",
+        used: f["Used"] || f["Used(%)"] || f["% Used"] || f["Belegt"] || f["Utilisé"] || f["Используется"] || "",
+        volumeName:
+          f["Volume Name"] ||
+          f["Label"] ||
+          f["Datenträgerbezeichnung"] ||
+          f["Nom de volume"] ||
+          f["Метка тома"] ||
+          f["Метка"] ||
+          "",
+        serialNumber:
+          f["Serial Number"] || f["Volume Serial Number"] || f["Seriennummer"] || f["Серийный номер"] || "",
         path,
       });
     };
@@ -1574,8 +1975,9 @@
 
     if (!out.length) {
       for (const p of [...new Set(kvs.map((k) => k.path))]) {
-        if (!/Storage/i.test(p) || !/Disks?|Logical|Drive|Partition/i.test(p)) continue;
-        if (/Problem|Printer|Floppy|USB.*Mass|DVD|CD-ROM|Controller\s*Host/i.test(p)) continue;
+        if (!/Storage|Запоминающ|Накопител|Диски|Компоненты/i.test(p) || !/Disks?|Logical|Drive|Partition|Диск|Том/i.test(p))
+          continue;
+        if (/Problem|Printer|Floppy|USB.*Mass|DVD|CD-ROM|Controller\s*Host|Принтер|Накопител.*гибк/i.test(p)) continue;
         const f = fieldsFromKvs(p);
         if (Object.keys(f).length < 3) continue;
         pushDrive(p, f);
@@ -1601,7 +2003,7 @@
    */
   function pickStartupNameFromFields(f) {
     if (!f || typeof f !== "object") return "";
-    return displayFieldByLabels(f, [
+    const direct = displayFieldByLabels(f, [
       "Name",
       "Item",
       "Program",
@@ -1613,7 +2015,39 @@
       "Élément de démarrage",
       "Elemento de inicio",
       "Elemento de inicialização",
+      "Elemento de arranque",
+      "Elemento di avvio",
+      "Opstartitem",
+      "Avvio automatico",
+      "Käynnistys",
+      "Käynnistyskohta",
+      "Käynnistyskohteet",
+      "Element automatycznego uruchamiania",
+      "Oppføring",
+      "Oppstartsprogram",
+      "Başlangıç öğesi",
+      "Spouštěcí program",
+      "Spouštěcí položka",
+      "Käivitusprogramm",
+      "Rendszerindító elem",
+      "Element pornire",
+      "Имя",
+      "Название",
+      "Программа",
+      "Элемент",
+      "Элемент автозагрузки",
+      "启动项",
+      "啟動項目",
+      "スタートアップ項目",
+      "시작 프로그램",
+      "عنصر بدء التشغيل",
     ]);
+    if (direct) return direct;
+    for (const [k, v] of Object.entries(f)) {
+      const kt = String(k || "").trim();
+      if (/^программ/i.test(kt) && String(v || "").trim()) return String(v).trim();
+    }
+    return "";
   }
 
   /**
@@ -1635,6 +2069,30 @@
       "Befehlszeichenfolge",
       "Línea de comandos",
       "Linha de comando",
+      "Riga di comando",
+      "Opdrachtregel",
+      "Opdracht",
+      "Komentorivi",
+      "Polecenie",
+      "Wiersz polecenia",
+      "Comando",
+      "Comando de inicio",
+      "Comando de inicialização",
+      "Başlat komutu",
+      "Příkaz",
+      "Příkazový řádek",
+      "Käsk",
+      "Käsurida",
+      "Parancssor",
+      "Comandă",
+      "Команда",
+      "Строка команды",
+      "Параметры",
+      "启动命令",
+      "啟動命令",
+      "コマンド",
+      "시작 명령",
+      "أمر التشغيل",
     ]);
     if (fromLabels) return normalizeStartupCommandText(fromLabels).trim();
     let best = "";
@@ -1643,7 +2101,13 @@
       const s = normalizeStartupCommandText(String(v || "").trim());
       if (!s) continue;
       if (!/(\.exe|\.lnk|\.bat|\.cmd|\.msi|--processstart)/i.test(s)) continue;
-      if (/^location$/i.test(kt) && /^(HKLM|HKCU|HKU|HKEY_)/i.test(s) && !/\.(exe|lnk)/i.test(s)) continue;
+      if (
+        /^(location|key|registry|размещение|раздел|ключ)$/i.test(kt) ||
+        /^размещ/i.test(kt) ||
+        /^пользо/i.test(kt)
+      ) {
+        if (/^(HKLM|HKCU|HKU|HKEY_)/i.test(s) && !/\.(exe|lnk|bat|cmd|msi)/i.test(s)) continue;
+      }
       if (s.length > best.length) best = s;
     }
     return best.trim();
@@ -1654,7 +2118,39 @@
    */
   function pickStartupLocationFromFields(f) {
     if (!f || typeof f !== "object") return "";
-    return displayFieldByLabels(f, ["Location", "Key", "Registry key", "Speicherort", "Ort"]);
+    const direct = displayFieldByLabels(f, [
+      "Location",
+      "Key",
+      "Registry key",
+      "Speicherort",
+      "Ort",
+      "Emplacement",
+      "Ubicación",
+      "Localização",
+      "Posizione",
+      "Locatie",
+      "Placering",
+      "Plassering",
+      "Sijainti",
+      "Asukoht",
+      "Umístění",
+      "Lokalizacja",
+      "Konum",
+      "Раздел реестра",
+      "Размещение",
+      "Ключ",
+      "注册表项",
+      "登錄機碼",
+      "レジストリ キー",
+      "레지스트리 키",
+      "موقع التسجيل",
+    ]);
+    if (direct) return direct;
+    for (const [k, v] of Object.entries(f)) {
+      const kt = String(k || "").trim();
+      if (/^размещ/i.test(kt) && String(v || "").trim()) return String(v).trim();
+    }
+    return "";
   }
 
   /**
@@ -1662,7 +2158,38 @@
    */
   function pickStartupUserFromFields(f) {
     if (!f || typeof f !== "object") return "";
-    return displayFieldByLabels(f, ["User", "User Name", "Benutzer", "Usuario", "Utilisateur"]);
+    const direct = displayFieldByLabels(f, [
+      "User",
+      "User Name",
+      "Benutzer",
+      "Usuario",
+      "Utilisateur",
+      "Utente",
+      "Gebruiker",
+      "Bruger",
+      "Bruker",
+      "Användare",
+      "Käyttäjä",
+      "Kasutaja",
+      "Użytkownik",
+      "Uživatel",
+      "Utilizator",
+      "Felhasználó",
+      "Kullanıcı",
+      "Пользователь",
+      "Имя пользователя",
+      "用户",
+      "使用者",
+      "ユーザー",
+      "사용자",
+      "المستخدم",
+    ]);
+    if (direct) return direct;
+    for (const [k, v] of Object.entries(f)) {
+      const kt = String(k || "").trim();
+      if (/^пользо/i.test(kt) && String(v || "").trim()) return String(v).trim();
+    }
+    return "";
   }
 
   /**
@@ -1764,12 +2291,49 @@
     const out = [];
     const seen = new Set();
 
-    const startupContext = (/** @type {string} */ p) =>
-      MSINFO_I18N.softwareEnvPath.test(p) &&
-      /Startup Programs|Startup\s*Command|Autostart|Autostartprogramme|Programme beim Start|Programmes au démarrage|Programas de inicio|Programas de inicialização|Автозагрузка|启动程序|CurrentVersion\s*[/\\]\s*Run|\/\s*Run\s*(\/|$)/i.test(
-        p
-      ) &&
-      !/Services|Dienste|Servicios agregados|Task\s*Scheduler|Scheduled\s*Tasks|Geplante Tasks|Tâches planifiées/i.test(p);
+    const startupLeafName = (/** @type {string} */ path) => {
+      const parts = String(path || "")
+        .split(" / ")
+        .map((x) => x.trim())
+        .filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : "";
+    };
+
+    const startupPathMentionsRunKey = (/** @type {string} */ s) =>
+      /CurrentVersion\s*[/\\]\s*Run|Microsoft\\Windows\\CurrentVersion\\Run|Explorer\\Run|Policies\\.*?\\Run|\\Run\\/i.test(
+        s
+      );
+
+    /** Some localized exports omit the usual “software environment” parent segment; match startup table by leaf or Run paths. */
+    const startupContext = (/** @type {string} */ p) => {
+      const s = String(p || "");
+      const leaf = startupLeafName(s);
+      const startupHint =
+        /Startup Programs|Startup\s*Command|Autostart|Autostartprogramme|Programme beim Start|Programmes au démarrage|Programas de inicio|Programas de inicialização|Programas de arranque|Programmi di avvio|Autostart-programmer|Autostartprogrammer|Oppstartsprogrammer|Käynnistysohjelmat|Opstartprogramma|Opstartprogramma's|Programy startowe|Başlangıç programları|自動実行|スタートアップ|啟動|启动|자동 실행|Käivitusprogrammid|Rendszerindító|Program de pornire|Spouštěcí programy|Spouštěcí aplikace|Автозагрузка|автозагруз|элементы автозагруз|элемент автозагруз|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Запуск программ|启动程序|CurrentVersion\s*[/\\]\s*Run|\/\s*Run\s*(\/|$)/i.test(
+          s
+        ) ||
+        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe)$/i.test(
+          leaf
+        );
+      if (!startupHint) return false;
+      if (
+        /(^|\/)(Services|Dienste|Службы|Сервисы|Palvelut|Tjenester|Tjänster|Usługi|Hizmetler|الخدمات|服务|服務|서비스|サービス|Teenused|Υπηρεσίες|Szolgáltatások|Servicii|Služby)(\/|$)/i.test(
+          s
+        ) &&
+        !/автозагруз|autostart|startup\s*programs|элемент|käynnistys|arranque|avvio/i.test(s)
+      ) {
+        return false;
+      }
+      if (/Task\s*Scheduler|Scheduled\s*Tasks|Geplante Tasks|Tâches planifiées|Планировщик|Tehtäväaikataulu|Aktivitetstavler|Opgavestyring/i.test(s))
+        return false;
+      return (
+        MSINFO_I18N.softwareEnvPath.test(s) ||
+        startupPathMentionsRunKey(s) ||
+        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe)$/i.test(
+          leaf
+        )
+      );
+    };
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!startupContext(p)) continue;
@@ -1809,16 +2373,41 @@
       if (!rawName.trim() && !cmd.trim()) continue;
       const pathLeaf = r.path.split(" / ").pop() || "";
       const displayName = deriveStartupProgramName(rawName, cmd, pathLeaf);
-      const key = `${r.path}|${cmd}`;
+      const loc = pickStartupLocationFromFields(f);
+      const usr = pickStartupUserFromFields(f);
+      const key = `${r.path}|${rawName}|${cmd}|${loc}|${usr}`;
       if (seen.has(key)) continue;
       seen.add(key);
       out.push({
         name: displayName,
         command: cmd,
-        location: pickStartupLocationFromFields(f),
-        user: pickStartupUserFromFields(f),
+        location: loc,
+        user: usr,
         path: r.path,
       });
+    }
+
+    if (!out.length) {
+      const junkPath = (/** @type {string} */ p) =>
+        /(^|\/)(службы|services)(\/|$)/i.test(p) ||
+        (/memory|память|storage|диск|network|сеть|принтер|printer/i.test(p) &&
+          !/автозагруз|startup|run\\/i.test(p));
+      for (const r of rows) {
+        if (junkPath(r.path)) continue;
+        const f = r.fields;
+        const rawName = pickStartupNameFromFields(f);
+        const cmd = pickStartupCommandFromFields(f);
+        if (!rawName.trim() || !cmd.trim()) continue;
+        if (Object.keys(f).length < 2) continue;
+        const pathLeaf = r.path.split(" / ").pop() || "";
+        const displayName = deriveStartupProgramName(rawName, cmd, pathLeaf);
+        const loc = pickStartupLocationFromFields(f);
+        const usr = pickStartupUserFromFields(f);
+        const key = `heur|${r.path}|${rawName}|${cmd}|${loc}|${usr}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ name: displayName, command: cmd, location: loc, user: usr, path: r.path });
+      }
     }
 
     return out.slice(0, 400);
@@ -1836,82 +2425,258 @@
 
     const dedupKey = (/** @type {string} */ p, /** @type {string} */ n) => `${p}::${n}`;
 
+    /** @param {Record<string, string>} f */
+    const pickServiceStateFromFields = (f) => {
+      if (!f || typeof f !== "object") return "";
+      const direct =
+        f.State ||
+        f.Status ||
+        f["Current State"] ||
+        f["Aktueller Status"] ||
+        f.Zustand ||
+        f["Состояние"] ||
+        f["Статус"] ||
+        f["Текущее состояние"] ||
+        f["Текущий статус"] ||
+        f["Текущее состояние службы"] ||
+        f["État"] ||
+        f["Stato"] ||
+        f["Estado"] ||
+        f["Estado actual"] ||
+        f["Status atual"] ||
+        f["Huidige status"] ||
+        f["Aktuel tilstand"] ||
+        f["Aktuell status"] ||
+        f["Nykyinen tila"] ||
+        f["Praegune olek"] ||
+        f["Aktuálny stav"] ||
+        f["Aktuální stav"] ||
+        f["Stan"] ||
+        f["Stare"] ||
+        f["Állapot"] ||
+        f["Durum"] ||
+        f["Κατάσταση"] ||
+        f["현재 상태"] ||
+        f["当前状态"] ||
+        f["狀態"] ||
+        f["状態"] ||
+        f["الحالة"] ||
+        "";
+      const d = String(direct || "").trim();
+      if (d && !/^недоступно$/i.test(d)) return d;
+      for (const [k, v] of Object.entries(f)) {
+        const kt = String(k || "").trim();
+        const vv = String(v || "").trim();
+        if (!vv || /^недоступно$/i.test(vv)) continue;
+        if (/^(state|status|zustand|состояни|статус|текущ|état|estado|stato|stan|tila|tilstand|állapot|durum|κατάσταση|상태|状态|狀態|状態|الحالة)/i.test(kt))
+          return vv;
+        if (/^состоян/i.test(kt) && !/шаблон|template/i.test(kt)) return vv;
+      }
+      return "";
+    };
+
+    /** @param {Record<string, string>} f */
+    const pickServiceStartModeFromFields = (f) => {
+      if (!f || typeof f !== "object") return "";
+      const direct =
+        f["Startup Type"] ||
+        f["Start Mode"] ||
+        f["Start type"] ||
+        f.Startup ||
+        f["Starttyp"] ||
+        f["Startmodus"] ||
+        f["Тип запуска"] ||
+        f["Тип_запуска"] ||
+        f["Режим запуска"] ||
+        f["Режим_запуска"] ||
+        f["Typ uruchomienia"] ||
+        f["Typ spouštění"] ||
+        f["Spouštěcí typ"] ||
+        f["Käynnistystyyppi"] ||
+        f["Käivitustüüp"] ||
+        f["Starttype"] ||
+        f["Opstarttype"] ||
+        f["Tipo de inicio"] ||
+        f["Tipo de inicialização"] ||
+        f["Tipo di avvio"] ||
+        f["Type de démarrage"] ||
+        f["Başlangıç türü"] ||
+        f["Tipo de arranque"] ||
+        f["Indítás típusa"] ||
+        f["Tip pornire"] ||
+        f["Τύπος εκκίνησης"] ||
+        f["시작 유형"] ||
+        f["启动类型"] ||
+        f["啟動類型"] ||
+        f["起動の種類"] ||
+        f["نوع بدء التشغيل"] ||
+        "";
+      const d = String(direct || "").trim();
+      if (d && !/^недоступно$/i.test(d)) return d;
+      for (const [k, v] of Object.entries(f)) {
+        const kt = String(k || "").trim();
+        const vv = String(v || "").trim();
+        if (!vv || /^недоступно$/i.test(vv)) continue;
+        if (
+          /^(startup|start\s*type|starttyp|запуск|тип\s*запуска|typ\s*uruchomienia|spouštěcí|käynnistys|käivitus|opstart|tipo\s*de\s*inicio|tipo\s*di\s*avvio|type\s*de\s*démarrage|başlangıç|indítás|tip\s*pornire|τύπος\s*εκκίνησης|시작|启动|啟動|起動|نوع)/i.test(
+            kt
+          )
+        )
+          return vv;
+        if (/^режим/i.test(kt) && /запуск/i.test(kt)) return vv;
+        if (/^тип/i.test(kt) && /запуск/i.test(kt)) return vv;
+      }
+      return "";
+    };
+
+    /** @param {Record<string, string>} f @param {string} pathLeaf */
+    const pickServiceNameFromFields = (f, pathLeaf) => {
+      if (!f || typeof f !== "object") return pathLeaf || "";
+      return (
+        f["Выводимое_имя"] ||
+        f["Выводимое имя"] ||
+        f["Display Name"] ||
+        f["Anzeigename"] ||
+        f["Weergavenaam"] ||
+        f["Visningsnavn"] ||
+        f["Visningsnamn"] ||
+        f["Näyttönimi"] ||
+        f["Zobrazovaný název"] ||
+        f["Zobrazovaný názov"] ||
+        f["Wyświetlana nazwa"] ||
+        f["Megjelenítendő név"] ||
+        f["Nume afișat"] ||
+        f["Nome visualizzato"] ||
+        f["Nome de exibição"] ||
+        f["Nombre para mostrar"] ||
+        f["Görünen ad"] ||
+        f["Εμφανιζόμενο όνομα"] ||
+        f["表示名"] ||
+        f["표시 이름"] ||
+        f["显示名称"] ||
+        f["顯示名稱"] ||
+        f["الاسم المعروض"] ||
+        f.Name ||
+        f["Имя"] ||
+        f["Service Name"] ||
+        f["Dienstname"] ||
+        f.Service ||
+        f["Отображаемое имя"] ||
+        f["Имя службы"] ||
+        f["Название службы"] ||
+        pathLeaf ||
+        ""
+      );
+    };
+
+    /** @param {string} st */
+    const isRunningServiceState = (st) => {
+      const s = String(st || "").trim();
+      if (!s || /^недоступно$/i.test(s)) return false;
+      return (
+        /\brunning\b/i.test(s) ||
+        /\bRUNNING\b/.test(s) ||
+        /^started$/i.test(s) ||
+        /\bgestartet\b/i.test(s) ||
+        /\bwird ausgeführt\b/i.test(s) ||
+        /\bläuft\b/i.test(s) ||
+        /\ben cours d['']exécution\b/i.test(s) ||
+        /\bfuncionando\b/i.test(s) ||
+        /\battivo\b/i.test(s) ||
+        /\bactivo\b/i.test(s) ||
+        /\bactief\b/i.test(s) ||
+        /\baktiv\b/i.test(s) ||
+        /\baktiivinen\b/i.test(s) ||
+        /\baktivní\b/i.test(s) ||
+        /\bdziała\b/i.test(s) ||
+        /\buruchomiony\b/i.test(s) ||
+        /\bkører\b/i.test(s) ||
+        /\bkörs\b/i.test(s) ||
+        /\bkäynnissä\b/i.test(s) ||
+        /\bkjører\b/i.test(s) ||
+        /\bçalışıyor\b/i.test(s) ||
+        /正在运行/.test(s) ||
+        /実行中/.test(s) ||
+        /실행 중/.test(s) ||
+        /قيد التشغيل/.test(s) ||
+        /λειτουργεί/i.test(s) ||
+        /\bвыполняется\b/i.test(s) ||
+        /\bзапущен[ао]?\b/i.test(s) ||
+        /\bзапущено\b/i.test(s) ||
+        /\bработает\b/i.test(s) ||
+        /\bв работе\b/i.test(s) ||
+        /\bактивн[аоы]?\b/i.test(s) ||
+        /\bидёт\s+выполнение\b/i.test(s) ||
+        /\bидет\s+выполнение\b/i.test(s) ||
+        /\boperat(ing|ional)\b/i.test(s) ||
+        /service\s+is\s+running/i.test(s) ||
+        (/^\s*\d+\s*[-–—]?\s*/.test(s) && /\b(выполня|работа|running|läuft)\b/i.test(s))
+      );
+    };
+
+    const pathParts = (/** @type {string} */ p) =>
+      String(p || "")
+        .split(" / ")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    /** Windows Services table is often "... / Службы" with no per-service path segment; older matchers required another path segment and missed flat tables. */
+    const isServicesSectionPath = (/** @type {string} */ p) => {
+      if (!MSINFO_I18N.softwareEnvPath.test(p)) return false;
+      if (/startup|autostart|автозагруз|планировщик|task\s*scheduler|scheduled\s*tasks|tâches planifiées|geplante tasks/i.test(p))
+        return false;
+      if (/print\s*spooler\s*drivers|enumerators|принтер|spooler|druckertreiber/i.test(p)) return false;
+      if (/системные драйверы|system\s*drivers/i.test(p)) return false;
+      if (/Drivers$|Druckertreiber$/i.test(p)) return false;
+      const parts = pathParts(p);
+      const idx = parts.findIndex((s) =>
+        /^(services|dienste|servicios|serviços|servizi|службы|сервисы|запущенные\s+службы|работающие\s+службы|palvelut|tjenester|tjänster|usługi|hizmetler|الخدمات|服务|服務|서비스|サービス|teenused|υπηρεσίες|szolgáltatások|servicii|služby|käynnissä\s+olevat\s+palvelut|uruchomione\s+usługi|çalışan\s+hizmetler)$/iu.test(
+          s
+        )
+      );
+      return idx >= 0;
+    };
+
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
-      if (!MSINFO_I18N.softwareEnvPath.test(p) || !/\/(Services|Dienste)\//i.test(p)) continue;
-      if (!/\/(Services|Dienste)\/.+/i.test(p)) continue;
-      if (/Drivers$|Enumerators|Print\s*Processors|Druckertreiber/i.test(p)) continue;
+      if (!isServicesSectionPath(p)) continue;
       const f = {};
       for (const k of kvs) {
         if (k.path !== p || !k.item) continue;
         f[k.item.trim()] = (k.value || "").trim();
       }
-      const name =
-        f["Display Name"] ||
-        f["Anzeigename"] ||
-        f.Name ||
-        f["Service Name"] ||
-        f["Dienstname"] ||
-        f.Service ||
-        p.split(" / ").pop() ||
-        "";
+      const pathLeaf = p.split(" / ").pop() || "";
+      const name = pickServiceNameFromFields(f, pathLeaf);
       if (!name) continue;
       const k0 = dedupKey(p, name);
       if (seen.has(k0)) continue;
       seen.add(k0);
-      const state = f.State || f.Status || f["Current State"] || f["Aktueller Status"] || f.Zustand || "";
-      const startMode =
-        f["Startup Type"] ||
-        f["Start Mode"] ||
-        f["Start type"] ||
-        f.Startup ||
-        f["Starttyp"] ||
-        f["Startmodus"] ||
-        "";
+      const state = pickServiceStateFromFields(f);
+      const startMode = pickServiceStartModeFromFields(f);
       all.push({ name, state, startMode, path: p });
     }
 
     for (const r of rows) {
-      if (!MSINFO_I18N.softwareEnvPath.test(r.path) || !/(Services|Dienste)/i.test(r.path)) continue;
-      if (/Startup|Autostart|Print\s*Spooler\s*Drivers|Enumerators/i.test(r.path)) continue;
+      if (!isServicesSectionPath(r.path)) continue;
       const f = r.fields;
-      const name =
-        f.Name ||
-        f["Display Name"] ||
-        f["Anzeigename"] ||
-        f["Service Name"] ||
-        f["Dienstname"] ||
-        f.Service ||
-        f.Item ||
-        "";
+      const pathLeaf = r.path.split(" / ").pop() || "";
+      const name = pickServiceNameFromFields(f, pathLeaf);
       if (!name) continue;
       const k0 = dedupKey(r.path, name);
       if (seen.has(k0)) continue;
       seen.add(k0);
-      const state = f.State || f.Status || f["Current State"] || f["Aktueller Status"] || f.Zustand || "";
-      const startMode =
-        f["Startup Type"] ||
-        f["Start Mode"] ||
-        f["Start type"] ||
-        f.Startup ||
-        f["Starttyp"] ||
-        f["Startmodus"] ||
-        "";
+      const state = pickServiceStateFromFields(f);
+      const startMode = pickServiceStartModeFromFields(f);
       all.push({ name: String(name), state: String(state), startMode: String(startMode), path: r.path });
     }
 
     const running = all.filter((s) => {
-      const st = (s.state || "").trim();
+      if (isRunningServiceState(s.state || "")) return true;
+      const st = String(s.state || "").trim();
+      if (st && /^недоступно$/i.test(st)) return false;
+      const p = String(s.path || "");
       return (
-        /\brunning\b/i.test(st) ||
-        /^started$/i.test(st) ||
-        /\bgestartet\b/i.test(st) ||
-        /\bwird ausgeführt\b/i.test(st) ||
-        /\bläuft\b/i.test(st) ||
-        /\ben cours d['']exécution\b/i.test(st) ||
-        /\bfuncionando\b/i.test(st) ||
-        /\bвыполняется\b/i.test(st) ||
-        /\boperat(ing|ional)\b/i.test(st) ||
-        /service\s+is\s+running/i.test(st)
+        !!(s.name || "").trim() &&
+        /\b(запущенн[\s\w,.-]{0,40}служб|работающ[\s\w,.-]{0,40}служб)\b/i.test(p)
       );
     });
     return { all: all.slice(0, 800), running: running.slice(0, 400) };
@@ -1946,10 +2711,16 @@
       /^時間$/i,
       /^时间$/i,
       /^время$/i,
+      /^время_/i,
+      /^время\b/i,
       /^czas$/i,
       /^čas$/i,
       /^tid$/i,
+      /^tidspunkt$/i,
       /^saat$/i,
+      /^aeg$/i,
+      /^kellonaika$/i,
+      /^وقت$/i,
     ]);
   }
 
@@ -1966,12 +2737,29 @@
         /^事件名称$/i,
         /^イベント名$/i,
         /^тип$/i,
+        /^тип_/i,
+        /^тип\b/i,
         /^fehlertyp$/i,
         /^fault\s*bucket$/i,
         /^bucket\s*id$/i,
+        /^tyyppi$/i,
+        /^tür$/i,
+        /^typ\s+problemu$/i,
+        /^type\s+de\s+probl/i,
+        /^tipo\s+de\s+problema$/i,
+        /^tipo\s+di\s+problema$/i,
+        /^probleemtype$/i,
+        /^probleemtypen$/i,
       ]) || "";
     if (t) return t;
-    const fb = werFirstFieldMatch(fields, [/fault/i, /wer\s*report/i, /problem\s*signature/i]);
+    const fb = werFirstFieldMatch(fields, [
+      /fault/i,
+      /wer\s*report/i,
+      /problem\s*signature/i,
+      /ошибк/i,
+      /отчет/i,
+      /livekernel/i,
+    ]);
     return fb || "";
   }
 
@@ -1986,10 +2774,20 @@
         /^detalhes$/i,
         /^詳細$/i,
         /^详细信息$/i,
+        /^сведения$/i,
+        /^сведения_/i,
+        /^сведен/i,
         /^подробности$/i,
         /^szczegóły$/i,
-        /^podrobnosti$/i,
         /^açıklama$/i,
+        /^описание$/i,
+        /^описан/i,
+        /^詳細情報$/i,
+        /^تفاصيل$/i,
+        /^részletek$/i,
+        /^yksityiskohdat$/i,
+        /^podrobnosti$/i,
+        /^detaljer$/i,
       ]) || "";
     if (d) return d;
     /** @type {string[]} */
@@ -2012,7 +2810,12 @@
   /** @param {string} type @param {string} details */
   function werCategorize(type, details) {
     const t = `${type} ${details}`.toLowerCase();
-    if (/appcrash|application|\.exe|faulting\s*application|app\s*error/i.test(t)) return "Application";
+    if (
+      /appcrash|application|\.exe|faulting\s*application|app\s*error|ошибк.*приложен|приложени.*ошиб|сбой\s*прилож/i.test(
+        t
+      )
+    )
+      return "Application";
     if (/driver|nvlddmkm|dxgmms|sys\b|\.sys/i.test(t)) return "Drivers";
     if (
       /bsod|kernel|livekernel|bugcheck|system\s*error|kmode|hardware|disk|memory|cpu|gpu|device/i.test(t)
@@ -2028,8 +2831,14 @@
   /** @param {string} type @param {string} details */
   function werSeverity(type, details) {
     const x = `${type} ${details}`.toLowerCase();
-    if (/critical|bsod|bugcheck|livekernel|kernel\s*power|0xc000021a/i.test(x)) return "error";
-    if (/appcrash|application\s*error|exception|fault|driver\s*stopped|stopped\s*responding/i.test(x)) return "warning";
+    if (/critical|bsod|bugcheck|livekernel|kernel\s*power|0xc000021a|критич|синий\s*экран|журнал\s*ошибок\s*ядра/i.test(x))
+      return "error";
+    if (
+      /appcrash|application\s*error|exception|fault|driver\s*stopped|stopped\s*responding|ошибк.*приложен|исключен|сбой/i.test(
+        x
+      )
+    )
+      return "warning";
     return "info";
   }
 
@@ -2066,6 +2875,8 @@
       /^時間$/i,
       /^时间$/i,
       /^время$/i,
+      /^время_/i,
+      /^время\b/i,
     ];
     const isAnchor = (/** @type {string} */ item) => {
       const it = (item || "").trim();
@@ -2159,9 +2970,20 @@
    * @returns {WerTimelineEntry[]}
    */
   function extractWindowsErrorReports(kvs, rows) {
-    const pathOk = (/** @type {string} */ p) =>
-      /Windows Error Reporting|Problem Reports|Reliability|WER|Report\s*Archive|Fault\s*Bucket/i.test(p) &&
-      !/Group\s*Policy|Registry\s*key/i.test(p);
+    const pathOk = (/** @type {string} */ p) => {
+      const s = String(p || "");
+      const hit =
+        /Windows Error Reporting|Problem Reports|Reliability|WER|Report\s*Archive|Fault\s*Bucket/i.test(s) ||
+        /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
+          s
+        ) ||
+        /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Relatórios de problemas|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Relatório de erros|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
+          s
+        );
+      if (!hit) return false;
+      if (/Group\s*Policy|Registry\s*key|групповых\s*политик|раздел\s*реестра/i.test(s)) return false;
+      return true;
+    };
 
     /** @param {WerTimelineEntry} a @param {WerTimelineEntry} b */
     const byTimeDesc = (a, b) => {
@@ -2205,18 +3027,34 @@
   }
 
   /**
-   * Localized MSInfo category paths and item labels (de/fr/es/pt/ru/zh + English).
-   * Values stay in the export language; matchers let summaries populate from non-English UI locales.
+   * Localized MSInfo category paths (Windows UI strings embedded in .nfo paths).
+   * Covers common display languages used with MSInfo exports.
    */
   const MSINFO_I18N = {
-    summaryPath: /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Informações do sistema|Сводка о системе|Сведения о системе|系统摘要|系統摘要/i,
-    softwareEnvPath: /Software Environment|Softwareumgebung|Environnement logiciel|Entorno de software|Ambiente de software|Программная среда|软件环境/i,
-    memoryRowPath: /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Виртуальная память|虚拟内存/i,
+    summaryPath:
+      /System Summary|Systemübersicht|Résumé du système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
+    softwareEnvPath:
+      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
+    memoryRowPath:
+      /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件/i,
     /** @param {RegExp | RegExp[]} labelRe */
     itemPatterns(labelRe) {
       return Array.isArray(labelRe) ? labelRe : [labelRe];
     },
   };
+
+  /**
+   * True when an MSInfo category path is the localized “system summary” table (or parent chain contains it).
+   * Some locales use wording not covered by {@link MSINFO_I18N.summaryPath} alone.
+   * @param {string} p
+   */
+  function msinfoSummaryPathMatches(p) {
+    const s = String(p || "");
+    if (MSINFO_I18N.summaryPath.test(s)) return true;
+    return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения/i.test(
+      s
+    );
+  }
 
   /**
    * @param {RegExp | RegExp[]} labelRe
@@ -2225,15 +3063,19 @@
    */
   function pickSummaryMemoryI18n(labelRe, kvs, rows) {
     const patterns = MSINFO_I18N.itemPatterns(labelRe);
+    const kvPathOk = (/** @type {string} */ p) =>
+      msinfoSummaryPathMatches(p) || MSINFO_I18N.memoryRowPath.test(p);
     for (const labelPat of patterns) {
       let v = (
-        kvs.find((k) => MSINFO_I18N.summaryPath.test(k.path) && labelPat.test((k.item || "").trim()))?.value || ""
+        kvs.find((k) => msinfoSummaryPathMatches(k.path) && labelPat.test((k.item || "").trim()))?.value || ""
       ).trim();
       if (v) return v;
-      v = (kvs.find((k) => labelPat.test((k.item || "").trim()))?.value || "").trim();
+      v = (
+        kvs.find((k) => kvPathOk(k.path) && labelPat.test((k.item || "").trim()))?.value || ""
+      ).trim();
       if (v) return v;
       for (const r of rows) {
-        if (!MSINFO_I18N.memoryRowPath.test(r.path)) continue;
+        if (!kvPathOk(r.path)) continue;
         for (const [k, val] of Object.entries(r.fields)) {
           if (labelPat.test(k.trim()) && String(val).trim()) return String(val).trim();
         }
@@ -2250,7 +3092,7 @@
     const patterns = MSINFO_I18N.itemPatterns(itemRes);
     for (const itemRegex of patterns) {
       const v = (
-        kvs.find((k) => MSINFO_I18N.summaryPath.test(k.path) && itemRegex.test((k.item || "").trim()))?.value || ""
+        kvs.find((k) => msinfoSummaryPathMatches(k.path) && itemRegex.test((k.item || "").trim()))?.value || ""
       ).trim();
       if (v) return v;
     }
@@ -2271,6 +3113,83 @@
       }
     }
     return "";
+  }
+
+  /**
+   * Row field match limited to paths that look like System Summary (not drivers, IRQ, etc.).
+   * Stops short labels such as Russian «Тип» from binding the wrong table in localized .nfo exports.
+   * @param {RegExp | RegExp[]} itemRes
+   * @param {{ path: string, fields: Record<string, string> }[]} rows
+   */
+  function fieldFromRowsSummaryPathOnly(itemRes, rows) {
+    const patterns = MSINFO_I18N.itemPatterns(itemRes);
+    for (const re of patterns) {
+      for (const r of rows) {
+        if (!msinfoSummaryPathMatches(r.path)) continue;
+        for (const [k, v] of Object.entries(r.fields)) {
+          if (re.test(k.trim()) && v && String(v).trim()) return String(v).trim();
+        }
+      }
+    }
+    return "";
+  }
+
+  /**
+   * Russian (and some builds) use the short label «Тип» on many tables; kvs order can surface a driver row first.
+   * Prefer values that look like a PC / architecture summary, not «драйвер ядра» etc.
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   */
+  function pickSystemTypeFromBareTypKvs(kvs) {
+    const cand = kvs.filter((k) => msinfoSummaryPathMatches(k.path) && /^Тип$/i.test((k.item || "").trim()));
+    if (!cand.length) return "";
+    const vOf = (/** @type {{ value?: string }} */ k) => String(k.value || "").trim();
+    const looksLikePcKind = (t) =>
+      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+        t
+      );
+    const looksLikeDriverKind = (t) =>
+      /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller/i.test(t);
+    const best = [...cand].sort((a, b) => {
+      const va = vOf(a);
+      const vb = vOf(b);
+      const sa = looksLikePcKind(va) ? 2 : looksLikeDriverKind(va) ? 0 : 1;
+      const sb = looksLikePcKind(vb) ? 2 : looksLikeDriverKind(vb) ? 0 : 1;
+      return sb - sa;
+    })[0];
+    const pick = vOf(best);
+    if (pick && looksLikeDriverKind(pick) && !looksLikePcKind(pick)) return "";
+    return pick;
+  }
+
+  /**
+   * @param {{ path: string, fields: Record<string, string> }[]} rows
+   */
+  function pickSystemTypeFromBareTypRows(rows) {
+    /** @type {string[]} */
+    const vals = [];
+    for (const r of rows) {
+      if (!msinfoSummaryPathMatches(r.path)) continue;
+      for (const [k, v] of Object.entries(r.fields)) {
+        if (!/^Тип$/i.test(k.trim())) continue;
+        const t = String(v || "").trim();
+        if (t) vals.push(t);
+      }
+    }
+    if (!vals.length) return "";
+    const looksLikePcKind = (t) =>
+      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+        t
+      );
+    const looksLikeDriverKind = (t) =>
+      /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller/i.test(t);
+    const pick =
+      [...vals].sort((a, b) => {
+        const sa = looksLikePcKind(a) ? 2 : looksLikeDriverKind(a) ? 0 : 1;
+        const sb = looksLikePcKind(b) ? 2 : looksLikeDriverKind(b) ? 0 : 1;
+        return sb - sa;
+      })[0] || vals[0];
+    if (pick && looksLikeDriverKind(pick) && !looksLikePcKind(pick)) return "";
+    return pick;
   }
 
   /**
@@ -2378,10 +3297,24 @@
     if (!motherboard.manufacturer && !motherboard.product) {
       for (const r of rows) {
         const f = r.fields;
-        const man = f["BaseBoard Manufacturer"] || f["Base Board Manufacturer"] || f.Hersteller;
+        const man =
+          f["BaseBoard Manufacturer"] ||
+          f["Base Board Manufacturer"] ||
+          f["Изготовитель основной платы"] ||
+          f.Hersteller;
         const prod =
-          f["BaseBoard Product"] || f["Base Board Product"] || f["BaseBoard Model"] || f.Produkt || f.Modell || f.Modèle;
-        const ver = f["BaseBoard Version"] || f["BaseBoard Serial Number"] || f.Seriennummer;
+          f["BaseBoard Product"] ||
+          f["Base Board Product"] ||
+          f["BaseBoard Model"] ||
+          f["Модель основной платы"] ||
+          f.Produkt ||
+          f.Modell ||
+          f.Modèle;
+        const ver =
+          f["BaseBoard Version"] ||
+          f["BaseBoard Serial Number"] ||
+          f["Версия основной платы"] ||
+          f.Seriennummer;
         if (man || prod || ver) {
           motherboard = {
             manufacturer: String(man || "").trim() || motherboard.manufacturer,
@@ -2393,6 +3326,23 @@
       }
     }
 
+    if (!motherboard.manufacturer && !motherboard.product) {
+      const pickSmKv = (/** @param {RegExp} itemRe */ itemRe) => {
+        const x = kvs.find((k) => msinfoSummaryPathMatches(k.path) && itemRe.test((k.item || "").trim()));
+        return (x?.value || "").trim();
+      };
+      const mfr = pickSmKv(/^Изготовитель основной платы$/i);
+      const prod = pickSmKv(/^Модель основной платы$/i);
+      const ver = pickSmKv(/^Версия основной платы$/i);
+      if (mfr || prod || ver) {
+        motherboard = {
+          manufacturer: mfr || motherboard.manufacturer,
+          product: prod || motherboard.product,
+          version: ver || motherboard.version,
+        };
+      }
+    }
+
     const formHints = [];
     const pushItem = (re) => {
       const x = kvs.find((k) => re.test(k.item));
@@ -2400,17 +3350,29 @@
     };
     pushItem(/^System Family$/i);
     pushItem(/Chassis Type/i);
+    pushItem(/^Тип корпуса$/i);
     pushItem(/^Gehäusetyp$/i);
     pushItem(/^Type de châssis$/i);
     pushItem(/PC System Type/i);
     pushItem(/^PC-Systemtyp$/i);
     pushItem(/^Platform Role$/i);
+    pushItem(/^Роль платформы$/i);
     pushItem(/^Systemrolle$/i);
     pushItem(/^System SKU$/i);
+    pushItem(/^Тип системы$/i);
     pushItem(/^Systemtyp$/i);
     for (const r of rows) {
       const f = r.fields;
-      const blob = [f.Type, f.Chassis, f["Enclosure Type"], f["System Type"], f.Description]
+      const blob = [
+        f.Type,
+        f["Тип"],
+        f.Chassis,
+        f["Тип корпуса"],
+        f["Enclosure Type"],
+        f["System Type"],
+        f["Роль платформы"],
+        f.Description,
+      ]
         .filter(Boolean)
         .join(" ");
       if (blob) formHints.push(blob);
@@ -2427,11 +3389,12 @@
           /^Nome do sistema operacional$/i,
           /^Nom du système$/i,
           /^Название ОС$/i,
+          /^Имя ОС$/i,
           /^操作系统名称$/i,
         ],
         kvs
       ) ||
-      kvValI18n([/^OS Name$/i, /^Betriebssystemname$/i], kvs) ||
+      kvValI18n([/^OS Name$/i, /^Betriebssystemname$/i, /^Имя ОС$/i, /^Название ОС$/i], kvs) ||
       fieldFromRowsI18n(
         [
           /^OS Name$/i,
@@ -2439,6 +3402,7 @@
           /^Nom du système d'exploitation$/i,
           /^Nombre del sistema operativo$/i,
           /^Название ОС$/i,
+          /^Имя ОС$/i,
         ],
         rows
       );
@@ -2452,14 +3416,15 @@
           /^Versión del sistema operativo$/i,
           /^Versão do sistema operacional$/i,
           /^Версия ОС$/i,
+          /^Версия$/i,
         ],
         kvs
       ) ||
       kvValI18n(
-        [/^OS Version$/i, /^Betriebssystemversion$/i, /^Version du système d'exploitation$/i],
+        [/^OS Version$/i, /^Betriebssystemversion$/i, /^Version du système d'exploitation$/i, /^Версия$/i, /^Версия ОС$/i],
         kvs
       ) ||
-      fieldFromRowsI18n([/^OS Version$/i, /^Betriebssystemversion$/i], rows);
+      fieldFromRowsI18n([/^OS Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Версия ОС$/i], rows);
     if (!osVersionLine) {
       const verKv = kvs.find((k) => {
         const it = (k.item || "").trim();
@@ -2468,14 +3433,17 @@
           /^Betriebssystemversion$/i.test(it) ||
           /^OS Version$/i.test(it) ||
           /^Versión$/i.test(it);
-        return versionish && /\b(10|11)\.0\.\d+|Microsoft Windows|Windows \d+/i.test(k.value || "");
+        return (
+          versionish &&
+          /\b(10|11)\.0\.\d+|Microsoft Windows|Майкрософт Windows|Windows \d+|\bСборка\s*\d+/i.test(k.value || "")
+        );
       });
       osVersionLine = (verKv?.value || "").trim();
     }
     if (!osVersionLine) {
       osVersionLine =
-        kvValI18n([/^Version$/i, /^Betriebssystemversion$/i], kvs) ||
-        fieldFromRowsI18n([/^Version$/i, /^Betriebssystemversion$/i], rows);
+        kvValI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i], kvs) ||
+        fieldFromRowsI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i], rows);
     }
     const osBuild = extractWindowsBuildFromVersionLine(osVersionLine);
 
@@ -2488,13 +3456,53 @@
           /^Tipo de sistema$/i,
           /^Tipo de Sistema$/i,
           /^Тип системы$/i,
+          /^Тип компьютера$/i,
+          /^Тип ПК$/i,
+          /^Вид системы$/i,
           /^系统类型$/i,
         ],
         kvs
       ) ||
-      kvValI18n([/^System Type$/i, /^Systemtyp$/i, /^Tipo de sistema$/i], kvs) ||
+      pickSystemTypeFromBareTypKvs(kvs) ||
+      kvValI18n(
+        [
+          /^System Type$/i,
+          /^Systemtyp$/i,
+          /^Tipo de sistema$/i,
+          /^Тип системы$/i,
+          /^Тип компьютера$/i,
+          /^Тип ПК$/i,
+          /^Вид системы$/i,
+        ],
+        kvs
+      ) ||
+      fieldFromRowsSummaryPathOnly(
+        [
+          /^System Type$/i,
+          /^Systemtyp$/i,
+          /^Type du système$/i,
+          /^Tipo de sistema$/i,
+          /^Тип системы$/i,
+          /^Тип компьютера$/i,
+          /^Тип ПК$/i,
+          /^Вид системы$/i,
+          /^系统类型$/i,
+        ],
+        rows
+      ) ||
+      pickSystemTypeFromBareTypRows(rows) ||
       fieldFromRowsI18n(
-        [/^System Type$/i, /^Systemtyp$/i, /^Type du système$/i, /^Tipo de sistema$/i],
+        [
+          /^System Type$/i,
+          /^Systemtyp$/i,
+          /^Type du système$/i,
+          /^Tipo de sistema$/i,
+          /^Тип системы$/i,
+          /^Тип компьютера$/i,
+          /^Тип ПК$/i,
+          /^Вид системы$/i,
+          /^系统类型$/i,
+        ],
         rows
       );
     const processor =
@@ -2510,8 +3518,9 @@
         ],
         kvs
       ) ||
-      kvValI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i], kvs) ||
-      fieldFromRowsI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i], rows);
+      kvValI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i, /^Процессор$/i], kvs) ||
+      fieldFromRowsSummaryPathOnly([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i, /^Процессор$/i], rows) ||
+      fieldFromRowsI18n([/^Processor$/i, /^Processeur$/i, /^Prozessor$/i, /^Процессор$/i], rows);
     const timeZone =
       kvFromSummaryI18n(
         [
@@ -2525,8 +3534,9 @@
         ],
         kvs
       ) ||
-      kvValI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i], kvs) ||
-      fieldFromRowsI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i], rows);
+      kvValI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i], kvs) ||
+      fieldFromRowsSummaryPathOnly([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i], rows) ||
+      fieldFromRowsI18n([/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i], rows);
     const osInstallDate =
       kvFromSummaryI18n(
         [
@@ -2559,6 +3569,18 @@
       );
 
     let platformRole =
+      kvFromSummaryI18n(
+        [
+          /^Platform Role$/i,
+          /^Systemrolle$/i,
+          /^Plattformrolle$/i,
+          /^Rôle de la plateforme$/i,
+          /^Rol de la plataforma$/i,
+          /^Função da plataforma$/i,
+          /^Роль платформы$/i,
+        ],
+        kvs
+      ) ||
       kvValI18n(
         [
           /^Platform Role$/i,
@@ -2571,7 +3593,14 @@
         ],
         kvs
       ) ||
-      fieldFromRowsI18n([/^Platform Role$/i, /^Systemrolle$/i, /^Rôle de la plateforme$/i], rows);
+      fieldFromRowsSummaryPathOnly(
+        [/^Platform Role$/i, /^Systemrolle$/i, /^Rôle de la plateforme$/i, /^Роль платформы$/i],
+        rows
+      ) ||
+      fieldFromRowsI18n(
+        [/^Platform Role$/i, /^Systemrolle$/i, /^Rôle de la plateforme$/i, /^Роль платформы$/i],
+        rows
+      );
     let pcSystemType =
       kvValI18n(
         [
@@ -2595,17 +3624,27 @@
         ],
         kvs
       ) ||
-      fieldFromRowsI18n([/^Chassis Type$/i, /^Gehäusetyp$/i, /^Type de châssis$/i], rows);
+      fieldFromRowsI18n([/^Chassis Type$/i, /^Gehäusetyp$/i, /^Type de châssis$/i, /^Тип корпуса$/i], rows);
 
     let systemForm = "";
     const pr = platformRole.toLowerCase();
-    if (/\bdesktop\b|workstation|appliance\s+pc/i.test(pr) && !/\bmobile\b|\bslate\b/i.test(pr)) {
+    if (
+      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция/i.test(pr) &&
+      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук/i.test(pr)
+    ) {
       systemForm = "Desktop / workstation-class";
-    } else if (/\bmobile\b|slate|handheld|phone/i.test(pr)) {
+    } else if (/\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн/i.test(pr)) {
       systemForm = "Laptop / mobile-class";
-    } else if (pcSystemType && /\bdesktop\b/i.test(pcSystemType) && !/\bmobile\b|laptop/i.test(pcSystemType)) {
+    } else if (
+      pcSystemType &&
+      /\bdesktop\b|рабочий\s+стол|настольн/i.test(pcSystemType) &&
+      !/\bmobile\b|laptop|ноутбук|планшет/i.test(pcSystemType)
+    ) {
       systemForm = "Desktop / workstation-class";
-    } else if (pcSystemType && /\bmobile\b|laptop|notebook|tablet/i.test(pcSystemType)) {
+    } else if (
+      pcSystemType &&
+      /\bmobile\b|laptop|notebook|tablet|ноутбук|планшет|переносн/i.test(pcSystemType)
+    ) {
       systemForm = "Laptop / mobile-class";
     } else if (chassisType && /\b(desktop|tower|mini|pizza|low profile|convertible|all in one|mainstream)\b/i.test(chassisType)) {
       if (/all\s*in\s*one|convertible/i.test(chassisType)) {
@@ -2615,7 +3654,10 @@
       } else {
         systemForm = "Desktop / workstation-class";
       }
-    } else if (chassisType && /\b(notebook|laptop|portable|handheld|tablet)\b/i.test(chassisType)) {
+    } else if (
+      chassisType &&
+      /\b(notebook|laptop|portable|handheld|tablet|ноутбук|планшет|переносн)\b/i.test(chassisType)
+    ) {
       systemForm = "Laptop / mobile-class";
     } else {
       let blob = formHints.join(" ").toLowerCase();
@@ -2649,6 +3691,8 @@
         /^Versión de BIOS \/ fecha$/i.test(it) ||
         /^Versão do BIOS \/ data$/i.test(it) ||
         /^Версия BIOS\/дата$/i.test(it) ||
+        /^Версия\s+BIOS\s*\/\s*дата$/i.test(it) ||
+        /^Версия\s*BIOS$/i.test(it) ||
         /^BIOS版本\/日期$/i.test(it)
       );
     });
@@ -2661,7 +3705,8 @@
         (k) =>
           (/BIOS Version$/i.test((k.item || "").trim()) ||
             /^BIOS-Version$/i.test((k.item || "").trim()) ||
-            /^Version du BIOS$/i.test((k.item || "").trim())) &&
+            /^Version du BIOS$/i.test((k.item || "").trim()) ||
+            /^Версия\s*BIOS$/i.test((k.item || "").trim())) &&
           !/date|datum|fecha|дата|日期/i.test((k.item || "").trim())
       );
       const d = kvs.find((k) =>
@@ -2671,13 +3716,18 @@
       );
       biosVersion = v?.value || "";
       biosDate = d?.value || "";
-      const pathBios = kvs.filter((k) => /\/BIOS$/i.test(k.path) || /Components.*BIOS/i.test(k.path));
+      const pathBios = kvs.filter(
+        (k) =>
+          /\/BIOS$/i.test(k.path) ||
+          /Components.*BIOS/i.test(k.path) ||
+          /Компоненты.*BIOS/i.test(k.path)
+      );
       if (!biosVersion) {
-        const ver = pathBios.find((k) => /^Version$/i.test(k.item));
+        const ver = pathBios.find((k) => /^Version$/i.test(k.item) || /^Версия$/i.test((k.item || "").trim()));
         if (ver) biosVersion = ver.value;
       }
       if (!biosDate) {
-        const rd = pathBios.find((k) => /Date/i.test(k.item));
+        const rd = pathBios.find((k) => /Date|Дата/i.test(k.item || ""));
         if (rd) biosDate = rd.value;
       }
     }
@@ -2693,7 +3743,7 @@
       graphics.adapters.some((a) => a && a.vendorLabel === "NVIDIA");
 
     if (!hasNvidiaInAdapters()) {
-      const nk = kvs.find((k) => /^Name$/i.test(k.item) && /NVIDIA/i.test(k.value));
+      const nk = kvs.find((k) => isDisplayNameItem(k.item) && /NVIDIA/i.test(k.value));
       if (nk) {
         let drv = pickNvidiaDisplayDriverKvs(kvs) || pickNvidiaDriverFromRows(rows);
         if (!drv) {
@@ -2704,7 +3754,7 @@
         if (nk.value || drv) {
           const byPathNv = new Map();
           for (const k of kvs) {
-            if (!/Display|Monitor|Graphics|Video|VideoController|Videocontroller/i.test(k.path)) continue;
+            if (!isMsInfoDisplayRelatedPath(k.path)) continue;
             if (k.path !== nk.path) continue;
             if (!byPathNv.has(k.path)) byPathNv.set(k.path, {});
             byPathNv.get(k.path)[k.item] = k.value;
@@ -2764,10 +3814,34 @@
 
     /** @type { { device: string, vendor: string, detail: string }[] } */
     const problems = [];
+    /** MSInfo “Problem Devices” lives under Components; Russian builds often use «Устройства с неполадками». */
     const problemPathRe =
-      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Устройства с проблемами|设备有问题|問題のあるデバイス/i;
+      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス/i;
+    const pathLooksLikeProblemDevices = (/** @type {string} */ p) => {
+      const s = String(p || "");
+      if (problemPathRe.test(s)) return true;
+      if (/неполадк/i.test(s) && /устройств/i.test(s) && /\s[сС]\s/i.test(s)) return true;
+      return false;
+    };
+    /** Normalize MSInfo row/item labels (spaces, underscores, NBSP, BOM) for column matching. */
+    const problemFieldKeyCompact = (/** @type {string} */ s) =>
+      String(s || "")
+        .replace(/^\ufeff/, "")
+        .replace(/\u00a0/g, " ")
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, "");
+    /** @param {Record<string, string>} f */
+    const rowValueByCompactKeys = (f, /** @type {string[]} */ wantedCompacts) => {
+      const want = new Set(wantedCompacts);
+      for (const [k, v] of Object.entries(f)) {
+        if (v == null || !String(v).trim()) continue;
+        if (want.has(problemFieldKeyCompact(k))) return String(v).trim();
+      }
+      return "";
+    };
     for (const r of rows) {
-      if (!problemPathRe.test(r.path)) continue;
+      if (!pathLooksLikeProblemDevices(r.path)) continue;
       const f = r.fields;
       const device =
         f.Device ||
@@ -2778,8 +3852,14 @@
         f.Dispositivo ||
         f.Устройство ||
         f.デバイス ||
+        rowValueByCompactKeys(f, ["device", "name", "item", "description", "устройство", "название"]) ||
         "";
       const vendor =
+        f["PNP Device ID"] ||
+        f["PNP_Device_ID"] ||
+        f["Код_устройства_PNP"] ||
+        f["Код устройства PNP"] ||
+        rowValueByCompactKeys(f, ["pnpdeviceid", "кодустройстваpnp"]) ||
         f.Vendor ||
         f.Manufacturer ||
         f.Provider ||
@@ -2792,22 +3872,76 @@
       const detail =
         f.Problem ||
         f["Problem Code"] ||
+        f["Код_ошибки"] ||
+        f["Код ошибки"] ||
+        rowValueByCompactKeys(f, ["problem", "problemcode", "кодошибки", "error", "status", "fehler"]) ||
         f.Error ||
         f.Status ||
         f["Code de problème"] ||
         f["Código de problema"] ||
         f.Fehler ||
         "";
-      if (device || vendor) problems.push({ device, vendor, detail });
+      if (device || vendor || detail) problems.push({ device, vendor, detail });
     }
     if (!problems.length) {
+      /** @type {{ device: string, vendor: string, detail: string } | null} */
+      let cur = null;
+      const flush = () => {
+        if (cur && (cur.device || cur.vendor || cur.detail)) problems.push(cur);
+        cur = null;
+      };
+      const isDeviceItem = (/** @type {string} */ it) => {
+        const c = problemFieldKeyCompact(it);
+        return (
+          c === "device" ||
+          c === "name" ||
+          c === "item" ||
+          c === "gerät" ||
+          c === "dispositivo" ||
+          c === "dispositif" ||
+          c === "apparaat" ||
+          c === "устройство" ||
+          c === "название"
+        );
+      };
+      const isPnpItem = (/** @type {string} */ it) => {
+        const c = problemFieldKeyCompact(it);
+        return c === "pnpdeviceid" || c === "pnp_device_id" || c === "кодустройстваpnp";
+      };
+      const isErrorDetailItem = (/** @type {string} */ it) => {
+        const c = problemFieldKeyCompact(it);
+        return (
+          c === "problem" ||
+          c === "problemcode" ||
+          c === "кодошибки" ||
+          c === "error" ||
+          c === "status" ||
+          c === "fehler" ||
+          /^кодошиб/.test(c)
+        );
+      };
       for (const k of kvs) {
-        if (!problemPathRe.test(k.path)) continue;
-        const it = (k.item || "").trim();
-        if (/^Device$/i.test(it) || /^Name$/i.test(it) || /^Gerät$/i.test(it) || /^Dispositivo$/i.test(it)) {
-          problems.push({ device: k.value, vendor: "", detail: "" });
+        if (!pathLooksLikeProblemDevices(k.path)) continue;
+        const it = String(k.item || "")
+          .replace(/^\ufeff/, "")
+          .trim();
+        const val = (k.value || "").trim();
+        if (isDeviceItem(it)) {
+          flush();
+          cur = { device: val, vendor: "", detail: "" };
+          continue;
+        }
+        if (!cur) cur = { device: "", vendor: "", detail: "" };
+        if (isPnpItem(it)) {
+          cur.vendor = val;
+          continue;
+        }
+        if (isErrorDetailItem(it)) {
+          cur.detail = val;
+          continue;
         }
       }
+      flush();
     }
 
     const networkAdapters = summarizeNetworkAdapters(kvs, rows);
@@ -2837,13 +3971,14 @@
           /Ubicación del archivo de paginación/i,
           /Localização do arquivo de paginação/i,
           /Расположение файла подкачки/i,
+          /Файл подкачки/i,
           /分页文件位置/i,
         ]) || "";
       if (v) return v;
       for (const k of kvs) {
         const it = (k.item || "").trim();
         if (
-          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|分页文件位置/i.test(
+          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置/i.test(
             it
           ) &&
           k.value.trim()
@@ -2858,7 +3993,8 @@
             /^auslagerungsdatei$/i.test(it) ||
             /^fichier d'échange$/i.test(it) ||
             /^archivo de paginación$/i.test(it) ||
-            /^arquivo de paginação$/i.test(it)) &&
+            /^arquivo de paginação$/i.test(it) ||
+            /^файл подкачки$/i.test(it)) &&
           looksLikePageFilePath(k.value)
         ) {
           return k.value.trim();
@@ -2867,14 +4003,14 @@
       for (const r of rows) {
         if (
           !MSINFO_I18N.memoryRowPath.test(r.path) &&
-          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页/i.test(r.path)
+          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页|подкачк/i.test(r.path)
         ) {
           continue;
         }
         for (const [key, val] of Object.entries(r.fields)) {
           const kt = key.trim();
           if (
-            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|分页文件位置/i.test(
+            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置/i.test(
               kt
             ) &&
             String(val).trim()
@@ -2885,7 +4021,8 @@
             (/^page file$/i.test(kt) ||
               /^auslagerungsdatei$/i.test(kt) ||
               /^fichier d'échange$/i.test(kt) ||
-              /^archivo de paginación$/i.test(kt)) &&
+              /^archivo de paginación$/i.test(kt) ||
+              /^файл подкачки$/i.test(kt)) &&
             looksLikePageFilePath(String(val))
           ) {
             return String(val).trim();
@@ -2905,7 +4042,10 @@
         /^Mémoire physique installée/i,
         /^Memoria física instalada/i,
         /^Memória física instalada/i,
-        /^Установленная оперативная память/i,
+        /Установленная оперативная память/i,
+        /Установленн[\w\s,.-]*оперативн[\w\s,.-]*памят/i,
+        /объём\s+оперативн[\w\s,.-]*памят/i,
+        /объем\s+оперативн[\w\s,.-]*памят/i,
         /^已安装的物理内存/i,
       ]),
       totalPhysical: pickSummaryMemory([
@@ -2915,6 +4055,7 @@
         /^Memoria física \(total\)/i,
         /^Memória física total$/i,
         /^Всего физической памяти/i,
+        /Полный объем физической памяти/i,
         /^物理内存总量$/i,
       ]),
       availablePhysical: pickSummaryMemory([
@@ -2924,6 +4065,7 @@
         /^Memoria física disponible$/i,
         /^Memória física disponível$/i,
         /^Доступная физическая память/i,
+        /Доступно физической памяти/i,
         /^可用物理内存$/i,
       ]),
       totalVirtual: pickSummaryMemory([
@@ -2942,6 +4084,7 @@
         /^Memoria virtual disponible$/i,
         /^Memória virtual disponível$/i,
         /^Доступная виртуальная память/i,
+        /Доступно виртуальной памяти/i,
         /^可用虚拟内存$/i,
       ]),
       pageFileSpace: pickSummaryMemory([
@@ -3156,9 +4299,47 @@
     let value = "";
     const im = attrBlob.match(/\bItem\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (im) item = im[2] != null ? im[2] : im[3] || "";
+    const imRu = attrBlob.match(/\bЭлемент\s*=\s*("([^"]*)"|'([^']*)')/i);
+    if (!item.trim() && imRu) item = imRu[2] != null ? imRu[2] : imRu[3] || "";
+    const imFr = attrBlob.match(/\bÉlément\s*=\s*("([^"]*)"|'([^']*)')/i);
+    if (!item.trim() && imFr) item = imFr[2] != null ? imFr[2] : imFr[3] || "";
+    const imJa = attrBlob.match(/\b項目\s*=\s*("([^"]*)"|'([^']*)')/);
+    if (!item.trim() && imJa) item = imJa[2] != null ? imJa[2] : imJa[3] || "";
     const vm = attrBlob.match(/\bValue\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (vm) value = vm[2] != null ? vm[2] : vm[3] || "";
+    const vmRu = attrBlob.match(/\bЗначение\s*=\s*("([^"]*)"|'([^']*)')/i);
+    if (!value.trim() && vmRu) value = vmRu[2] != null ? vmRu[2] : vmRu[3] || "";
+    const vmFr = attrBlob.match(/\bValeur\s*=\s*("([^"]*)"|'([^']*)')/i);
+    if (!value.trim() && vmFr) value = vmFr[2] != null ? vmFr[2] : vmFr[3] || "";
+    const vmJa = attrBlob.match(/\b値\s*=\s*("([^"]*)"|'([^']*)')/);
+    if (!value.trim() && vmJa) value = vmJa[2] != null ? vmJa[2] : vmJa[3] || "";
     return { item: norm(item), value: norm(decodeXmlishText(value)) };
+  }
+
+  /** @param {string} inner XML body of a Data element (loose text scan). */
+  function looseDataInnerToItemValue(inner) {
+    const normInner = (/** @type {string} */ s) =>
+      decodeXmlishText(String(s || "").replace(/\s+/g, " ").trim());
+    const pairs = [
+      [/<Item\b[^>]*>([\s\S]*?)<\/Item>/i, /<Value\b[^>]*>([\s\S]*?)<\/Value>/i],
+      [/<Элемент\b[^>]*>([\s\S]*?)<\/Элемент>/i, /<Значение\b[^>]*>([\s\S]*?)<\/Значение>/i],
+      [/<Élément\b[^>]*>([\s\S]*?)<\/Élément>/i, /<Valeur\b[^>]*>([\s\S]*?)<\/Valeur>/i],
+      [/<項目\b[^>]*>([\s\S]*?)<\/項目>/, /<値\b[^>]*>([\s\S]*?)<\/値>/],
+      [/<元素\b[^>]*>([\s\S]*?)<\/元素>/, /<值\b[^>]*>([\s\S]*?)<\/值>/],
+      [/<항목\b[^>]*>([\s\S]*?)<\/항목>/, /<값\b[^>]*>([\s\S]*?)<\/값>/],
+      [/<Eintrag\b[^>]*>([\s\S]*?)<\/Eintrag>/i, /<Wert\b[^>]*>([\s\S]*?)<\/Wert>/i],
+    ];
+    for (const [itemRe, valRe] of pairs) {
+      const im = inner.match(itemRe);
+      const vm = inner.match(valRe);
+      if (im || vm) {
+        return {
+          item: im ? normInner(im[1]) : "",
+          value: vm ? normInner(vm[1]) : "",
+        };
+      }
+    }
+    return { item: "", value: "" };
   }
 
   /**
@@ -3205,12 +4386,7 @@
       m = rest.match(/^<Data\b([^>]*)>([\s\S]*?)<\/Data\s*>/i);
       if (m) {
         const inner = m[2] || "";
-        const im = inner.match(/<Item[^>]*>([\s\S]*?)<\/Item>/i);
-        const vm = inner.match(/<Value[^>]*>([\s\S]*?)<\/Value>/i);
-        let item = "";
-        let value = "";
-        if (im) item = decodeXmlishText(im[1].replace(/\s+/g, " ").trim());
-        if (vm) value = decodeXmlishText(vm[1].replace(/\s+/g, " ").trim());
+        let { item, value } = looseDataInnerToItemValue(inner);
         if (!item && !value) {
           const blob = m[1] || "";
           const p = parseDataAttrBlob(blob);
@@ -3397,23 +4573,23 @@
     const vendor = esc(vendorStr);
     const isNvidia = /NVIDIA/i.test(vendorStr);
     const isIntel = /INTEL/i.test(vendorStr);
-    const name = esc(String(gg.name || "—"));
+    const name = sumI18nSpan(String(gg.name || ""), esc);
     const pciUrl = gg.pciLookupUrl
       ? String(gg.pciLookupUrl)
       : gg.deviceHuntUrl
         ? String(gg.deviceHuntUrl)
         : "";
     const dv = gg.driverVersionDisplay || gg.driverFormatted || gg.driverFull;
-    let driverVersion = esc(String(dv || "—"));
+    let driverVersion = sumI18nSpan(String(dv || "—"), esc);
     if (isNvidia && gg.driverFormatted && gg.driverFull && String(gg.driverFormatted) !== String(gg.driverFull)) {
       driverVersion += ` <span class="summary-empty">(internal: ${esc(String(gg.driverFull))})</span>`;
     } else if (isIntel && gg.driverFull) {
       driverVersion += ` <span class="summary-empty">(Intel — raw from MSInfo)</span>`;
     }
-    const driverDate = esc(String(gg.driverDate || "—"));
-    const deviceId = esc(String(gg.deviceId || "—"));
-    const adapterType = esc(String(gg.adapterType || "—"));
-    const adapterRam = esc(String(gg.adapterRam || "—"));
+    const driverDate = sumI18nSpan(String(gg.driverDate || "—"), esc);
+    const deviceId = sumI18nSpan(String(gg.deviceId || "—"), esc);
+    const adapterType = sumI18nSpan(String(gg.adapterType || "—"), esc);
+    const adapterRam = sumI18nSpan(String(gg.adapterRam || "—"), esc);
 
     let resLine = "Not Available";
     if (gg.resolution && String(gg.resolution).trim() && !/^not available|^n\/a$/i.test(String(gg.resolution).trim())) {
@@ -3422,7 +4598,7 @@
       resLine =
         "Not listed under NVIDIA in this export (common on hybrid graphics — see Intel for panel resolution).";
     }
-    const resolution = esc(resLine);
+    const resolution = sumI18nSpan(resLine, esc);
 
     const pciBtn = pciUrl
       ? `<a class="gpu-pci-lookup" href="${esc(pciUrl)}" target="_blank" rel="noopener noreferrer" title="Open PCILookup.com with vendor and device ID filled in"><svg class="gpu-pci-lookup__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10h10M7 14h7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><circle cx="17" cy="5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.75"/><path d="M19.2 7.2l2.3 2.3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg><span class="visually-hidden">PCI lookup (prefilled)</span></a>`
@@ -3484,6 +4660,848 @@
   }
 
   /**
+   * True when text looks non-English for common Windows display languages (Arabic, CJK, Cyrillic, Greek, Hangul, kana, Latin with European diacritics).
+   * Used to show the section Translate control; phrase maps cover Russian + intl. pairs below as best-effort.
+   * @param {string} s
+   */
+  function localeScriptLooksNonEnglishListed(s) {
+    const t = String(s || "").replace(/<[^>]*>/g, " ");
+    if (!t.trim()) return false;
+    if (/[\u0600-\u06FF]/.test(t)) return true;
+    if (/[\u0400-\u04FF]/.test(t)) return true;
+    if (/[\u0370-\u03FF]/.test(t)) return true;
+    if (/[\u3040-\u30FF\u31F0-\u31FF]/.test(t)) return true;
+    if (/[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(t)) return true;
+    if (/[\uAC00-\uD7AF]/.test(t)) return true;
+    if (/[\u0100-\u024F\u1E00-\u1EFF]/.test(t)) return true;
+    return false;
+  }
+
+  /**
+   * Russian MSInfo / Windows UI → English (offline phrase map).
+   * @type {readonly (readonly [string, string])[]}
+   */
+  const LOCALE_PAIRS_MSINFO_RU = [
+        ["64-разрядная операционная система", "64-bit operating system"],
+        ["32-разрядная операционная система", "32-bit operating system"],
+        ["Компьютер на базе x64", "x64-based PC"],
+        ["Компьютер на базе x86", "x86-based PC"],
+        ["Компьютер на базе ARM64", "ARM64-based PC"],
+        ["Компьютер на базе ARM", "ARM-based PC"],
+        ["логических процессоров:", "logical processors:"],
+        ["логических процессоров", "logical processors"],
+        ["логических процессора:", "logical processors:"],
+        ["логических процессора", "logical processors"],
+        ["Корпорация Майкрософт", "Microsoft Corporation"],
+        ["Установленная физическая память (ОЗУ)", "Installed Physical Memory (RAM)"],
+        ["Установленная физическая память", "Installed Physical Memory"],
+        ["Доступная физическая память", "Available Physical Memory"],
+        ["Всего физической памяти", "Total Physical Memory"],
+        ["Всего виртуальной памяти", "Total Virtual Memory"],
+        ["Доступная виртуальная память", "Available Virtual Memory"],
+        ["Локальный фиксированный диск", "Local Fixed Disk"],
+        ["Дисковый накопитель", "Disk drive"],
+        ["Съемное устройство хранения", "Removable storage"],
+        ["Съемное устройство", "Removable device"],
+        ["Оптический накопитель", "Optical drive"],
+        ["Сетевой диск", "Network drive"],
+        ["Локальный диск", "Local Disk"],
+        ["гигабайта", "gigabytes"],
+        ["терабайта", "terabytes"],
+        ["мегабайта", "megabytes"],
+        ["килобайта", "kilobytes"],
+        ["гигабайт", "gigabyte"],
+        ["терабайт", "terabyte"],
+        ["мегабайт", "megabyte"],
+        ["килобайт", "kilobyte"],
+        [" байт)", " bytes)"],
+        [" байт ", " bytes "],
+        [") байт", ") bytes"],
+        [")байт", ")bytes"],
+        ["совместимый видеоадаптер", "compatible video adapter"],
+        ["Direct3D-совместимый", "Direct3D-compatible"],
+        ["NVIDIA-совместимый", "NVIDIA-compatible"],
+        ["AMD-совместимый", "AMD-compatible"],
+        ["Intel-совместимый", "Intel-compatible"],
+        ["Встроенный видеоадаптер", "Integrated video adapter"],
+        ["Основной дисплей", "Primary display"],
+        ["Дополнительный дисплей", "Secondary display"],
+        ["Расположение файла подкачки", "Page File Location"],
+        ["Автоматически с отложенным запуском", "Automatic (Delayed Start)"],
+        ["Вручную при отложенном запуске", "Manual (Trigger Start)"],
+        ["Исходная дата установки", "Original Install Date"],
+        ["Версия / серийный номер", "Version / serial number"],
+        ["Файловая система", "File System"],
+        ["Общий размер", "Total Size"],
+        ["Серийный номер", "Serial Number"],
+        ["Шлюз IP по умолчанию", "Default IP Gateway"],
+        ["Шлюз по умолчанию", "Default Gateway"],
+        ["Тип запуска", "Startup type"],
+        ["Тип системы", "System Type"],
+        ["Роль платформы", "Platform Role"],
+        ["Часовой пояс", "Time Zone"],
+        ["Дата установки", "Install date"],
+        ["Имя тома", "Volume Name"],
+        ["Имя службы", "Service name"],
+        ["Имя подключения", "Connection name"],
+        ["Тип продукта", "Product type"],
+        ["Тип продукции", "Product type"],
+        ["ID PNP-устройства", "PNP Device ID"],
+        ["ИД PNP-устройства", "PNP Device ID"],
+        ["Код PNP-устройства", "PNP Device ID"],
+        ["Последний сброс", "Last reset"],
+        ["Установлен", "Installed"],
+        ["Установлено", "Installed"],
+        ["Установлена", "Installed"],
+        ["DHCP-аренда истекает", "DHCP lease expires"],
+        ["DHCP-аренда получена", "DHCP lease obtained"],
+        ["Срок аренды DHCP истекает", "DHCP lease expires"],
+        ["Срок аренды DHCP получен", "DHCP lease obtained"],
+        ["Дата окончания аренды DHCP", "DHCP lease expires"],
+        ["Дата получения аренды DHCP", "DHCP lease obtained"],
+        ["IP-адрес", "IP address"],
+        ["Драйвер", "Driver"],
+        ["Программная среда / Сообщения об ошибках Windows", "Software Environment / Windows Error Reporting"],
+        ["Сообщения об ошибках Windows", "Windows Error Reporting"],
+        ["Программная среда", "Software Environment"],
+        ["Контейнер ошибки", "Error container"],
+        ["Отклик: Нет данных", "Response: No data"],
+        ["Идентификатор CAB:", "CAB ID:"],
+        ["Идентификатор CAB", "CAB ID"],
+        ["Имя события:", "Event name:"],
+        ["Имя события", "Event name"],
+        ["Отклик:", "Response:"],
+        ["Нет данных", "No data"],
+        ["Эти файлы можно найти здесь:", "These files can be found here:"],
+        ["Сигнатура проблемы:", "Problem signature:"],
+        ["Сигнатура проблемы", "Problem signature"],
+        ["Вложенные файлы:", "Attached files:"],
+        ["Вложенные файлы", "Attached files"],
+        ["Символ анализа:", "Analysis symbol:"],
+        ["Символ анализа", "Analysis symbol"],
+        ["Повторный поиск решения:", "Searching for solutions:"],
+        ["Повторный поиск решения", "Searching for solutions"],
+        ["Хэшированный контейнер:", "Hashed container:"],
+        ["Хэшированный контейнер", "Hashed container"],
+        ["Идентификатор отчёта:", "Report identifier:"],
+        ["Идентификатор отчёта", "Report identifier"],
+        ["Идентификатор отчета:", "Report identifier:"],
+        ["Идентификатор отчета", "Report identifier"],
+        ["Identifier отчета:", "Report identifier:"],
+        ["Identifier отчета", "Report identifier"],
+        ["Состояние отчёта:", "Report state:"],
+        ["Состояние отчёта", "Report state"],
+        ["Состояние отчета:", "Report state:"],
+        ["Состояние отчета", "Report state"],
+        ["State отчета:", "Report state:"],
+        ["State отчета", "Report state"],
+        ["Identifier GUID CAB:", "CAB GUID identifier:"],
+        [", тип ", ", type "],
+        ["\nтип ", "\ntype "],
+        ["Идентификатор", "Identifier"],
+        ["Недоступно", "Unavailable"],
+        ["Состояние IPv6", "IPv6 status"],
+        ["Файл подкачки", "Page File"],
+        ["Майкрософт", "Microsoft"],
+        ["Сборка", "Build"],
+        ["Версия", "Version"],
+        ["Издание", "Edition"],
+        ["Процессор", "Processor"],
+        ["Классификация", "Classification"],
+        ["Изготовитель", "Manufacturer"],
+        ["Модель", "Model"],
+        ["Свободно", "Free Space"],
+        ["Занято", "Used"],
+        ["Выполняется", "Running"],
+        ["Остановлена", "Stopped"],
+        ["Работает", "Running"],
+        ["Запущена", "Running"],
+        ["Отключена", "Disabled"],
+        ["Отключено", "Disabled"],
+        ["Автоматически", "Automatic"],
+        ["Вручную", "Manual"],
+        ["Имя", "Name"],
+        ["Команда", "Command"],
+        ["Расположение", "Location"],
+        ["Пользователь", "User"],
+        ["Состояние", "State"],
+        ["Источник", "Source"],
+        ["Время", "Time"],
+        ["Описание", "Description"],
+        ["Сеть", "Network"],
+        ["Среда", "Environment"],
+        ["Домен", "Domain"],
+        ["Основной шлюз", "Default Gateway"],
+        ["Носитель", "Medium"],
+        ["Рабочий стол", "Desktop"],
+        ["Серверная платформа", "Server"],
+        ["Системный шкаф", "System rack"],
+        ["ядер:", "cores:"],
+        ["Мобильная система", "Mobile"],
+        ["МГц", "MHz"],
+        ["мГц", "MHz"],
+        ["ГГц", "GHz"],
+        ["гГц", "GHz"],
+        ["кГц", "kHz"],
+        ["Гц", "Hz"],
+        ["(зима)", "(winter)"],
+        ["(лето)", "(summer)"],
+        ["ГБ", "GB"],
+        ["ТБ", "TB"],
+        ["МБ", "MB"],
+        ["КБ", "KB"],
+        ["Гб", "GB"],
+        ["Тб", "TB"],
+        ["Мб", "MB"],
+        ["Кб", "KB"],
+        ["Нет", "No"],
+        ["Да", "Yes"],
+  ];
+
+  /**
+   * Additional locales (Arabic, CJK, European Latin, Greek, Cyrillic variants, etc.) → English.
+   * Merged with Russian; longest keys win globally after sort.
+   * @type {readonly (readonly [string, string])[]}
+   */
+  const LOCALE_PAIRS_MSINFO_INTL = [
+    // --- German (de) ---
+    ["Softwareumgebung / Windows-Fehlerberichte", "Software Environment / Windows Error Reporting"],
+    ["Windows-Fehlerberichte", "Windows Error Reporting"],
+    ["Fehlercontainer", "Error container"],
+    ["Ereignisname:", "Event name:"],
+    ["Ereignisname", "Event name"],
+    ["Antwort: Keine Daten", "Response: No data"],
+    ["Antwort:", "Response:"],
+    ["Keine Daten", "No data"],
+    ["CAB-ID:", "CAB ID:"],
+    ["CAB-ID", "CAB ID"],
+    ["Problemsignatur:", "Problem signature:"],
+    ["Problemsignatur", "Problem signature"],
+    ["Angefügte Dateien:", "Attached files:"],
+    ["Angefügte Dateien", "Attached files"],
+    ["Diese Dateien sind hier zu finden:", "These files can be found here:"],
+    ["Analysesymbol:", "Analysis symbol:"],
+    ["Analysesymbol", "Analysis symbol"],
+    ["Erneute Suche nach Lösungen:", "Searching for solutions:"],
+    ["Gehashter Container:", "Hashed container:"],
+    ["Gehashter Container", "Hashed container"],
+    ["Berichtskennung:", "Report identifier:"],
+    ["Berichtskennung", "Report identifier"],
+    ["Berichtstatus:", "Report state:"],
+    ["Berichtstatus", "Report state"],
+    [", Typ ", ", type "],
+    ["\nTyp ", "\ntype "],
+    ["x64-basierter PC", "x64-based PC"],
+    ["x86-basierter PC", "x86-based PC"],
+    ["ARM64-basierter PC", "ARM64-based PC"],
+    ["Installierter physischer Arbeitsspeicher (RAM)", "Installed Physical Memory (RAM)"],
+    ["Installierter physischer Arbeitsspeicher", "Installed Physical Memory"],
+    ["Gesamter physischer Arbeitsspeicher", "Total Physical Memory"],
+    ["Verfügbarer physischer Arbeitsspeicher", "Available Physical Memory"],
+    ["Gesamter virtueller Arbeitsspeicher", "Total Virtual Memory"],
+    ["Verfügbarer virtueller Arbeitsspeicher", "Available Virtual Memory"],
+    ["Auslagerungsdatei", "Page File"],
+    ["Auslagerungsdateigröße", "Page File Space"],
+    ["Speicher für Auslagerungsdateien", "Page File Location(s)"],
+    ["Dateisystem", "File System"],
+    ["Gesamtgröße", "Total Size"],
+    ["Freier Speicher", "Free Space"],
+    ["Belegter Speicher", "Used"],
+    ["Volumename", "Volume Name"],
+    ["Hersteller", "Manufacturer"],
+    ["Lokaler Datenträger", "Local Disk"],
+    ["Lokales Festplattenlaufwerk", "Local Fixed Disk"],
+    ["Netzlaufwerk", "Network drive"],
+    ["Wechseldatenträger", "Removable device"],
+    ["DVD-Laufwerk", "Optical drive"],
+    ["Wird ausgeführt", "Running"],
+    ["Beendet", "Stopped"],
+    ["Deaktiviert", "Disabled"],
+    ["Automatisch", "Automatic"],
+    ["Manuell", "Manual"],
+    ["Nicht verfügbar", "Unavailable"],
+    ["Ja", "Yes"],
+    ["Nein", "No"],
+    ["NVIDIA-kompatibel", "NVIDIA-compatible"],
+    ["Direct3D-kompatibel", "Direct3D-compatible"],
+    ["integrierter Grafikadapter", "Integrated video adapter"],
+    ["Primärer Bildschirm", "Primary display"],
+    ["GB", "GB"],
+    ["TB", "TB"],
+    ["MB", "MB"],
+    ["kB", "KB"],
+    ["Bytes", "bytes"],
+    ["Byte)", "bytes)"],
+    ["\nByte ", "\nbytes "],
+    // --- French (fr + fr-CA overlap) ---
+    ["Environnement logiciel / Rapports d'erreurs Windows", "Software Environment / Windows Error Reporting"],
+    ["Rapports d'erreurs Windows", "Windows Error Reporting"],
+    ["Conteneur d'erreurs", "Error container"],
+    ["Nom de l'événement:", "Event name:"],
+    ["Nom de l'événement", "Event name"],
+    ["Réponse : Aucune donnée", "Response: No data"],
+    ["Réponse : aucune donnée", "Response: No data"],
+    ["Réponse:", "Response:"],
+    ["Aucune donnée", "No data"],
+    ["ID CAB :", "CAB ID:"],
+    ["ID CAB:", "CAB ID:"],
+    ["Signature du problème :", "Problem signature:"],
+    ["Signature du problème", "Problem signature"],
+    ["Fichiers joints :", "Attached files:"],
+    ["Fichiers joints", "Attached files"],
+    ["Ces fichiers peuvent être disponibles ici :", "These files can be found here:"],
+    ["Symbole d'analyse :", "Analysis symbol:"],
+    ["Symbole d'analyse", "Analysis symbol"],
+    ["Nouvelle recherche de solutions :", "Searching for solutions:"],
+    ["Conteneur haché :", "Hashed container:"],
+    ["Identificateur du rapport :", "Report identifier:"],
+    ["État du rapport :", "Report state:"],
+    [", type ", ", type "],
+    ["Ordinateur à processeur x64", "x64-based PC"],
+    ["Ordinateur à processeur x86", "x86-based PC"],
+    ["Mémoire physique installée (RAM)", "Installed Physical Memory (RAM)"],
+    ["Mémoire physique installée", "Installed Physical Memory"],
+    ["Mémoire physique totale", "Total Physical Memory"],
+    ["Mémoire physique disponible", "Available Physical Memory"],
+    ["Mémoire virtuelle totale", "Total Virtual Memory"],
+    ["Mémoire virtuelle disponible", "Available Virtual Memory"],
+    ["Fichier d'échange", "Page File"],
+    ["Système de fichiers", "File System"],
+    ["Taille totale", "Total Size"],
+    ["Espace libre", "Free Space"],
+    ["Espace utilisé", "Used"],
+    ["Nom du volume", "Volume Name"],
+    ["Processeur", "Processor"],
+    ["Fabricant", "Manufacturer"],
+    ["Exécution", "Running"],
+    ["Arrêté", "Stopped"],
+    ["Désactivé", "Disabled"],
+    ["Automatique", "Automatic"],
+    ["Oui", "Yes"],
+    ["Non", "No"],
+    ["Indisponible", "Unavailable"],
+    ["NVIDIA-compatible", "NVIDIA-compatible"],
+    // --- Spanish (es) ---
+    ["Entorno de software / Informes de errores de Windows", "Software Environment / Windows Error Reporting"],
+    ["Informes de errores de Windows", "Windows Error Reporting"],
+    ["Contenedor de errores", "Error container"],
+    ["Nombre del evento:", "Event name:"],
+    ["Nombre del evento", "Event name"],
+    ["Respuesta: No hay datos", "Response: No data"],
+    ["Respuesta:", "Response:"],
+    ["No hay datos", "No data"],
+    ["Id. de CAB:", "CAB ID:"],
+    ["Firma del problema:", "Problem signature:"],
+    ["Archivos adjuntos:", "Attached files:"],
+    ["Estos archivos se pueden encontrar aquí:", "These files can be found here:"],
+    ["Símbolo de análisis:", "Analysis symbol:"],
+    ["Búsqueda de soluciones nueva:", "Searching for solutions:"],
+    ["Contenedor con hash:", "Hashed container:"],
+    ["Identificador de informe:", "Report identifier:"],
+    ["Estado del informe:", "Report state:"],
+    ["Equipo basado en x64", "x64-based PC"],
+    ["Memoria física instalada (RAM)", "Installed Physical Memory (RAM)"],
+    ["Memoria física instalada", "Installed Physical Memory"],
+    ["Memoria física total", "Total Physical Memory"],
+    ["Memoria física disponible", "Available Physical Memory"],
+    ["Sistema de archivos", "File System"],
+    ["Tamaño total", "Total Size"],
+    ["Espacio libre", "Free Space"],
+    ["Espacio usado", "Used"],
+    ["Nombre de volumen", "Volume Name"],
+    ["Fabricante", "Manufacturer"],
+    ["Modelo", "Model"],
+    ["En ejecución", "Running"],
+    ["Detenido", "Stopped"],
+    ["Deshabilitado", "Disabled"],
+    ["Automático", "Automatic"],
+    ["Manual", "Manual"],
+    ["Sí", "Yes"],
+    ["No disponible", "Unavailable"],
+    // --- Italian (it) ---
+    ["Ambiente software / Segnalazioni di problemi di Windows", "Software Environment / Windows Error Reporting"],
+    ["Segnalazioni di problemi di Windows", "Windows Error Reporting"],
+    ["Contenitore errori", "Error container"],
+    ["Nome evento:", "Event name:"],
+    ["Risposta: Nessun dato", "Response: No data"],
+    ["Nessun dato", "No data"],
+    ["Firma problema:", "Problem signature:"],
+    ["File allegati:", "Attached files:"],
+    ["Questi file potrebbero essere disponibili qui:", "These files can be found here:"],
+    ["Simbolo analisi:", "Analysis symbol:"],
+    ["Nuova ricerca soluzioni:", "Searching for solutions:"],
+    ["Contenitore con hash:", "Hashed container:"],
+    ["Computer basato su x64", "x64-based PC"],
+    ["Memoria fisica installata (RAM)", "Installed Physical Memory (RAM)"],
+    ["Memoria fisica installata", "Installed Physical Memory"],
+    ["File system", "File System"],
+    ["Dimensione totale", "Total Size"],
+    ["Spazio libero", "Free Space"],
+    ["Spazio utilizzato", "Used"],
+    ["Nome volume", "Volume Name"],
+    ["In esecuzione", "Running"],
+    ["Arrestato", "Stopped"],
+    ["Disabilitato", "Disabled"],
+    ["Automatico", "Automatic"],
+    ["Non disponibile", "Unavailable"],
+    // --- Portuguese (pt / pt-BR) ---
+    ["Ambiente de software / Relatórios de Erros do Windows", "Software Environment / Windows Error Reporting"],
+    ["Relatórios de Erros do Windows", "Windows Error Reporting"],
+    ["Contêiner de erros", "Error container"],
+    ["Nome do evento:", "Event name:"],
+    ["Resposta: Sem dados", "Response: No data"],
+    ["Sem dados", "No data"],
+    ["Assinatura do problema:", "Problem signature:"],
+    ["Arquivos anexados:", "Attached files:"],
+    ["Esses arquivos podem estar disponíveis aqui:", "These files can be found here:"],
+    ["Símbolo de análise:", "Analysis symbol:"],
+    ["Computador baseado em x64", "x64-based PC"],
+    ["Memória física instalada (RAM)", "Installed Physical Memory (RAM)"],
+    ["Memória física instalada", "Installed Physical Memory"],
+    ["Sistema de ficheiros", "File System"],
+    ["Sistema de archivos", "File System"],
+    ["Tamanho total", "Total Size"],
+    ["Espaço livre", "Free Space"],
+    ["Espaço usado", "Used"],
+    ["Nome do volume", "Volume Name"],
+    ["Em execução", "Running"],
+    ["Parado", "Stopped"],
+    ["Desativado", "Disabled"],
+    ["Desactivado", "Disabled"],
+    ["Automático", "Automatic"],
+    ["Sim", "Yes"],
+    ["Não", "No"],
+    // --- Polish (pl) ---
+    ["Oprogramowanie / Zgłoszenia błędów systemu Windows", "Software Environment / Windows Error Reporting"],
+    ["Zgłoszenia błędów systemu Windows", "Windows Error Reporting"],
+    ["Kontener błędów", "Error container"],
+    ["Nazwa zdarzenia:", "Event name:"],
+    ["Odpowiedź: Brak danych", "Response: No data"],
+    ["Brak danych", "No data"],
+    ["Podpis problemu:", "Problem signature:"],
+    ["Załączone pliki:", "Attached files:"],
+    ["Te pliki mogą być dostępne tutaj:", "These files can be found here:"],
+    ["Symbol analizy:", "Analysis symbol:"],
+    ["Komputer z procesorem x64", "x64-based PC"],
+    ["Zainstalowana pamięć fizyczna (RAM)", "Installed Physical Memory (RAM)"],
+    ["Zainstalowana pamięć fizyczna", "Installed Physical Memory"],
+    ["System plików", "File System"],
+    ["Całkowity rozmiar", "Total Size"],
+    ["Wolne miejsce", "Free Space"],
+    ["Zajęte", "Used"],
+    ["Nazwa woluminu", "Volume Name"],
+    ["Uruchomiony", "Running"],
+    ["Zatrzymany", "Stopped"],
+    ["Wyłączony", "Disabled"],
+    ["Automatyczny", "Automatic"],
+    ["Ręczny", "Manual"],
+    ["Tak", "Yes"],
+    ["Nie", "No"],
+    ["Niedostępne", "Unavailable"],
+    // --- Czech (cs) ---
+    ["Softwarové prostředí / Hlášení chyb systému Windows", "Software Environment / Windows Error Reporting"],
+    ["Hlášení chyb systému Windows", "Windows Error Reporting"],
+    ["Kontejner chyb", "Error container"],
+    ["Název události:", "Event name:"],
+    ["Odpověď: Žádná data", "Response: No data"],
+    ["Žádná data", "No data"],
+    ["Podpis problému:", "Problem signature:"],
+    ["Připojené soubory:", "Attached files:"],
+    ["Počítač založený na platformě x64", "x64-based PC"],
+    ["Nainstalovaná fyzická paměť (RAM)", "Installed Physical Memory (RAM)"],
+    ["Nainstalovaná fyzická paměť", "Installed Physical Memory"],
+    ["Souborový systém", "File System"],
+    ["Celková velikost", "Total Size"],
+    ["Volné místo", "Free Space"],
+    ["Spuštěno", "Running"],
+    ["Zastaveno", "Stopped"],
+    ["Zakázáno", "Disabled"],
+    ["Automaticky", "Automatic"],
+    ["Ručně", "Manual"],
+    ["Ano", "Yes"],
+    // --- Dutch (nl) ---
+    ["Software-omgeving / Foutrapporten van Windows", "Software Environment / Windows Error Reporting"],
+    ["Foutrapporten van Windows", "Windows Error Reporting"],
+    ["Foutcontainer", "Error container"],
+    ["Gebeurtenisnaam:", "Event name:"],
+    ["Antwoord: Geen gegevens", "Response: No data"],
+    ["Geen gegevens", "No data"],
+    ["Probleemhandtekening:", "Problem signature:"],
+    ["Bijgevoegde bestanden:", "Attached files:"],
+    ["x64-gebaseerde pc", "x64-based PC"],
+    ["Geïnstalleerd fysiek geheugen (RAM)", "Installed Physical Memory (RAM)"],
+    ["Bestandssysteem", "File System"],
+    ["Totale grootte", "Total Size"],
+    ["Vrije ruimte", "Free Space"],
+    ["Gebruikt", "Used"],
+    ["Uitvoeren", "Running"],
+    ["Gestopt", "Stopped"],
+    ["Uitgeschakeld", "Disabled"],
+    ["Automatisch", "Automatic"],
+    ["Handmatig", "Manual"],
+    ["Ja", "Yes"],
+    ["Nee", "No"],
+    ["Niet beschikbaar", "Unavailable"],
+    // --- Danish (da) ---
+    ["Softwaremiljø / Windows-fejlrapporter", "Software Environment / Windows Error Reporting"],
+    ["Windows-fejlrapporter", "Windows Error Reporting"],
+    ["Fejlbeholder", "Error container"],
+    ["Hændelsesnavn:", "Event name:"],
+    ["Svar: Ingen data", "Response: No data"],
+    ["Ingen data", "No data"],
+    ["Problemsignatur:", "Problem signature:"],
+    ["Vedhæftede filer:", "Attached files:"],
+    ["x64-baseret pc", "x64-based PC"],
+    ["Installeret fysisk hukommelse (RAM)", "Installed Physical Memory (RAM)"],
+    ["Filsystem", "File System"],
+    ["Samlet størrelse", "Total Size"],
+    ["Ledig plads", "Free Space"],
+    ["Brugt", "Used"],
+    ["Kører", "Running"],
+    ["Stoppet", "Stopped"],
+    ["Deaktiveret", "Disabled"],
+    ["Automatisk", "Automatic"],
+    ["Manuel", "Manual"],
+    ["Ja", "Yes"],
+    ["Nej", "No"],
+    // --- Swedish (sv) ---
+    ["Programvara / Windows-felrapporter", "Software Environment / Windows Error Reporting"],
+    ["Windows-felrapporter", "Windows Error Reporting"],
+    ["Felbehållare", "Error container"],
+    ["Händelsenamn:", "Event name:"],
+    ["Svar: Inga data", "Response: No data"],
+    ["Inga data", "No data"],
+    ["Problemsignatur:", "Problem signature:"],
+    ["Bifogade filer:", "Attached files:"],
+    ["x64-baserad dator", "x64-based PC"],
+    ["Installerat fysiskt minne (RAM)", "Installed Physical Memory (RAM)"],
+    ["Filsystem", "File System"],
+    ["Total storlek", "Total Size"],
+    ["Ledigt utrymme", "Free Space"],
+    ["Använt", "Used"],
+    ["Körs", "Running"],
+    ["Stoppad", "Stopped"],
+    ["Inaktiverad", "Disabled"],
+    ["Automatisk", "Automatic"],
+    ["Manuell", "Manual"],
+    ["Ja", "Yes"],
+    ["Nej", "No"],
+    // --- Norwegian Bokmål (nb) ---
+    ["Programvare / Windows-feilrapporter", "Software Environment / Windows Error Reporting"],
+    ["Windows-feilrapporter", "Windows Error Reporting"],
+    ["Feilbeholder", "Error container"],
+    ["Hendelsesnavn:", "Event name:"],
+    ["Svar: Ingen data", "Response: No data"],
+    ["Ingen data", "No data"],
+    ["Problemsignatur:", "Problem signature:"],
+    ["Vedlegg:", "Attached files:"],
+    ["x64-basert PC", "x64-based PC"],
+    ["Installert fysisk minne (RAM)", "Installed Physical Memory (RAM)"],
+    ["Filsystem", "File System"],
+    ["Total størrelse", "Total Size"],
+    ["Ledig plass", "Free Space"],
+    ["Brukt", "Used"],
+    ["Kjører", "Running"],
+    ["Stoppet", "Stopped"],
+    ["Deaktivert", "Disabled"],
+    ["Automatisk", "Automatic"],
+    ["Manuell", "Manual"],
+    ["Ja", "Yes"],
+    ["Nei", "No"],
+    // --- Finnish (fi) ---
+    ["Ohjelmisto / Windows-virheraportit", "Software Environment / Windows Error Reporting"],
+    ["Windows-virheraportit", "Windows Error Reporting"],
+    ["Virhesäiliö", "Error container"],
+    ["Tapahtuman nimi:", "Event name:"],
+    ["Vastaus: Ei tietoja", "Response: No data"],
+    ["Ei tietoja", "No data"],
+    ["Ongelmatunnus:", "Problem signature:"],
+    ["Liitetyt tiedostot:", "Attached files:"],
+    ["x64-pohjainen tietokone", "x64-based PC"],
+    ["Asennettu fyysinen muisti (RAM)", "Installed Physical Memory (RAM)"],
+    ["Tiedostojärjestelmä", "File System"],
+    ["Kokonaiskoko", "Total Size"],
+    ["Vapaa tila", "Free Space"],
+    ["Käytetty", "Used"],
+    ["Käynnissä", "Running"],
+    ["Pysäytetty", "Stopped"],
+    ["Poistettu käytöstä", "Disabled"],
+    ["Automaattinen", "Automatic"],
+    ["Manuaalinen", "Manual"],
+    ["Kyllä", "Yes"],
+    ["Ei", "No"],
+    ["Ei käytettävissä", "Unavailable"],
+    // --- Estonian (et) ---
+    ["Tarkvara / Windowsi veaaruanded", "Software Environment / Windows Error Reporting"],
+    ["Windowsi veaaruanded", "Windows Error Reporting"],
+    ["Veaümbris", "Error container"],
+    ["Sündmuse nimi:", "Event name:"],
+    ["Vastus: Andmed puuduvad", "Response: No data"],
+    ["Andmed puuduvad", "No data"],
+    ["Probleemi allkiri:", "Problem signature:"],
+    ["Manustatud failid:", "Attached files:"],
+    ["x64-põhine arvuti", "x64-based PC"],
+    ["Installitud füüsiline mälu (RAM)", "Installed Physical Memory (RAM)"],
+    ["Failisüsteem", "File System"],
+    ["Kogumaht", "Total Size"],
+    ["Vaba ruum", "Free Space"],
+    ["Kasutusel", "Used"],
+    ["Käivitatud", "Running"],
+    ["Peatatud", "Stopped"],
+    ["Keelatud", "Disabled"],
+    ["Automaatne", "Automatic"],
+    ["Käsitsi", "Manual"],
+    ["Jah", "Yes"],
+    ["Ei", "No"],
+    // --- Romanian (ro) ---
+    ["Software / Rapoarte de probleme Windows", "Software Environment / Windows Error Reporting"],
+    ["Rapoarte de probleme Windows", "Windows Error Reporting"],
+    ["Recipient de erori", "Error container"],
+    ["Nume eveniment:", "Event name:"],
+    ["Răspuns: Fără date", "Response: No data"],
+    ["Fără date", "No data"],
+    ["Semnătura problemei:", "Problem signature:"],
+    ["Fișiere atașate:", "Attached files:"],
+    ["Computer bazat pe x64", "x64-based PC"],
+    ["Memorie fizică instalată (RAM)", "Installed Physical Memory (RAM)"],
+    ["Sistem de fișiere", "File System"],
+    ["Dimensiune totală", "Total Size"],
+    ["Spațiu liber", "Free Space"],
+    ["Utilizat", "Used"],
+    ["Rulare", "Running"],
+    ["Oprit", "Stopped"],
+    ["Dezactivat", "Disabled"],
+    ["Automat", "Automatic"],
+    ["Da", "Yes"],
+    ["Nu", "No"],
+    ["Indisponibil", "Unavailable"],
+    // --- Hungarian (hu) ---
+    ["Szoftverkörnyezet / Windows-hibajelentések", "Software Environment / Windows Error Reporting"],
+    ["Windows-hibajelentések", "Windows Error Reporting"],
+    ["Hibatároló", "Error container"],
+    ["Esemény neve:", "Event name:"],
+    ["Válasz: Nincsenek adatok", "Response: No data"],
+    ["Nincsenek adatok", "No data"],
+    ["Probléma aláírása:", "Problem signature:"],
+    ["Csatolt fájlok:", "Attached files:"],
+    ["x64-alapú számítógép", "x64-based PC"],
+    ["Telepített fizikai memória (RAM)", "Installed Physical Memory (RAM)"],
+    ["Fájlrendszer", "File System"],
+    ["Teljes méret", "Total Size"],
+    ["Szabad hely", "Free Space"],
+    ["Használt", "Used"],
+    ["Fut", "Running"],
+    ["Leállítva", "Stopped"],
+    ["Letiltva", "Disabled"],
+    ["Automatikus", "Automatic"],
+    ["Kézi", "Manual"],
+    ["Igen", "Yes"],
+    ["Nem", "No"],
+    ["Nem érhető el", "Unavailable"],
+    // --- Turkish (tr) ---
+    ["Yazılım Ortamı / Windows Hata Bildirimleri", "Software Environment / Windows Error Reporting"],
+    ["Windows Hata Bildirimleri", "Windows Error Reporting"],
+    ["Hata kapsayıcısı", "Error container"],
+    ["Olay Adı:", "Event name:"],
+    ["Yanıt: Veri yok", "Response: No data"],
+    ["Veri yok", "No data"],
+    ["Sorun İmzası:", "Problem signature:"],
+    ["Ekli Dosyalar:", "Attached files:"],
+    ["x64 tabanlı bilgisayar", "x64-based PC"],
+    ["Yüklü Fiziksel Bellek (RAM)", "Installed Physical Memory (RAM)"],
+    ["Dosya sistemi", "File System"],
+    ["Toplam boyut", "Total Size"],
+    ["Boş alan", "Free Space"],
+    ["Kullanılan", "Used"],
+    ["Çalışıyor", "Running"],
+    ["Durduruldu", "Stopped"],
+    ["Devre Dışı", "Disabled"],
+    ["Otomatik", "Automatic"],
+    ["Elle", "Manual"],
+    ["Evet", "Yes"],
+    ["Hayır", "No"],
+    ["Kullanılamıyor", "Unavailable"],
+    // --- Greek (el) ---
+    ["Λογισμικό / Αναφορές σφαλμάτων των Windows", "Software Environment / Windows Error Reporting"],
+    ["Αναφορές σφαλμάτων των Windows", "Windows Error Reporting"],
+    ["Υποδοχέας σφαλμάτων", "Error container"],
+    ["Όνομα συμβάντος:", "Event name:"],
+    ["Απόκριση: Δεν υπάρχουν δεδομένα", "Response: No data"],
+    ["Υπογραφή προβλήματος:", "Problem signature:"],
+    ["Συνημμένα αρχεία:", "Attached files:"],
+    ["Υπολογιστής τύπου x64", "x64-based PC"],
+    ["Εγκατεστημένη φυσική μνήμη (RAM)", "Installed Physical Memory (RAM)"],
+    ["Σύστημα αρχείων", "File System"],
+    ["Συνολικό μέγεθος", "Total Size"],
+    ["Ελεύθερος χώρος", "Free Space"],
+    ["Χρησιμοποιείται", "Used"],
+    ["Εκτέλεση", "Running"],
+    ["Διακοπή", "Stopped"],
+    ["Απενεργοποιημένο", "Disabled"],
+    ["Αυτόματο", "Automatic"],
+    ["Χειροκίνητο", "Manual"],
+    ["Ναι", "Yes"],
+    ["Όχι", "No"],
+    // --- Arabic (ar) ---
+    ["مايكروسوفت", "Microsoft"],
+    ["البناء", "Build"],
+    ["الذاكرة الفعلية المثبتة", "Installed Physical Memory"],
+    ["إجمالي الذاكرة الفعلية", "Total Physical Memory"],
+    ["الذاكرة الفعلية المتوفرة", "Available Physical Memory"],
+    ["نظام الملفات", "File System"],
+    ["الحجم الإجمالي", "Total Size"],
+    ["المساحة الحرة", "Free Space"],
+    ["المستخدم", "Used"],
+    ["المعالج", "Processor"],
+    ["الشركة المصنعة", "Manufacturer"],
+    ["النموذج", "Model"],
+    ["نعم", "Yes"],
+    ["لا", "No"],
+    ["غير متوفر", "Unavailable"],
+    // --- Chinese Simplified (zh-Hans) ---
+    ["软件环境 / Windows 错误报告", "Software Environment / Windows Error Reporting"],
+    ["Windows 错误报告", "Windows Error Reporting"],
+    ["错误容器", "Error container"],
+    ["事件名称:", "Event name:"],
+    ["响应: 无数据", "Response: No data"],
+    ["无数据", "No data"],
+    ["问题签名:", "Problem signature:"],
+    ["附加文件:", "Attached files:"],
+    ["基于 x64 的电脑", "x64-based PC"],
+    ["已安装的物理内存 (RAM)", "Installed Physical Memory (RAM)"],
+    ["已安装的物理内存", "Installed Physical Memory"],
+    ["文件系统", "File System"],
+    ["总大小", "Total Size"],
+    ["可用空间", "Free Space"],
+    ["已用空间", "Used"],
+    ["卷名", "Volume Name"],
+    ["正在运行", "Running"],
+    ["已停止", "Stopped"],
+    ["已禁用", "Disabled"],
+    ["自动", "Automatic"],
+    ["手动", "Manual"],
+    // --- Chinese Traditional (zh-Hant) ---
+    ["軟體環境 / Windows 錯誤報告", "Software Environment / Windows Error Reporting"],
+    ["Windows 錯誤報告", "Windows Error Reporting"],
+    ["錯誤容器", "Error container"],
+    ["事件名稱:", "Event name:"],
+    ["回應: 沒有資料", "Response: No data"],
+    ["沒有資料", "No data"],
+    ["問題簽章:", "Problem signature:"],
+    ["附加檔案:", "Attached files:"],
+    ["以 x64 為基礎的電腦", "x64-based PC"],
+    ["已安裝的實體記憶體 (RAM)", "Installed Physical Memory (RAM)"],
+    ["已安裝的實體記憶體", "Installed Physical Memory"],
+    ["檔案系統", "File System"],
+    ["總大小", "Total Size"],
+    ["可用空間", "Free Space"],
+    ["已使用的空間", "Used"],
+    ["磁碟區標籤", "Volume Name"],
+    // --- Japanese (ja) ---
+    ["ソフトウェア環境 / Windows エラー報告", "Software Environment / Windows Error Reporting"],
+    ["Windows エラー報告", "Windows Error Reporting"],
+    ["エラー コンテナー", "Error container"],
+    ["イベント名:", "Event name:"],
+    ["応答: データがありません", "Response: No data"],
+    ["データがありません", "No data"],
+    ["問題の署名:", "Problem signature:"],
+    ["添付ファイル:", "Attached files:"],
+    ["x64 ベース PC", "x64-based PC"],
+    ["インストール済み物理メモリ (RAM)", "Installed Physical Memory (RAM)"],
+    ["ファイル システム", "File System"],
+    ["総容量", "Total Size"],
+    ["空き容量", "Free Space"],
+    ["使用中", "Used"],
+    ["実行中", "Running"],
+    ["停止", "Stopped"],
+    ["無効", "Disabled"],
+    ["自動", "Automatic"],
+    ["手動", "Manual"],
+    ["はい", "Yes"],
+    ["いいえ", "No"],
+    // --- Korean (ko) ---
+    ["소프트웨어 환경 / Windows 오류 보고", "Software Environment / Windows Error Reporting"],
+    ["Windows 오류 보고", "Windows Error Reporting"],
+    ["오류 컨테이너", "Error container"],
+    ["이벤트 이름:", "Event name:"],
+    ["응답: 데이터 없음", "Response: No data"],
+    ["데이터 없음", "No data"],
+    ["문제 서명:", "Problem signature:"],
+    ["첨부 파일:", "Attached files:"],
+    ["x64 기반 PC", "x64-based PC"],
+    ["설치된 실제 RAM", "Installed Physical Memory (RAM)"],
+    ["설치된 실제 메모리", "Installed Physical Memory"],
+    ["파일 시스템", "File System"],
+    ["총 크기", "Total Size"],
+    ["여유 공간", "Free Space"],
+    ["사용됨", "Used"],
+    ["실행 중", "Running"],
+    ["중지됨", "Stopped"],
+    ["사용 안 함", "Disabled"],
+    ["자동", "Automatic"],
+    ["수동", "Manual"],
+    ["예", "Yes"],
+    ["아니요", "No"],
+    ["사용할 수 없음", "Unavailable"],
+  ];
+
+  const MSINFO_I18N_EN_TOKEN_PAIRS = Object.freeze(
+    /** @type {readonly (readonly [string, string])[]} */ (
+      [...LOCALE_PAIRS_MSINFO_RU, ...LOCALE_PAIRS_MSINFO_INTL].sort((a, b) => b[0].length - a[0].length)
+    )
+  );
+
+  /** Decode common MSInfo / WER HTML-style line breaks so Russian tokens match across “&#x000d;&#x000a;”. */
+  function normalizeMsinfoLineBreakEntities(s) {
+    return String(s ?? "")
+      .replace(/&#x000d;&#x000a;/gi, "\n")
+      .replace(/&#000d;&#000a;/gi, "\n")
+      .replace(/&#13;&#10;/gi, "\n")
+      .replace(/&#xd;&#xa;/gi, "\n")
+      .replace(/&#x000d;/gi, "\n")
+      .replace(/&#x000a;/gi, "\n")
+      .replace(/&#13;/gi, "\n")
+      .replace(/&#10;/gi, "\n")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+  }
+
+  /** @param {string} s */
+  function translateMsinfoI18nTokensToEnglish(s) {
+    let out = normalizeMsinfoLineBreakEntities(String(s ?? ""));
+    for (const pair of MSINFO_I18N_EN_TOKEN_PAIRS) {
+      const from = pair[0];
+      const to = pair[1];
+      if (!from || out.indexOf(from) === -1) continue;
+      out = out.split(from).join(to);
+    }
+    return out;
+  }
+
+  /** @param {string} raw */
+  function translateExportValueToEnglish(raw) {
+    const s = String(raw || "");
+    const dev = translateMsProblemDeviceForDisplay(s);
+    const base = dev.display !== dev.original ? dev.display : s;
+    return translateMsinfoI18nTokensToEnglish(base);
+  }
+
+  /**
+   * Wraps export-sourced values so section-level Translate can swap to offline English where mapped.
+   * @param {string | null | undefined} raw full export string (stored on data-export)
+   * @param {(s: string) => string} escFn
+   * @param {string | null | undefined} [displayOverride] visible text when different from raw (e.g. WER preview truncation)
+   */
+  function sumI18nSpan(raw, escFn, displayOverride) {
+    const s = String(raw ?? "").trim();
+    if (!s) return escFn("—");
+    const inner = displayOverride != null ? String(displayOverride) : s;
+    const innerShown = normalizeMsinfoLineBreakEntities(inner);
+    if (!localeScriptLooksNonEnglishListed(s)) return escFn(innerShown);
+    return `<span class="sum-i18n" data-export="${escFn(s)}">${escFn(innerShown)}</span>`;
+  }
+
+  /**
    * Collapsible report block — same chrome as Problem Devices (green bar, icon, count, chevron).
    * @param {string} title
    * @param {string} bodyHtml inner HTML only
@@ -3500,17 +5518,77 @@
       count != null
         ? `<span class="report-category__count" aria-label="${count} item(s)">${esc(String(count))}</span>`
         : "";
+    const plainForDetect = bodyHtml.replace(/<[^>]+>/g, " ").replace(/&(?:#(?:x[\da-fA-F]+|\d+)|[a-zA-Z]+);/g, " ");
+    const needsTranslate = localeScriptLooksNonEnglishListed(plainForDetect);
+    const translateBtn = needsTranslate
+      ? `<button type="button" class="report-category__translate" aria-pressed="false">Translate</button>`
+      : "";
     return `<section class="report-category summary-card summary-card--wide${mod}" aria-label="${esc(title)}">
       <details class="report-category__details"${openAttr}>
         <summary class="report-category__summary">
           <span class="report-category__icon" aria-hidden="true">${icon}</span>
           <span class="report-category__summary-text">${esc(title)}</span>
           ${countHtml}
+          ${translateBtn}
           <span class="report-category__chevron" aria-hidden="true"></span>
         </summary>
-        <div class="report-category__body-inner">${bodyHtml}</div>
+        <div class="report-category__body-inner"><div class="report-category__i18n-root">${bodyHtml}</div></div>
       </details>
     </section>`;
+  }
+
+  /**
+   * Best-effort Russian (Cyrillic) → English for Problem Devices UI only (offline; no API).
+   * Unknown strings pass through unchanged.
+   * @param {string} raw
+   * @returns {{ display: string, original: string }}
+   */
+  function translateMsProblemDeviceForDisplay(raw) {
+    const original = String(raw || "").trim();
+    if (!original) return { display: "", original: "" };
+    if (!/[\u0400-\u04FF]/.test(original)) return { display: original, original };
+    const norm = original.replace(/\s+/g, " ");
+    /** @type {Record<string, string>} */
+    const exact = {
+      "Высокоточный таймер событий": "High Precision Event Timer",
+      "Стандартная клавиатура PS/2": "Standard PS/2 Keyboard",
+      "Мышь Microsoft PS/2": "Microsoft PS/2 Mouse",
+      "Аудио устройства USB": "USB Audio Device",
+      "Аудио устройство USB": "USB Audio Device",
+      "Это устройство отключено.": "This device is disabled.",
+      "Запуск этого устройства невозможен.": "This device cannot start.",
+      "Драйверы для этого устройства не установлены.": "The drivers for this device are not installed.",
+      "Система Windows останавливает это устройство.": "Windows is stopping this device.",
+      "Не удается запустить это устройство.": "This device cannot start.",
+    };
+    if (exact[original]) return { display: exact[original], original };
+    if (exact[norm]) return { display: exact[norm], original };
+    const prefixRows = [
+      {
+        ru: "Это устройство отсутствует, работает неправильно, или для него установлены не все драйверы",
+        en: "This device is not present, is not working properly, or does not have all the drivers installed.",
+      },
+      {
+        ru: "Это устройство отсутствует, работает неправильно, или для него не установлены все драйверы",
+        en: "This device is not present, is not working properly, or does not have all the drivers installed.",
+      },
+      {
+        ru: "Это устройство настроено неправильно",
+        en: "This device is not configured correctly.",
+      },
+      {
+        ru: "Windows остановила это устройство, поскольку в нем возникли неполадки",
+        en: "Windows has stopped this device because it has reported problems.",
+      },
+      {
+        ru: "Для этого устройства найден конфликт ресурсов",
+        en: "A conflict was detected for this device’s resources.",
+      },
+    ];
+    for (const { ru, en } of prefixRows) {
+      if (norm.startsWith(ru)) return { display: en, original };
+    }
+    return { display: original, original };
   }
 
   /**
@@ -3524,27 +5602,25 @@
 
     const cardsHtml = list
       .map((p, i) => {
-        const device = esc((p.device || "").trim() || "Device");
+        const exportDeviceRaw = (p.device || "").trim();
+        const exportDetailRaw = (p.detail || "").trim();
+        const devicePrimary = sumI18nSpan(exportDeviceRaw || "Device", esc);
+        const detailPrimary = sumI18nSpan(exportDetailRaw, esc);
         const vendor = esc((p.vendor || "").trim());
-        const detail = esc((p.detail || "").trim());
-        const errorLine =
-          detail ||
-          "Problem reported in MSInfo export (no additional code text in this row).";
-        const vendorLine = vendor ? `<p class="problem-device-card__vendor"><em>Vendor: ${vendor}</em></p>` : "";
-        const mutedLine = detail
-          ? `<p class="problem-device-card__muted"><em>An error occurred with the device. Error code: ${detail}</em></p>`
-          : "";
+        const errorLine = exportDetailRaw
+          ? detailPrimary
+          : esc("Problem reported in MSInfo export (no additional code text in this row).");
+        const vendorLine = vendor ? `<p class="problem-device-card__vendor"><em>Hardware ID: ${vendor}</em></p>` : "";
 
         return `<li class="problem-devices__item">
           <article class="problem-device-card" aria-labelledby="problem-device-title-${i}">
             <div class="problem-device-card__inner">
               <div class="problem-device-card__text">
                 <h4 class="problem-device-card__title" id="problem-device-title-${i}">
-                  <span class="problem-device-card__mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" focusable="false"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></span>
-                  ${device}
-                </h4>
+                    <span class="problem-device-card__mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="14" height="14" focusable="false"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg></span>
+                    ${devicePrimary}
+                  </h4>
                 <p class="problem-device-card__error">${errorLine}</p>
-                ${mutedLine}
                 ${vendorLine}
               </div>
               <details class="problem-device-card__details">
@@ -3554,9 +5630,9 @@
                 </summary>
                 <div class="problem-device-card__details-body">
                   <dl class="problem-device-card__dl">
-                    <dt>Device</dt><dd>${device}</dd>
-                    ${vendor ? `<dt>Vendor</dt><dd>${vendor}</dd>` : ""}
-                    ${detail ? `<dt>Detail</dt><dd>${detail}</dd>` : "<dt>Detail</dt><dd>—</dd>"}
+                    <dt>Device</dt><dd>${sumI18nSpan(exportDeviceRaw || "Device", esc)}</dd>
+                    ${vendor ? `<dt>Hardware ID</dt><dd>${vendor}</dd>` : ""}
+                    ${exportDetailRaw ? `<dt>Details</dt><dd>${detailPrimary}</dd>` : "<dt>Details</dt><dd>—</dd>"}
                   </dl>
                 </div>
               </details>
@@ -3622,8 +5698,8 @@
       <div class="os-winup__row">
         <div class="os-winup__card os-winup__card--build">
           <span class="os-winup__kicker">Current build</span>
-          <p class="os-winup__hero">${esc(buildHero)}</p>
-          <p class="os-winup__sub">${esc(winTitle)}</p>
+          <p class="os-winup__hero">${sumI18nSpan(buildHero, esc)}</p>
+          <p class="os-winup__sub">${sumI18nSpan(winTitle, esc)}</p>
         </div>
         <div class="os-winup__card os-winup__card--status">
           <span class="os-winup__kicker">Status</span>
@@ -3684,7 +5760,7 @@
         parsedDate.toLocaleDateString(undefined, { dateStyle: "medium" })
       )} · <span class="mbbios-last__sub">about ${bm.ageDays.toLocaleString()} days ago</span></p>`;
     } else if (sum.biosDate) {
-      lastUpdatedBlock = `<p class="mbbios-last"><strong>Date from export</strong> (not parsed to a single calendar day): ${esc(String(sum.biosDate))}</p>`;
+      lastUpdatedBlock = `<p class="mbbios-last"><strong>Date from export</strong> (not parsed to a single calendar day): ${sumI18nSpan(String(sum.biosDate), esc)}</p>`;
     } else {
       lastUpdatedBlock = `<p class="mbbios-last mbbios-last--muted">No separate BIOS release date in this export — check the vendor site for current firmware.</p>`;
     }
@@ -3693,16 +5769,16 @@
       <div class="mbbios-info">
         <h4 class="mbbios-info__title"><span class="mbbios-info__glyph" aria-hidden="true">&#128203;</span> Motherboard information</h4>
         <dl class="mbbios-dl">
-          <dt>Manufacturer</dt><dd>${esc(mb.manufacturer) || "—"}</dd>
-          <dt>Model</dt><dd>${esc(mb.product) || "—"}</dd>
-          ${mb.version ? `<dt>Version / serial</dt><dd>${esc(mb.version)}</dd>` : ""}
-          <dt>Current BIOS</dt><dd>${esc(biosFull)}</dd>
+          <dt>Manufacturer</dt><dd>${sumI18nSpan(mb.manufacturer || "", esc)}</dd>
+          <dt>Model</dt><dd>${sumI18nSpan(mb.product || "", esc)}</dd>
+          ${mb.version ? `<dt>Version / serial</dt><dd>${sumI18nSpan(mb.version, esc)}</dd>` : ""}
+          <dt>Current BIOS</dt><dd>${sumI18nSpan(biosFull, esc)}</dd>
         </dl>
       </div>
       <div class="mbbios-cards">
         <div class="mbbios-card mbbios-card--current">
           <span class="mbbios-card__kicker">Current BIOS</span>
-          <p class="mbbios-card__value">${esc(biosFull)}</p>
+          <p class="mbbios-card__value">${sumI18nSpan(biosFull, esc)}</p>
           <span class="mbbios-card__foot">Installed version</span>
         </div>
         <div class="mbbios-card mbbios-card--check">
@@ -3716,8 +5792,9 @@
       </div>
       <div class="mbbios-update">
         <h4 class="mbbios-update__title"><span class="mbbios-update__glyph" aria-hidden="true">&#9432;</span> BIOS update check</h4>
-        <p class="mbbios-update__copy">Check the <strong>${esc(vendorName)}</strong> support site for the latest BIOS updates for your <strong>${esc(
-      modelForBlurb
+        <p class="mbbios-update__copy">Check the <strong>${sumI18nSpan(vendorName, esc)}</strong> support site for the latest BIOS updates for your <strong>${sumI18nSpan(
+      modelForBlurb,
+      esc
     )}</strong>.</p>
         ${lastUpdatedBlock}
         <div class="rec-actions mbbios-actions">
@@ -3804,7 +5881,7 @@
         ${cats
           .map(
             (c, i) =>
-              `<label class="wer-tab" for="wer-${uid}-c${i}"><span class="wer-tab__inner">${werCategoryIconSvg(c)}<span class="wer-tab__txt">${esc(c)}</span></span></label>`
+              `<label class="wer-tab" for="wer-${uid}-c${i}"><span class="wer-tab__inner">${werCategoryIconSvg(c)}<span class="wer-tab__txt">${sumI18nSpan(c, esc)}</span></span></label>`
           )
           .join("")}
       </div>`
@@ -3817,7 +5894,10 @@
           e.severity === "error" ? "wer-item--error" : e.severity === "warning" ? "wer-item--warning" : "wer-item--info";
         const sevTitle =
           e.severity === "error" ? "High severity" : e.severity === "warning" ? "Warning" : "Informational";
-        const prev = e.details.length > 140 ? `${esc(e.details.slice(0, 140))}…` : esc(e.details);
+        const prev =
+          e.details.length > 140
+            ? sumI18nSpan(e.details, esc, `${e.details.slice(0, 140)}…`)
+            : sumI18nSpan(e.details, esc);
         const catKey = werNormalizeCategory(e.category);
         const cat = esc(catKey);
         return `<div class="wer-item ${sevClass}" data-wer-cat="${cat}">
@@ -3825,16 +5905,17 @@
         <div class="wer-item__body">
           <div class="wer-item__head">
             <span class="wer-item__sev" title="${esc(sevTitle)}"><span class="wer-sev-dot wer-sev-dot--${e.severity}"></span></span>
-            <span class="wer-item__type">${esc(e.type)}</span>
+            <span class="wer-item__type">${sumI18nSpan(e.type, esc)}</span>
             <span class="wer-item__when">${esc(timeAgo(e.time))}</span>
           </div>
-          <div class="wer-item__meta"><span class="muted-label">Time</span> ${esc(e.time)} · <span class="muted-label">Source</span> ${esc(
-          e.sourceTitle
+          <div class="wer-item__meta"><span class="muted-label">Time</span> ${sumI18nSpan(e.time, esc)} · <span class="muted-label">Source</span> ${sumI18nSpan(
+          e.sourceTitle,
+          esc
         )}</div>
           <p class="wer-item__preview">${prev}</p>
           <details class="wer-details">
             <summary class="wer-details__sum">Show full details</summary>
-            <pre class="wer-details__pre">${esc(e.details)}</pre>
+            <pre class="wer-details__pre">${sumI18nSpan(e.details, esc)}</pre>
           </details>
         </div>
       </div>`;
@@ -3912,15 +5993,15 @@
           const det = a.details
             .map(
               (d) =>
-                `<div class="network-detail"><span class="network-detail__k">${esc(d.k)}</span><span class="network-detail__v network-wrap">${esc(d.v)}</span></div>`
+                `<div class="network-detail"><span class="network-detail__k">${sumI18nSpan(d.k, esc)}</span><span class="network-detail__v network-wrap">${sumI18nSpan(d.v, esc)}</span></div>`
             )
             .join("");
           return `<li class="network-adapter">
-            <div class="network-adapter__name">${esc(a.name)}</div>
-            <div class="network-adapter__meta"><span class="muted-label">Medium</span> ${esc(a.medium)}</div>
-            <div class="network-adapter__meta"><span class="muted-label">IPv4</span> <span class="network-wrap">${esc(a.ipv4Display)}</span></div>
-            <div class="network-adapter__meta"><span class="muted-label">IPv6 address(es)</span> <span class="network-wrap">${esc(a.ipv6Display)}</span></div>
-            <div class="network-adapter__meta"><span class="muted-label">IPv6 status</span> ${esc(a.ipv6.summary)}</div>
+            <div class="network-adapter__name">${sumI18nSpan(a.name, esc)}</div>
+            <div class="network-adapter__meta"><span class="muted-label">Medium</span> ${sumI18nSpan(a.medium, esc)}</div>
+            <div class="network-adapter__meta"><span class="muted-label">IPv4</span> <span class="network-wrap">${sumI18nSpan(a.ipv4Display, esc)}</span></div>
+            <div class="network-adapter__meta"><span class="muted-label">IPv6 address(es)</span> <span class="network-wrap">${sumI18nSpan(a.ipv6Display, esc)}</span></div>
+            <div class="network-adapter__meta"><span class="muted-label">IPv6 status</span> ${sumI18nSpan(a.ipv6.summary, esc)}</div>
             <div class="network-adapter__details">${det}</div>
           </li>`;
         })
@@ -3931,23 +6012,23 @@
     }
 
     const overviewBody = `<dl class="system-summary-dl">
-      <dt>System Type</dt><dd>${esc(sum.systemTypeRaw) || "—"}</dd>
-      <dt>Processor</dt><dd class="system-summary-dd--wrap">${esc(sum.processor) || "—"}</dd>
-      <dt>Platform Role</dt><dd>${esc(sum.platformRole) || "—"}</dd>
-      <dt>Time Zone</dt><dd>${esc(sum.timeZone) || "—"}</dd>
-      <dt>Classification</dt><dd>${esc(sum.systemForm)}</dd>
+      <dt>System Type</dt><dd>${sumI18nSpan(sum.systemTypeRaw, esc)}</dd>
+      <dt>Processor</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(sum.processor, esc)}</dd>
+      <dt>Platform Role</dt><dd>${sumI18nSpan(sum.platformRole, esc)}</dd>
+      <dt>Time Zone</dt><dd>${sumI18nSpan(sum.timeZone, esc)}</dd>
+      <dt>Classification</dt><dd>${sumI18nSpan(sum.systemForm, esc)}</dd>
     </dl>`;
     const overviewHtml = renderReportCategoryAccordion("System Overview", overviewBody, esc, { open: true, icon: "system" });
 
     const mem = sum.memory || {};
     const memoryBody = `<dl class="system-summary-dl">
-      <dt>Installed Physical Memory (RAM)</dt><dd>${esc(mem.installedRam) || "—"}</dd>
-      <dt>Total Physical Memory</dt><dd>${esc(mem.totalPhysical) || "—"}</dd>
-      <dt>Available Physical Memory</dt><dd>${esc(mem.availablePhysical) || "—"}</dd>
-      <dt>Total Virtual Memory</dt><dd>${esc(mem.totalVirtual) || "—"}</dd>
-      <dt>Available Virtual Memory</dt><dd>${esc(mem.availableVirtual) || "—"}</dd>
-      <dt>Page File Space</dt><dd>${esc(mem.pageFileSpace) || "—"}</dd>
-      <dt>Page File Location(s)</dt><dd class="system-summary-dd--wrap">${esc(mem.pageFileLocation) || "—"}</dd>
+      <dt>Installed Physical Memory (RAM)</dt><dd>${sumI18nSpan(mem.installedRam, esc)}</dd>
+      <dt>Total Physical Memory</dt><dd>${sumI18nSpan(mem.totalPhysical, esc)}</dd>
+      <dt>Available Physical Memory</dt><dd>${sumI18nSpan(mem.availablePhysical, esc)}</dd>
+      <dt>Total Virtual Memory</dt><dd>${sumI18nSpan(mem.totalVirtual, esc)}</dd>
+      <dt>Available Virtual Memory</dt><dd>${sumI18nSpan(mem.availableVirtual, esc)}</dd>
+      <dt>Page File Space</dt><dd>${sumI18nSpan(mem.pageFileSpace, esc)}</dd>
+      <dt>Page File Location(s)</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(mem.pageFileLocation, esc)}</dd>
     </dl>`;
     const memoryHtml = renderReportCategoryAccordion("Memory Information", memoryBody, esc, { icon: "memory" });
 
@@ -3956,14 +6037,14 @@
       storageDrives.length > 0
         ? `<div class="system-ext-stack">${storageDrives
             .map(
-              (d) => `<article class="system-storage-card"><h4 class="system-storage-card__title">${esc(d.title)}</h4>
+              (d) => `<article class="system-storage-card"><h4 class="system-storage-card__title">${sumI18nSpan(d.title, esc)}</h4>
       <dl class="system-summary-dl system-summary-dl--compact">
-        <dt>File System</dt><dd>${esc(d.fileSystem) || "—"}</dd>
-        <dt>Total Size</dt><dd class="system-summary-dd--wrap">${esc(d.totalSize) || "—"}</dd>
-        <dt>Free Space</dt><dd class="system-summary-dd--wrap">${esc(d.freeSpace) || "—"}</dd>
-        <dt>Used</dt><dd>${esc(d.used) || "—"}</dd>
-        <dt>Volume Name</dt><dd>${esc(d.volumeName) || "—"}</dd>
-        <dt>Serial Number</dt><dd>${esc(d.serialNumber) || "—"}</dd>
+        <dt>File System</dt><dd>${sumI18nSpan(d.fileSystem, esc)}</dd>
+        <dt>Total Size</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(d.totalSize, esc)}</dd>
+        <dt>Free Space</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(d.freeSpace, esc)}</dd>
+        <dt>Used</dt><dd>${sumI18nSpan(d.used, esc)}</dd>
+        <dt>Volume Name</dt><dd>${sumI18nSpan(d.volumeName, esc)}</dd>
+        <dt>Serial Number</dt><dd>${sumI18nSpan(d.serialNumber, esc)}</dd>
       </dl></article>`
             )
             .join("")}</div>`
@@ -3979,7 +6060,7 @@
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Startup programs"><thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead><tbody>${startups
             .map(
               (s) =>
-                `<tr><td class="system-ext-td-name">${esc(s.name)}</td><td class="system-summary-dd--wrap">${esc(s.command)}</td><td class="system-summary-dd--wrap">${esc(s.location) || "—"}</td><td>${esc(s.user) || "—"}</td></tr>`
+                `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.command, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.location, esc)}</td><td>${sumI18nSpan(s.user, esc)}</td></tr>`
             )
             .join("")}</tbody></table></div>`
         : `<p class="summary-empty">No startup program entries found (export may omit <strong>Software Environment → Startup Programs</strong>).</p>`;
@@ -3994,7 +6075,7 @@
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Services"><thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead><tbody>${list
             .map(
               (s) =>
-                `<tr><td class="system-ext-td-name">${esc(s.name)}</td><td>${esc(s.state) || "—"}</td><td>${esc(s.startMode) || "—"}</td></tr>`
+                `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc)}</td><td>${sumI18nSpan(s.state, esc)}</td><td>${sumI18nSpan(s.startMode, esc)}</td></tr>`
             )
             .join("")}</tbody></table></div>`
         : `<p class="summary-empty">No service rows found.</p>`;
@@ -4007,7 +6088,7 @@
     const runningBody =
       runningList.length > 0
         ? svcRows(runningList)
-        : `<p class="summary-empty">No services with state <strong>Running</strong> were found in the parsed rows (some exports only list running services under a separate category).</p>`;
+        : `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
     const runningHtml = renderReportCategoryAccordion("Running Services", runningBody, esc, {
       count: runningList.length || null,
       icon: "running",
@@ -4022,10 +6103,10 @@
 
     const os = sum.os || { name: "", versionLine: "", build: "", installDate: "" };
     const osDl = `<dl class="system-summary-dl">
-      <dt>OS Name</dt><dd>${esc(os.name) || "—"}</dd>
-      <dt>Version</dt><dd class="system-summary-dd--wrap">${esc(os.versionLine) || "—"}</dd>
-      <dt>Build</dt><dd>${esc(os.build) || "—"}</dd>
-      <dt>Original Install Date</dt><dd>${esc(os.installDate) || "—"}</dd>
+      <dt>OS Name</dt><dd>${sumI18nSpan(os.name, esc)}</dd>
+      <dt>Version</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(os.versionLine, esc)}</dd>
+      <dt>Build</dt><dd>${sumI18nSpan(os.build, esc)}</dd>
+      <dt>Original Install Date</dt><dd>${sumI18nSpan(os.installDate, esc)}</dd>
     </dl>`;
     const osBody = `${osDl}${renderWindowsUpdatesOsEmbed(sum, esc)}`;
     const osHtml = renderReportCategoryAccordion("OS Information", osBody, esc, { icon: "os" });
@@ -6122,6 +8203,29 @@
       }
     });
     encodingSelect.addEventListener("change", () => applyDecode());
+    if (summaryEl) {
+      summaryEl.addEventListener(
+        "click",
+        (e) => {
+          const btn = e.target.closest(".report-category__translate");
+          if (!btn || !summaryEl.contains(btn)) return;
+          e.preventDefault();
+          e.stopPropagation();
+          const det = btn.closest("details");
+          const root = det && det.querySelector(".report-category__i18n-root");
+          if (!root) return;
+          const pressed = btn.getAttribute("aria-pressed") === "true";
+          const showEn = !pressed;
+          btn.setAttribute("aria-pressed", showEn ? "true" : "false");
+          btn.textContent = showEn ? "Original" : "Translate";
+          root.querySelectorAll(".sum-i18n").forEach((span) => {
+            const raw = span.getAttribute("data-export") || "";
+            span.textContent = showEn ? translateExportValueToEnglish(raw) : raw;
+          });
+        },
+        true
+      );
+    }
     if (searchInput) {
       searchInput.addEventListener("input", () => {
         if (searchDebounce) clearTimeout(searchDebounce);

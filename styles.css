@@ -912,6 +912,15 @@ details.sys-section:not([open]) .sys-section__chevron {
   color: var(--system-accent);
 }
 
+/* Inline callout in panel hint: same green / weight / tracking as BSOD panel h2, font size from .panel__hint. */
+.panel--bsod .panel__head-inline-title {
+  font-size: inherit;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: inherit;
+  color: var(--system-accent);
+}
+
 .panel__hint {
   margin: 0;
   font-size: 0.86rem;
@@ -1652,7 +1661,7 @@ details.sys-section:not([open]) .sys-section__chevron {
   margin: 0.25rem 0;
 }
 
-/* System information — all summary blocks stacked (no section dropdown) */
+/* System Information — all summary blocks stacked (no section dropdown) */
 .system-summary-stack {
   display: flex;
   flex-direction: column;

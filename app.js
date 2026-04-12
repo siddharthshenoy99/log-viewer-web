@@ -3578,7 +3578,7 @@
       : `<p class="problem-devices__empty">No problem devices section or none listed in this export.</p>`;
 
     return renderReportCategoryAccordion(
-      "Problem devices",
+      "Problem Devices",
       `<div class="problem-devices__body-inner">${bodyInner}</div>`,
       esc,
       {
@@ -3590,7 +3590,7 @@
   }
 
   /**
-   * Windows Updates dashboard (shown under OS information).
+   * Windows Updates dashboard (shown under OS Information).
    * @param {ReturnType<typeof extractSystemSummary>} sum
    * @param {(s: string) => string} esc
    */
@@ -3858,7 +3858,7 @@
 <div class="wer-root" id="wer-root-${uid}">
   ${styleBlock}
   ${radios}
-  <div class="wer-timeline" aria-label="Windows error reports, most recent first">
+  <div class="wer-timeline" aria-label="Windows Error Reports, most recent first">
     ${timeline}
   </div>
   <p class="wer-footnote">Showing up to <strong>80</strong> of <strong>${entries.length}</strong> parsed report(s). Open the raw export to search the full file.</p>
@@ -3937,7 +3937,7 @@
       <dt>Time Zone</dt><dd>${esc(sum.timeZone) || "—"}</dd>
       <dt>Classification</dt><dd>${esc(sum.systemForm)}</dd>
     </dl>`;
-    const overviewHtml = renderReportCategoryAccordion("System overview", overviewBody, esc, { open: true, icon: "system" });
+    const overviewHtml = renderReportCategoryAccordion("System Overview", overviewBody, esc, { open: true, icon: "system" });
 
     const mem = sum.memory || {};
     const memoryBody = `<dl class="system-summary-dl">
@@ -3949,7 +3949,7 @@
       <dt>Page File Space</dt><dd>${esc(mem.pageFileSpace) || "—"}</dd>
       <dt>Page File Location(s)</dt><dd class="system-summary-dd--wrap">${esc(mem.pageFileLocation) || "—"}</dd>
     </dl>`;
-    const memoryHtml = renderReportCategoryAccordion("Memory information", memoryBody, esc, { icon: "memory" });
+    const memoryHtml = renderReportCategoryAccordion("Memory Information", memoryBody, esc, { icon: "memory" });
 
     const storageDrives = sum.storageDrives || [];
     const storageBody =
@@ -3968,7 +3968,7 @@
             )
             .join("")}</div>`
         : `<p class="summary-empty">No disk or volume details found in this export (look for <strong>Components → Storage → Disks</strong> in MSInfo).</p>`;
-    const storageHtml = renderReportCategoryAccordion("Storage drives", storageBody, esc, {
+    const storageHtml = renderReportCategoryAccordion("Storage Drives", storageBody, esc, {
       count: storageDrives.length || null,
       icon: "disk",
     });
@@ -3983,7 +3983,7 @@
             )
             .join("")}</tbody></table></div>`
         : `<p class="summary-empty">No startup program entries found (export may omit <strong>Software Environment → Startup Programs</strong>).</p>`;
-    const startupHtml = renderReportCategoryAccordion("Startup applications", startupBody, esc, {
+    const startupHtml = renderReportCategoryAccordion("Startup Applications", startupBody, esc, {
       count: startups.length || null,
       icon: "startup",
     });
@@ -4008,14 +4008,14 @@
       runningList.length > 0
         ? svcRows(runningList)
         : `<p class="summary-empty">No services with state <strong>Running</strong> were found in the parsed rows (some exports only list running services under a separate category).</p>`;
-    const runningHtml = renderReportCategoryAccordion("Running services", runningBody, esc, {
+    const runningHtml = renderReportCategoryAccordion("Running Services", runningBody, esc, {
       count: runningList.length || null,
       icon: "running",
     });
 
     const wer = sum.windowsErrorReports || [];
     const werBody = renderWindowsErrorReportsBody(wer, esc);
-    const werHtml = renderReportCategoryAccordion("Windows error reports", werBody, esc, {
+    const werHtml = renderReportCategoryAccordion("Windows Error Reports", werBody, esc, {
       count: wer.length || null,
       icon: "wer",
     });
@@ -4028,9 +4028,9 @@
       <dt>Original Install Date</dt><dd>${esc(os.installDate) || "—"}</dd>
     </dl>`;
     const osBody = `${osDl}${renderWindowsUpdatesOsEmbed(sum, esc)}`;
-    const osHtml = renderReportCategoryAccordion("OS information", osBody, esc, { icon: "os" });
+    const osHtml = renderReportCategoryAccordion("OS Information", osBody, esc, { icon: "os" });
 
-    const recHtml = renderReportCategoryAccordion("Recommendations & updates", renderRecommendationsCard(sum, true), esc, {
+    const recHtml = renderReportCategoryAccordion("Recommendations & Updates", renderRecommendationsCard(sum, true), esc, {
       icon: "rec",
     });
     const gpuHtml = renderReportCategoryAccordion("Graphics (GPU)", gpuDashboardEmbed, esc, {
@@ -4039,7 +4039,7 @@
       open: true,
     });
     const netCount = Array.isArray(sum.networkAdapters) ? sum.networkAdapters.length : 0;
-    const networkHtml = renderReportCategoryAccordion("Network (internet)", netBody, esc, {
+    const networkHtml = renderReportCategoryAccordion("Network (Internet)", netBody, esc, {
       count: netCount || null,
       icon: "network",
     });
@@ -4083,7 +4083,7 @@
         </span>
         <h3 id="rec-heading" class="rec-head__title">Recommendations</h3>
       </div>
-      <p class="rec-windows-only-hint">Windows Update (build and status cards) is under <strong>OS information</strong> above. Motherboard, BIOS, and firmware links are under <strong>Motherboard &amp; BIOS</strong> above.</p>`;
+      <p class="rec-windows-only-hint">Windows Update (build and status cards) is under <strong>OS Information</strong> above. Motherboard, BIOS, and firmware links are under <strong>Motherboard &amp; BIOS</strong> above.</p>`;
     if (embed) {
       return `<div class="summary-card--rec summary-card--rec--embed">${inner}</div>`;
     }
@@ -4853,7 +4853,7 @@
         <ul>
           <li>Event Viewer → Windows Logs → System → find “BugCheck” or “The computer has rebooted from a bugcheck” and copy the <strong>Details</strong> tab text.</li>
           <li>Paste the top of WinDbg <code>!analyze -v</code> (bugcheck line, arguments, <strong>IMAGE_NAME</strong> / <strong>Probably caused by</strong>).</li>
-          <li>Load an <code>.nfo</code> in System information, then use <strong>Merge MSInfo text</strong> here to scan the same buffer for bugcheck lines.</li>
+          <li>Load an <code>.nfo</code> in System Information, then use <strong>Merge MSInfo text</strong> here to scan the same buffer for bugcheck lines.</li>
         </ul>
       </div>`;
     }
@@ -5001,7 +5001,7 @@
       const extra = (sysPre?.textContent || "").trim();
       if (!extra) {
         window.alert(
-          "No MSInfo text found. Load a system .nfo in the System information panel first, then try again."
+          "No MSInfo text found. Load a system .nfo in the System Information panel first, then try again."
         );
         return;
       }

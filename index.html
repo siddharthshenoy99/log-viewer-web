@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Portable NVIDIA report viewer: MSInfo (.nfo) summary, BSOD and WinDbg text hints, GPU-Z log charts — runs locally in the browser with no upload pipeline."
+      content="Portable NVIDIA Report Viewer: MSInfo (.nfo) summary, BSOD and WinDbg text hints, GPU-Z log charts — runs locally in the browser with no upload pipeline."
     />
     <!--
       Portable / offline — copy the entire log-viewer-web folder. No npm, Node, Python, build step, CDN,
@@ -15,7 +15,7 @@
       app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu.
       Network: nothing is fetched for parsing; https:// and ms-settings: links run only when the user clicks them (docs, vendor sites, Windows Settings).
     -->
-    <title>NVIDIA: System report, BSOD hints &amp; GPU log analyzer</title>
+    <title>NVIDIA Report Viewer — System Report, BSOD Hints &amp; GPU Log Analyzer</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -37,7 +37,7 @@
         </div>
         <div class="brand-text">
           <p class="hero-kicker">Instant insight · stays on your machine</p>
-          <h1>Report viewer</h1>
+          <h1>Report Viewer</h1>
           <p class="tagline">
             <span>MSInfo summary, BSOD / bugcheck hints &amp; GPU-Z</span>
             <span class="tagline-arrow" aria-hidden="true">
@@ -117,7 +117,7 @@
           tabindex="0"
           title="Shortcut: Shift+1 (outside text fields)"
         >
-          <span class="tool-tab__title">System information</span>
+          <span class="tool-tab__title">System Information</span>
           <span class="tool-tab__desc">Summaries &amp; search · NFO / XML</span>
           <span class="tool-tab__shortcut" aria-hidden="true">Shift+1</span>
         </a>
@@ -209,7 +209,7 @@
               </svg>
             </div>
             <div class="panel__head-text">
-              <h2>System information</h2>
+              <h2>System Information</h2>
               <p class="panel__hint">Windows MSInfo export — <code>.nfo</code> (usually UTF-16 XML)</p>
             </div>
           </div>
@@ -367,7 +367,8 @@
               <p class="panel__hint">
                 Drop a text export (Event Viewer details, <code>WinDbg</code> <code>!analyze -v</code> with
                 <code>IMAGE_NAME</code> / arguments, vendor log) or merge MSInfo text. The panel surfaces STOP codes,
-                Microsoft doc links, and parsed fields when present — not a substitute for opening the
+                Microsoft doc links, and parsed fields when present.
+                <span class="panel__head-inline-title">Note:</span> Not a substitute for opening the
                 <code>.dmp</code> in WinDbg.
               </p>
             </div>
@@ -482,9 +483,21 @@
             <div class="panel__head-text">
               <h2>GPU log analyzer</h2>
               <p class="panel__hint">
-                Add <strong>multiple</strong> GPU-Z sensor <code>.txt</code> files — chart up to twelve metrics, correlation matrix,
-                <strong>timeline CSV export</strong> for Excel, raw text bundle download, and rule-based soft checks
-                (temperature, PCIe-style wording). All processing stays in the browser.
+                Add <strong>multiple</strong> GPU-Z sensor <code>.txt</code> files
+                <span class="tagline-arrow" aria-hidden="true">
+                  <svg class="tagline-arrow__svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                      d="M5 12h14M13 6l6 6-6 6"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </span>
+                chart up to twelve metrics, correlation matrix, <strong>timeline CSV export</strong> for Excel, raw text
+                bundle download, and rule-based soft checks (temperature, PCIe-style wording). All processing stays in the
+                browser.
               </p>
             </div>
           </div>
@@ -541,7 +554,7 @@
       <div class="about-dialog__inner">
         <header class="about-dialog__head">
           <div>
-            <h2 id="about-dialog-title">Report viewer</h2>
+            <h2 id="about-dialog-title">Report Viewer</h2>
             <p class="about-dialog__version-line">
               Portable build <span class="about-dialog__version" id="about-dialog-version"></span>
             </p>
@@ -576,7 +589,7 @@
             <h3 id="about-keys">Keyboard</h3>
             <ul>
               <li>
-                <strong>Tabs:</strong> <kbd>Shift</kbd>+<kbd>1</kbd> System information, <kbd>Shift</kbd>+<kbd>2</kbd> BSOD
+                <strong>Tabs:</strong> <kbd>Shift</kbd>+<kbd>1</kbd> System Information, <kbd>Shift</kbd>+<kbd>2</kbd> BSOD
                 &amp; WinDbg, <kbd>Shift</kbd>+<kbd>3</kbd> GPU-Z logs (physical row keys; skipped in a text field and while
                 this About dialog is open). With focus on a tab, <kbd>Home</kbd> / <kbd>End</kbd> / arrow keys still move
                 between tools.

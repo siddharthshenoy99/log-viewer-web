@@ -17,6 +17,7 @@ WHAT THIS IS
     nvidia-logo.png     Header logo
 
   OPTIONAL — convenience only; not needed for the app to function:
+    favicon.svg              Tab icon (black / green chart mark; referenced from index.html)
     Open-Report-Viewer.bat   Double-click to open index.html (Windows)
     serve.ps1                Tiny HTTP server (built-in PowerShell / .NET only)
     PORTABLE-HANDOFF.txt     This file

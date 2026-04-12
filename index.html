@@ -10,12 +10,13 @@
     <!--
       Portable / offline — copy the entire log-viewer-web folder. No npm, Node, Python, build step, CDN,
       database, or remote API. Analysis runs in the browser from local files only.
-      Required: index.html, styles.css, app.js, nvidia-logo.png (same folder).
+      Required: index.html, styles.css, app.js, nvidia-logo.png (same folder). Optional: favicon.svg (tab icon).
       Optional: Open-Report-Viewer.bat, serve.ps1, PORTABLE-HANDOFF.txt (handoff notes).
       app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu.
       Network: nothing is fetched for parsing; https:// and ms-settings: links run only when the user clicks them (docs, vendor sites, Windows Settings).
     -->
-    <title>NVIDIA — System report, BSOD hints &amp; GPU log analyzer</title>
+    <title>NVIDIA: System report, BSOD hints &amp; GPU log analyzer</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>

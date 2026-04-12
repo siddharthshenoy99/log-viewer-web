@@ -1766,29 +1766,25 @@
 
     const startupContext = (/** @type {string} */ p) =>
       MSINFO_I18N.softwareEnvPath.test(p) &&
-      /Startup Programs|Startup\s*Command|Autostart|Programme beim Start|Programmes au démarrage|Programas de inicio|Programas de inicialização|Автозагрузка|启动程序/i.test(
+      /Startup Programs|Startup\s*Command|Autostart|Autostartprogramme|Programme beim Start|Programmes au démarrage|Programas de inicio|Programas de inicialização|Автозагрузка|启动程序|CurrentVersion\s*[/\\]\s*Run|\/\s*Run\s*(\/|$)/i.test(
         p
       ) &&
       !/Services|Dienste|Servicios agregados|Task\s*Scheduler|Scheduled\s*Tasks|Geplante Tasks|Tâches planifiées/i.test(p);
 
-    /**
-     * Paths where MSInfo hangs startup rows. Category paths use " / " between segments,
-     * so allow optional whitespace before each slash (e.g. "Startup Programs / OneDrive").
-     */
-    const startupPathOk = (/** @type {string} */ p) =>
-      /\/(Startup Programs|Autostartprogramme|Autostart|Programme beim Start)\s*\//i.test(p) ||
-      /\/Startup\s*\//i.test(p) ||
-      /\/(Startup Programs|Autostartprogramme|Programme beim Start)\s*$/i.test(p) ||
-      /\/Autostartprogramme\s*$/i.test(p) ||
-      /\/Autostart\s*$/i.test(p);
-
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!startupContext(p)) continue;
-      if (!startupPathOk(p)) continue;
       const f = {};
       for (const k of kvs) {
-        if (k.path !== p || !k.item) continue;
-        f[k.item.trim()] = (k.value || "").trim();
+        if (k.path !== p) continue;
+        const it = (k.item || "").trim();
+        const val = (k.value || "").trim();
+        if (it) {
+          f[it] = val;
+        } else if (val) {
+          if (/(\.exe|\.lnk|\.bat|\.cmd|\.msi|--processstart)/i.test(val)) {
+            if (!f.Command || val.length > String(f.Command).length) f.Command = val;
+          }
+        }
       }
       const rawName = pickStartupNameFromFields(f);
       const cmd = pickStartupCommandFromFields(f);
@@ -1806,7 +1802,7 @@
     }
 
     for (const r of rows) {
-      if (!startupContext(r.path) || !startupPathOk(r.path)) continue;
+      if (!startupContext(r.path)) continue;
       const f = r.fields;
       const rawName = pickStartupNameFromFields(f);
       const cmd = pickStartupCommandFromFields(f);

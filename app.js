@@ -10152,6 +10152,46 @@
     });
   }
 
+  /** Fixed control: scroll to top of page (theme-aligned; shown after modest scroll). */
+  function setupScrollToTop() {
+    const btn = document.getElementById("scroll-to-top");
+    if (!(btn instanceof HTMLButtonElement)) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let ticking = false;
+    const threshold = 280;
+
+    function applyVisibility() {
+      ticking = false;
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      if (y > threshold) {
+        btn.hidden = false;
+        btn.classList.add("scroll-to-top--visible");
+      } else {
+        btn.classList.remove("scroll-to-top--visible");
+        btn.hidden = true;
+      }
+    }
+
+    function onScroll() {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(applyVisibility);
+      }
+    }
+
+    btn.addEventListener("click", () => {
+      window.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: reduceMotion.matches ? "auto" : "smooth",
+      });
+    });
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    applyVisibility();
+  }
+
   /** About modal, version string, and <kbd>Shift</kbd>+<kbd>?</kbd> (<kbd>Shift</kbd>+<kbd>/</kbd>) shortcut (skipped in form fields). */
   function setupAboutDialog() {
     const dlg = document.getElementById("about-dialog");
@@ -10207,5 +10247,6 @@
   });
   setupWorkspaceTabs();
   setupSkipLinkFocus();
+  setupScrollToTop();
   setupAboutDialog();
 })();

@@ -4405,6 +4405,79 @@ details.report-category__details:not([open]) .report-category__chevron {
   opacity: 0.92;
 }
 
+/* Fixed “back to top” — matches deep panel + NVIDIA green accent */
+.scroll-to-top {
+  position: fixed;
+  z-index: 45;
+  right: clamp(0.85rem, 3vw, 1.35rem);
+  bottom: clamp(0.85rem, 3vw, 1.35rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.65rem;
+  height: 2.65rem;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 1px solid var(--nv-green-border);
+  background: linear-gradient(165deg, rgba(22, 29, 26, 0.96) 0%, rgba(10, 14, 12, 0.98) 100%);
+  color: var(--nv-green);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 4px 18px rgba(0, 0, 0, 0.45),
+    0 0 24px rgba(118, 185, 0, 0.08);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(0.35rem) scale(0.96);
+  transition:
+    opacity 0.22s var(--ease-out-expo),
+    visibility 0.22s,
+    transform 0.22s var(--ease-out-expo),
+    border-color 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.22s ease;
+}
+
+.scroll-to-top.scroll-to-top--visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.scroll-to-top:hover {
+  color: var(--system-accent);
+  border-color: rgba(143, 214, 48, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(143, 214, 48, 0.12) inset,
+    0 6px 22px rgba(0, 0, 0, 0.5),
+    0 0 32px rgba(118, 185, 0, 0.18);
+}
+
+.scroll-to-top:focus-visible {
+  outline: none;
+  color: var(--system-accent);
+  border-color: rgba(143, 214, 48, 0.55);
+  box-shadow:
+    0 0 0 2px rgba(143, 214, 48, 0.22),
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    0 6px 22px rgba(0, 0, 0, 0.5);
+}
+
+.scroll-to-top__icon {
+  width: 1.2rem;
+  height: 1.2rem;
+  display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-to-top {
+    transition: none;
+  }
+}
+
 /* Inline “Local-first → analysis …” so the arrow sits in the sentence flow. */
 .footer-local-lead {
   display: inline-flex;

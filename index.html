@@ -586,7 +586,11 @@
             <h3 id="about-purpose">Purpose</h3>
             <p>
               Read-only helpers for support workflows: structured MSInfo summaries, quick parsing of BSOD / bugcheck
-              text, and GPU-Z sensor log charts, without sending customer data to a remote service from this page.
+              text, and GPU-Z sensor log charts, without sending customer data to a remote service from this page. The
+              MSInfo path applies tolerant decoding and repair so a wide range of corrupted or partially damaged System
+              Information exports can still be read when the underlying content is recoverable. Summaries and labels also
+              support multilingual exports through local normalization and offline phrase mapping, with dedicated
+              handling for Russian and Japanese in addition to English.
             </p>
           </section>
           <section class="about-dialog__section" aria-labelledby="about-privacy">

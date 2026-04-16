@@ -56,6 +56,9 @@
     "Yhdyskäytävän IP-osoite",
     "Varsayılan ağ geçidi",
     "Varsayılan ağ geçidi IPv4",
+    /** Turkish MSInfo (Components → Ağ) uses “IP” in the gateway row title. */
+    "Varsayılan IP Ağ Geçidi",
+    "Varsayılan ip ağ geçidi",
     "Προεπιλεγμένη πύλη",
     "Προεπιλεγμένη πύλη IPv4",
     "Puerta de enlace predeterminada",
@@ -404,17 +407,33 @@
         return String(name || "").toLowerCase();
       }
     };
+    /** Turkish MSInfo uses {@code Öğe} / {@code Değer}; NFKC+ASCII toLowerCase may not match {@code öğe}. */
+    const msinfoTagLowerTr = (/** @type {string} */ localName) => {
+      try {
+        return String(localName || "").normalize("NFC").toLocaleLowerCase("tr-TR");
+      } catch {
+        return String(localName || "").normalize("NFC").toLowerCase();
+      }
+    };
     const msinfoDataChildIsItemLike = (/** @type {string} */ localName) => {
       const n = normXmlTag(localName);
-      return /^(item|name|key|eintrag|property|элемент|elemento|élément|položka|pozycja|öğe|عنصر|στοιχείο|elementti|項目|名称|항목)$/u.test(
-        n
-      );
+      if (
+        /^(item|name|key|eintrag|property|элемент|elemento|élément|položka|pozycja|öğe|عنصر|στοιχείο|elementti|項目|名称|항목)$/u.test(
+          n
+        )
+      )
+        return true;
+      return msinfoTagLowerTr(localName) === "öğe";
     };
     const msinfoDataChildIsValueLike = (/** @type {string} */ localName) => {
       const n = normXmlTag(localName);
-      return /^(value|val|wert|data|inhalt|значение|valor|valeur|waarde|hodnota|wartość|arvo|érték|valoare|değer|قيمة|τιμή|值|数值|値|값|väärtus)$/u.test(
-        n
-      );
+      if (
+        /^(value|val|wert|data|inhalt|значение|valor|valeur|waarde|hodnota|wartość|arvo|érték|valoare|değer|قيمة|τιμή|值|数值|値|값|väärtus)$/u.test(
+          n
+        )
+      )
+        return true;
+      return msinfoTagLowerTr(localName) === "değer";
     };
 
     /** @param {Element} catEl @param {string[]} pathParts */
@@ -423,6 +442,9 @@
         catEl.getAttribute("name") ||
         catEl.getAttribute("Name") ||
         catEl.getAttribute("名前") ||
+        catEl.getAttribute("Ad") ||
+        catEl.getAttribute("İsim") ||
+        catEl.getAttribute("Имя") ||
         "";
       const path = nm ? [...pathParts, nm] : pathParts;
       for (const child of catEl.children) {
@@ -441,7 +463,10 @@
             child.getAttribute("項目") ||
             child.getAttribute("名称") ||
             child.getAttribute("항목") ||
-            child.getAttribute("Элемент");
+            child.getAttribute("Элемент") ||
+            /** Turkish MSInfo saves {@code Öğe} / {@code öğe} on {@code <Data>} when the UI is Turkish. */
+            child.getAttribute("Öğe") ||
+            child.getAttribute("öğe");
           const attrVal =
             child.getAttribute("Value") ||
             child.getAttribute("value") ||
@@ -451,10 +476,34 @@
             child.getAttribute("值") ||
             child.getAttribute("数值") ||
             child.getAttribute("값") ||
-            child.getAttribute("Значение");
-          if (attrItem != null && attrVal != null && (String(attrItem).trim() || String(attrVal).trim())) {
+            child.getAttribute("Значение") ||
+            child.getAttribute("Değer") ||
+            child.getAttribute("değer");
+          /** Some Turkish builds use NFC variants or other spellings not matched by {@code getAttribute} literals. */
+          let attrItemLoose = attrItem;
+          let attrValLoose = attrVal;
+          for (const a of child.attributes) {
+            const key = String(a.localName || a.name || "").normalize("NFC");
+            let lk = "";
+            try {
+              lk = key.toLocaleLowerCase("tr-TR");
+            } catch {
+              lk = key.toLowerCase();
+            }
+            if (
+              !String(attrItemLoose || "").trim() &&
+              (/^(item|key)$/i.test(key) || lk === "öğe" || /^элемент$/i.test(key) || key === "項目" || key === "名称")
+            )
+              attrItemLoose = a.value;
+            if (
+              !String(attrValLoose || "").trim() &&
+              (/^(value|val)$/i.test(key) || lk === "değer" || /^значение$/i.test(key) || key === "値" || key === "值")
+            )
+              attrValLoose = a.value;
+          }
+          if (attrItemLoose != null && attrValLoose != null && (String(attrItemLoose).trim() || String(attrValLoose).trim())) {
             const norm = (/** @type {string} */ s) => String(s || "").replace(/\s+/g, " ").trim();
-            kvs.push({ path: pathStr, item: norm(attrItem), value: norm(attrVal) });
+            kvs.push({ path: pathStr, item: norm(attrItemLoose), value: norm(attrValLoose) });
             continue;
           }
 
@@ -481,6 +530,19 @@
           const fields = {};
           for (const k of kids) {
             fields[k.localName] = xmlText(k);
+          }
+          const fk = Object.keys(fields);
+          if (fk.length >= 2 && fk.length <= 8) {
+            const itemKey = fk.find((key) => msinfoDataChildIsItemLike(key));
+            const valKey = fk.find((key) => msinfoDataChildIsValueLike(key));
+            if (itemKey && valKey) {
+              const itemText = String(fields[itemKey] || "").replace(/\s+/g, " ").trim();
+              const valText = String(fields[valKey] || "").replace(/\s+/g, " ").trim();
+              if (itemText || valText) {
+                kvs.push({ path: pathStr, item: itemText, value: valText });
+                continue;
+              }
+            }
           }
           if (Object.keys(fields).length) rows.push({ path: pathStr, fields });
         }
@@ -552,6 +614,8 @@
     return (
       /^driver\s*version$/i.test(it) ||
       /^версия\s*драйвера$/i.test(it) ||
+      /^sürücü\s+sürümü$/iu.test(it) ||
+      /^sürücü\s+versiyonu$/iu.test(it) ||
       /^ドライバー\s*の\s*バージョン$/i.test(it) ||
       /^ドライバーのバージョン$/i.test(it) ||
       /^ドライバのバージョン$/i.test(it) ||
@@ -567,6 +631,9 @@
       /^name$/i.test(it) ||
       /^имя$/i.test(it) ||
       /^наименование$/i.test(it) ||
+      /^ad$/iu.test(it) ||
+      /^adı$/iu.test(it) ||
+      /^isim$/iu.test(it) ||
       /^名前$/i.test(it) ||
       /^名称$/i.test(it)
     );
@@ -575,8 +642,18 @@
   /** @param {Record<string, string>} fields */
   function displayAdapterDisplayName(fields) {
     return (
-      displayFieldByLabels(fields, ["Name", "Имя", "Наименование", "名前", "名称"]) ||
-      String(fields.Name || fields.Имя || fields["Наименование"] || fields["名前"] || fields["名称"] || "").trim()
+      displayFieldByLabels(fields, ["Name", "Имя", "Наименование", "Ad", "Adı", "İsim", "名前", "名称"]) ||
+      String(
+        fields.Name ||
+          fields.Имя ||
+          fields["Наименование"] ||
+          fields.Ad ||
+          fields["Adı"] ||
+          fields["İsim"] ||
+          fields["名前"] ||
+          fields["名称"] ||
+          ""
+      ).trim()
     );
   }
 
@@ -587,6 +664,8 @@
       /^resolution$/i.test(it) ||
       /^current resolution$/i.test(it) ||
       /^разрешение$/i.test(it) ||
+      /^çözünürlük$/iu.test(it) ||
+      /^geçerli\s+çözünürlük$/iu.test(it) ||
       /^解像度$/i.test(it) ||
       /^現在の解像度$/i.test(it) ||
       /^画面の解像度$/i.test(it)
@@ -667,7 +746,9 @@
         f["ドライバーのバージョン"] ||
         f["ドライバのバージョン"] ||
         f["ドライバー バージョン"] ||
-        f["ドライバ バージョン"];
+        f["ドライバ バージョン"] ||
+        f["Sürücü Sürümü"] ||
+        f["Sürücü Versiyonu"];
       return dv ? String(dv).trim() : "";
     }
     for (const r of rows) {
@@ -701,6 +782,8 @@
         f["解像度"] ||
         f["現在の解像度"] ||
         f["画面の解像度"] ||
+        f["Çözünürlük"] ||
+        f["Geçerli Çözünürlük"] ||
         ""
       ).trim();
       if (!res || /^not available|^недоступно$/i.test(res)) continue;
@@ -719,12 +802,64 @@
     if (!fields || typeof fields !== "object") return "";
     for (const lab of labels) {
       const escLab = lab.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const re = new RegExp(`^${escLab}$`, "i");
+      const re = new RegExp(`^${escLab}$`, "iu");
+      const labNorm = msinfoFieldKeyNormLower(lab);
       for (const [k, v] of Object.entries(fields)) {
-        if (re.test(k.trim()) && v != null && String(v).trim()) return String(v).trim();
+        if (v == null || !String(v).trim()) continue;
+        const kt = k.trim();
+        if (re.test(kt)) return String(v).trim();
+        if (labNorm && msinfoFieldKeyNormLower(kt) === labNorm) return String(v).trim();
       }
     }
     return "";
+  }
+
+  /** MSInfo Components → Display — “Driver date” row (Item column) across locales. */
+  function displayDriverDateMs(fields) {
+    return (
+      displayFieldByLabels(fields, [
+        "Driver Date",
+        "Дата драйвера",
+        "Sürücü Tarihi",
+        "Sürücü tarihi",
+        "Sürücünün tarihi",
+        "Sürüm Tarihi",
+        "Sürüm tarihi",
+        "Sürücü sürüm tarihi",
+        "Sürücü Sürüm Tarihi",
+        "ドライバーの日付",
+        "ドライバの日付",
+        "ドライバー 日付",
+        "バージョンの日付",
+        "ドライバー バージョンの日付",
+        "ドライバのバージョンの日付",
+      ]) || ""
+    );
+  }
+
+  /** MSInfo Components → Display — dedicated / adapter video memory row labels. */
+  function displayAdapterRamMs(fields) {
+    return (
+      displayFieldByLabels(fields, [
+        "Adapter RAM",
+        "ОЗУ адаптера",
+        "Память адаптера",
+        "Bağdaştırıcı RAM",
+        "Bağdaştırıcı RAM'i",
+        "Bağdaştırıcı RAMi",
+        "Bağdaştırıcı Belleği",
+        "Bağdaştırıcı bellek",
+        "Ayrılmış Video Belleği",
+        "Ayrılmış video belleği",
+        "Özel Video Belleği",
+        "Özel video belleği",
+        "Özel Grafik Belleği",
+        "Özel grafik belleği",
+        "アダプター RAM",
+        "アダプタ RAM",
+        "アダプターの RAM",
+      ]) || ""
+    );
   }
 
   /**
@@ -746,6 +881,37 @@
     return m ? `${m[1].toUpperCase()}:${m[2].toUpperCase()}` : "";
   }
 
+  /**
+   * PNP / instance ID string for a display adapter block (localized Item keys + fallback: any field value containing VEN_/DEV_).
+   * @param {Record<string, string>} fields
+   */
+  function pickPnpStringFromAdapterFields(fields) {
+    const fromLabels = displayFieldByLabels(fields, [
+      "PNP Device ID",
+      "PNP_Device_ID",
+      "ID PNP-устройства",
+      "ИД PNP-устройства",
+      "PNP デバイス ID",
+      "PNPデバイス ID",
+      "Plug and Play デバイス ID",
+      "Tak ve Çalıştır Aygıt Kimliği",
+      "Tak ve Çalıştır aygıt kimliği",
+      "Tak ve Çalıştır Aygıtı Kimliği",
+      "Tak ve Çalıştır aygıtı kimliği",
+      "PnP Aygıt Kimliği",
+      "PnP aygıt kimliği",
+    ]);
+    if (fromLabels) return String(fromLabels).trim();
+    if (!fields || typeof fields !== "object") return "";
+    for (const v of Object.values(fields)) {
+      const s = String(v ?? "").trim();
+      if (!s) continue;
+      const m = s.match(/\bVEN_[0-9A-F]{4}&DEV_[0-9A-F]{4}/i);
+      if (m) return m[0];
+    }
+    return "";
+  }
+
   /** @param {string} id VEN:DEV (hex, e.g. 10DE:24B8) — opens PCILookup with fields prefilled */
   function pciLookupUrlFromDeviceId(id) {
     if (!id || !/^[0-9A-F]{4}:[0-9A-F]{4}$/i.test(id)) return "";
@@ -758,7 +924,7 @@
   /** @param {string} path */
   function isMsInfoDisplayRelatedPath(path) {
     return (
-      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
+      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|Görüntü|Ekran|Grafik|Grafikler|Bileşenler.*Görüntü|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
         path
       ) &&
       !/USB.*Audio|Sound Driver|Audio Device|Звук|аудио|オーディオ|サウンド/i.test(path)
@@ -794,15 +960,7 @@
 
     return segments.filter((s) => {
       const name = displayAdapterDisplayName(s.fields);
-      const pnp = displayFieldByLabels(s.fields, [
-        "PNP Device ID",
-        "PNP_Device_ID",
-        "ID PNP-устройства",
-        "ИД PNP-устройства",
-        "PNP デバイス ID",
-        "PNPデバイス ID",
-        "Plug and Play デバイス ID",
-      ]);
+      const pnp = pickPnpStringFromAdapterFields(s.fields);
       const vals = Object.values(s.fields).join(" ");
       if (/VEN_10DE|VEN_8086|VEN_1002|NVIDIA|GeForce|RTX|Quadro|Tesla|Radeon|Intel\s*\(R\)|UHD\s*Graphics|Iris|Arc/i.test(vals))
         return true;
@@ -835,17 +993,7 @@
     const out = [];
     const seen = new Set();
     for (const s of segments) {
-      const pnp = displayFieldByLabels(s.fields, [
-        "PNP Device ID",
-        "PNP_Device_ID",
-        "ID PNP-устройства",
-        "ИД PNP-устройства",
-        "PNP デバイス ID",
-        "PNPデバイス ID",
-        "Plug and Play デバイス ID",
-      ])
-        .replace(/\s+/g, "")
-        .toUpperCase();
+      const pnp = pickPnpStringFromAdapterFields(s.fields).replace(/\s+/g, "").toUpperCase();
       const name = displayAdapterDisplayName(s.fields).toLowerCase();
       const key = pnp || `name:${name}|path:${s.path}`;
       if (seen.has(key)) continue;
@@ -858,7 +1006,7 @@
   /** @param {Record<string, string>} fields */
   function gpuVendorLabelFromAdapterFields(fields) {
     const name = `${displayAdapterDisplayName(fields)}`;
-    const pnp = `${fields["PNP Device ID"] || fields.PNP_Device_ID || fields["ID PNP-устройства"] || fields["ИД PNP-устройства"] || fields["PNP デバイス ID"] || fields["PNPデバイス ID"] || fields["Plug and Play デバイス ID"] || ""}`.toUpperCase();
+    const pnp = pickPnpStringFromAdapterFields(fields).replace(/\s+/g, "").toUpperCase();
     const n = name.toLowerCase();
     if (/nvidia|geforce|rtx|quadro|tesla/.test(n) || /VEN_10DE/.test(pnp)) return "NVIDIA";
     if (/intel|\buhd\b|iris|arc/.test(n) || /VEN_8086/.test(pnp)) return "INTEL";
@@ -885,6 +1033,8 @@
       displayFieldByLabels(fields, [
         "Driver Version",
         "Версия драйвера",
+        "Sürücü Sürümü",
+        "Sürücü Versiyonu",
         "ドライバーのバージョン",
         "ドライバのバージョン",
         "ドライバー バージョン",
@@ -909,6 +1059,8 @@
     const nmDriverVer = displayFieldByLabels(fields, [
       "Driver Version",
       "Версия драйвера",
+      "Sürücü Sürümü",
+      "Sürücü Versiyonu",
       "ドライバーのバージョン",
       "ドライバのバージョン",
       "ドライバー バージョン",
@@ -926,6 +1078,8 @@
       "Current Resolution",
       "Разрешение",
       "Текущее разрешение",
+      "Çözünürlük",
+      "Geçerli Çözünürlük",
       "解像度",
       "現在の解像度",
       "画面の解像度",
@@ -936,15 +1090,7 @@
     }
 
     const nvidiaDrivesDisplay = vendorLabel === "NVIDIA" && !!resolution;
-    const pnp = displayFieldByLabels(fields, [
-      "PNP Device ID",
-      "PNP_Device_ID",
-      "ID PNP-устройства",
-      "ИД PNP-устройства",
-      "PNP デバイス ID",
-      "PNPデバイス ID",
-      "Plug and Play デバイス ID",
-    ]);
+    const pnp = pickPnpStringFromAdapterFields(fields);
     const devId = pnpToDeviceId(pnp);
 
     return {
@@ -955,17 +1101,7 @@
       drivesDisplay: vendorLabel !== "NVIDIA" || nvidiaDrivesDisplay,
       vendorLabel,
       driverVersionDisplay,
-      driverDate:
-        displayFieldByLabels(fields, [
-          "Driver Date",
-          "Дата драйвера",
-          "ドライバーの日付",
-          "ドライバの日付",
-          "ドライバー 日付",
-          "バージョンの日付",
-          "ドライバー バージョンの日付",
-          "ドライバのバージョンの日付",
-        ]) || "",
+      driverDate: displayDriverDateMs(fields),
       deviceId: devId,
       pciLookupUrl: pciLookupUrlFromDeviceId(devId),
       adapterType:
@@ -973,6 +1109,7 @@
           "Adapter Type",
           "Тип адаптера",
           "Описание адаптера",
+          "Bağdaştırıcı Türü",
           "アダプターの種類",
           "アダプター種類",
           "アダプタの種類",
@@ -981,15 +1118,7 @@
           "チップの種類",
           "チップ タイプ",
         ]) || "",
-      adapterRam:
-        displayFieldByLabels(fields, [
-          "Adapter RAM",
-          "ОЗУ адаптера",
-          "Память адаптера",
-          "アダプター RAM",
-          "アダプタ RAM",
-          "アダプターの RAM",
-        ]) || "",
+      adapterRam: displayAdapterRamMs(fields),
     };
   }
 
@@ -1160,34 +1289,20 @@
         driverVersion: displayFieldByLabels(intelFields, [
           "Driver Version",
           "Версия драйвера",
+          "Sürücü Sürümü",
+          "Sürücü Versiyonu",
           "ドライバーのバージョン",
           "ドライバのバージョン",
           "ドライバー バージョン",
           "ドライバ バージョン",
         ]),
-        driverDate: displayFieldByLabels(intelFields, [
-          "Driver Date",
-          "Дата драйвера",
-          "ドライバーの日付",
-          "ドライバの日付",
-          "ドライバー 日付",
-          "バージョンの日付",
-          "ドライバー バージョンの日付",
-          "ドライバのバージョンの日付",
-        ]),
-        pnp: displayFieldByLabels(intelFields, [
-          "PNP Device ID",
-          "PNP_Device_ID",
-          "ID PNP-устройства",
-          "ИД PNP-устройства",
-          "PNP デバイス ID",
-          "PNPデバイス ID",
-          "Plug and Play デバイス ID",
-        ]),
+        driverDate: displayDriverDateMs(intelFields),
+        pnp: pickPnpStringFromAdapterFields(intelFields),
         adapterType: displayFieldByLabels(intelFields, [
           "Adapter Type",
           "Тип адаптера",
           "Описание адаптера",
+          "Bağdaştırıcı Türü",
           "アダプターの種類",
           "アダプター種類",
           "アダプタの種類",
@@ -1196,14 +1311,7 @@
           "チップの種類",
           "チップ タイプ",
         ]),
-        adapterRam: displayFieldByLabels(intelFields, [
-          "Adapter RAM",
-          "ОЗУ адаптера",
-          "Память адаптера",
-          "アダプター RAM",
-          "アダプタ RAM",
-          "アダプターの RAM",
-        ]),
+        adapterRam: displayAdapterRamMs(intelFields),
       };
       const devId = pnpToDeviceId(im.pnp);
       intelBlock = {
@@ -1227,34 +1335,20 @@
         driverVersion: displayFieldByLabels(nvidiaFields, [
           "Driver Version",
           "Версия драйвера",
+          "Sürücü Sürümü",
+          "Sürücü Versiyonu",
           "ドライバーのバージョン",
           "ドライバのバージョン",
           "ドライバー バージョン",
           "ドライバ バージョン",
         ]),
-        driverDate: displayFieldByLabels(nvidiaFields, [
-          "Driver Date",
-          "Дата драйвера",
-          "ドライバーの日付",
-          "ドライバの日付",
-          "ドライバー 日付",
-          "バージョンの日付",
-          "ドライバー バージョンの日付",
-          "ドライバのバージョンの日付",
-        ]),
-        pnp: displayFieldByLabels(nvidiaFields, [
-          "PNP Device ID",
-          "PNP_Device_ID",
-          "ID PNP-устройства",
-          "ИД PNP-устройства",
-          "PNP デバイス ID",
-          "PNPデバイス ID",
-          "Plug and Play デバイス ID",
-        ]),
+        driverDate: displayDriverDateMs(nvidiaFields),
+        pnp: pickPnpStringFromAdapterFields(nvidiaFields),
         adapterType: displayFieldByLabels(nvidiaFields, [
           "Adapter Type",
           "Тип адаптера",
           "Описание адаптера",
+          "Bağdaştırıcı Türü",
           "アダプターの種類",
           "アダプター種類",
           "アダプタの種類",
@@ -1263,14 +1357,7 @@
           "チップの種類",
           "チップ タイプ",
         ]),
-        adapterRam: displayFieldByLabels(nvidiaFields, [
-          "Adapter RAM",
-          "ОЗУ адаптера",
-          "Память адаптера",
-          "アダプター RAM",
-          "アダプタ RAM",
-          "アダプターの RAM",
-        ]),
+        adapterRam: displayAdapterRamMs(nvidiaFields),
       };
       const devIdN = pnpToDeviceId(nm.pnp);
       const verDisp =
@@ -1307,6 +1394,7 @@
   function classifyNetworkMedium(fields, path) {
     const name =
       fields.Name ||
+      fields["Adı"] ||
       fields.Имя ||
       fields["名前"] ||
       fields["デバイス名"] ||
@@ -1314,9 +1402,16 @@
       fields.Item ||
       fields.Description ||
       "";
-    const desc = fields.Description || fields["Product Name"] || fields["Тип продукта"] || fields["製品名"] || "";
+    const desc =
+      fields.Description ||
+      fields["Product Name"] ||
+      fields["Ürün Türü"] ||
+      fields["Тип продукта"] ||
+      fields["製品名"] ||
+      "";
     const aType =
       fields["Adapter Type"] ||
+      fields["Bağdaştırıcı Türü"] ||
       fields["Тип адаптера"] ||
       fields["アダプターの種類"] ||
       fields["アダプタの種類"] ||
@@ -1359,6 +1454,7 @@
   function networkAdapterIdentityKey(fields) {
     const raw =
       fields.Name ||
+      fields["Adı"] ||
       fields.Имя ||
       fields["名前"] ||
       fields["デバイス名"] ||
@@ -1376,6 +1472,28 @@
    * @param {Record<string, string>} fields
    * @param {string[]} exactNames
    */
+  /** MSInfo field keys vary by UI language; Turkish dotted/caseless I needs {@code tr-TR} folding. */
+  function msinfoFieldKeyNormLower(/** @type {string} */ k) {
+    const t = String(k || "")
+      .replace(/^\ufeff/, "")
+      .replace(/\u00a0/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+    try {
+      return t.toLocaleLowerCase("tr-TR");
+    } catch {
+      return t.toLowerCase();
+    }
+  }
+
+  /**
+   * Turkish “IP …” keys lower to “ıp…” under tr-TR; fold dotless ı → ASCII i so `includes("ip")` / {@code /ip/i} checks match MSInfo.
+   * @param {string} k
+   */
+  function networkFieldKeyAsciiFold(k) {
+    return msinfoFieldKeyNormLower(k).replace(/\u0131/g, "i");
+  }
+
   function getNetworkField(fields, ...exactNames) {
     for (const n of exactNames) {
       const v = fields[n];
@@ -1384,10 +1502,10 @@
     const lowerMap = new Map();
     for (const [k, v] of Object.entries(fields)) {
       if (v == null || !String(v).trim()) continue;
-      lowerMap.set(k.trim().toLowerCase().replace(/\s+/g, " "), v);
+      lowerMap.set(msinfoFieldKeyNormLower(k), v);
     }
     for (const n of exactNames) {
-      const hit = lowerMap.get(n.trim().toLowerCase().replace(/\s+/g, " "));
+      const hit = lowerMap.get(msinfoFieldKeyNormLower(n));
       if (hit) return String(hit);
     }
     return "";
@@ -1445,6 +1563,8 @@
       "IP-cím",
       "IPv4-cím",
       "IP adresi",
+      /** Turkish MSInfo — tr-TR lowercases “IP” to “ıp…”, so explicit + ascii-fold fallback below. */
+      "IP Adresi",
       "IPv4 adresi",
       "Adresă IP",
       "Adresă IPv4",
@@ -1466,15 +1586,16 @@
     if (hit) return hit;
     for (const [k, v] of Object.entries(fields)) {
       if (!v || !String(v).trim()) continue;
-      const kl = k.toLowerCase();
+      const kl = msinfoFieldKeyNormLower(k);
+      const klA = networkFieldKeyAsciiFold(k);
       const addrHint =
         /address|адрес|adres|addr|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(
           kl
         );
       if (
-        (kl.includes("ipv4") && addrHint) ||
-        (kl.includes("ip") && addrHint && !kl.includes("ipv6")) ||
-        (/ipv4/i.test(kl) && addrHint && !kl.includes("ipv6"))
+        (klA.includes("ipv4") && addrHint) ||
+        (klA.includes("ip") && addrHint && !klA.includes("ipv6")) ||
+        (/ipv4/i.test(klA) && addrHint && !klA.includes("ipv6"))
       ) {
         hit = tryVal(v);
         if (hit) return hit;
@@ -1556,7 +1677,9 @@
         "IP 주소",
         "IPv4 주소",
         "IP 地址",
-        "IPv4 地址"
+        "IPv4 地址",
+        "IP Adresi",
+        "IP adresi"
       )
     );
     for (const name of [
@@ -1572,17 +1695,18 @@
     }
     for (const [k, v] of Object.entries(fields)) {
       if (!v || !String(v).trim()) continue;
-      const kl = k.toLowerCase();
-      if (/dns|multicast|gateway/i.test(kl)) continue;
+      const kl = msinfoFieldKeyNormLower(k);
+      const klA = networkFieldKeyAsciiFold(k);
+      if (/dns|multicast|gateway/i.test(klA)) continue;
       if (
-        /^ip\s*address$/i.test(kl) ||
-        (/ipv6/i.test(kl) && /address|addr|адрес|adres|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(kl))
+        /^ip\s*address$/i.test(klA) ||
+        (/ipv6/i.test(klA) && /address|addr|адрес|adres|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(kl))
       )
         scan(v);
       if (
-        /ip/i.test(kl) &&
+        /ip/i.test(klA) &&
         /адрес|adres|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(kl) &&
-        !/ipv6|dns|шлюз|gateway/i.test(kl)
+        !/ipv6|dns|шлюз|gateway/i.test(klA)
       )
         scan(v);
     }
@@ -1640,7 +1764,7 @@
         if (hit) return hit;
       }
     }
-    for (const n of ["IP Address", "IP address", "IP-адрес", "Addresses"]) {
+    for (const n of ["IP Address", "IP address", "IP-адрес", "IP Adresi", "IP adresi", "Addresses"]) {
       const v = getNetworkField(fields, n) || fields[n];
       if (v) {
         const hit = tryValue(v);
@@ -1649,14 +1773,19 @@
     }
     for (const [k, v] of Object.entries(fields)) {
       if (!v || !String(v).trim()) continue;
-      const kl = k.toLowerCase();
-      if (/ip/i.test(kl) && /адрес/i.test(kl) && !/ipv6|dns|шлюз|gateway/i.test(kl)) {
+      const kl = msinfoFieldKeyNormLower(k);
+      const klA = networkFieldKeyAsciiFold(k);
+      if (
+        /ip/i.test(klA) &&
+        /адрес|adres|addr|address|osoite|direcci|indirizzo|endereço|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(kl) &&
+        !/ipv6|dns|шлюз|gateway/i.test(klA)
+      ) {
         const hit = tryValue(v);
         if (hit) return hit;
       }
-      if (!kl.includes("ipv6")) continue;
-      if (/(dns|gateway|multicast)/i.test(kl)) continue;
-      if (!/(address|addr\.?|адрес)/i.test(kl) && !/^ipv6 address$/i.test(k)) continue;
+      if (!klA.includes("ipv6")) continue;
+      if (/(dns|gateway|multicast)/i.test(klA)) continue;
+      if (!/(address|addr\.?|адрес|adres)/i.test(kl) && !/^ipv6 address$/i.test(klA)) continue;
       const hit = tryValue(v);
       if (hit) return hit;
     }
@@ -1698,6 +1827,10 @@
       out.push({ k, v: t });
     };
     const named = [
+      "DNS Sunucuları",
+      "DNS Sunucusu",
+      "Tercih Edilen DNS Sunucusu",
+      "Alternatif DNS Sunucusu",
       "DNS Server",
       "DNS Servers",
       "DNS servers",
@@ -1728,8 +1861,10 @@
     }
     for (const [k, v] of Object.entries(fields)) {
       if (!v || !String(v).trim()) continue;
-      const kl = k.toLowerCase();
-      if (!/dns|suffix/.test(kl)) continue;
+      const kl = msinfoFieldKeyNormLower(k);
+      /** “Sunucu” matches DHCP server rows — not DNS (avoids duplicate next to “DHCP Server”). */
+      if (/dhcp/i.test(kl)) continue;
+      if (!/dns|suffix|sunucu/.test(kl)) continue;
       if (/hostname|wins|netbios|vendor/i.test(kl)) continue;
       push(k, v);
     }
@@ -1752,6 +1887,7 @@
       /\bnetwork|\bnetzwerk|\bréseau|\bnetworking\b|tcp\/ip|ipconfig|wlan|wi-?fi|wifi\b|802\.11|wireless lan|ethernet connection|nic\b|network adapter|win32.*network|remote access|vpn|hyper-?v.*switch/i.test(
         p
       ) ||
+      /ağ\s*bağdaştırıcıları|ağ\s*bağlantıları|bağdaştırıcı|Bileşenler.*Ağ|Bileşenler.*ağ/i.test(p) ||
       /\bсеть\b|сетев|адаптер|tcp\s*\/\s*ip|беспровод|подключен|удаленн|компоненты.*сеть|сеть.*адапт/i.test(p) ||
       /\b(red|netwerk|netværk|nettverk|verkko|sieć|síť|rețea|ağ|δίκτυο|võrk|网络|網路|ネットワーク|네트워크|شبكة)\b/i.test(
         p
@@ -1789,7 +1925,10 @@
         /^名前$/i.test(it) ||
         /^이름$/i.test(it) ||
         /^الاسم$/i.test(it) ||
-        /^όνομα$/iu.test(it)
+        /^όνομα$/iu.test(it) ||
+        /^ad$/iu.test(it) ||
+        /^adı$/iu.test(it) ||
+        /^isim$/iu.test(it)
       );
     };
     const recordHasAdapterNameKey = (/** @type {Record<string, string>} */ rec) => {
@@ -1797,7 +1936,12 @@
         if (!rec[k]) continue;
         if (isAdapterNameItem(k)) return true;
       }
-      return Object.prototype.hasOwnProperty.call(rec, "Name") || Object.prototype.hasOwnProperty.call(rec, "Имя");
+      return (
+        Object.prototype.hasOwnProperty.call(rec, "Name") ||
+        Object.prototype.hasOwnProperty.call(rec, "Имя") ||
+        Object.prototype.hasOwnProperty.call(rec, "Ad") ||
+        Object.prototype.hasOwnProperty.call(rec, "Adı")
+      );
     };
     for (const k of pathKvs) {
       const item = (k.item || "").trim();
@@ -1815,7 +1959,7 @@
 
   /** Bluetooth / PAN “network” entries are not internet paths; exclude by name/path too. */
   function isBluetoothOrPanAdapter(fields, path) {
-    const blob = `${path} ${fields.Name || ""} ${fields.Имя || ""} ${fields["名前"] || ""} ${fields["デバイス名"] || ""} ${fields.Nimi || ""} ${fields.Naam || ""} ${fields.Nazwa || ""} ${fields.Nome || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Тип адаптера"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
+    const blob = `${path} ${fields.Name || ""} ${fields["Adı"] || ""} ${fields.Имя || ""} ${fields["名前"] || ""} ${fields["デバイス名"] || ""} ${fields.Ad || ""} ${fields["İsim"] || ""} ${fields.Nimi || ""} ${fields.Naam || ""} ${fields.Nazwa || ""} ${fields.Nome || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Тип адаптера"] || ""} ${fields["Bağdaştırıcı Türü"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
     return /\bbluetooth\b|personal area network|bt\s*pan|usb bluetooth network/i.test(blob);
   }
 
@@ -1840,13 +1984,14 @@
   function hasDnsServersInExport(fields) {
     for (const [k, v] of Object.entries(fields)) {
       if (!v || !String(v).trim()) continue;
-      const kl = k.toLowerCase();
-      if (!/dns|nameserver|name server|resolver/i.test(kl)) continue;
+      const kl = msinfoFieldKeyNormLower(k);
+      /** “Sunucu” alone would match Turkish DHCP server rows — those are handled in {@link hasDnsOrInfrastructureHint}. */
+      if (!/dns|nameserver|name server|resolver|dns\s*sunucu/i.test(kl)) continue;
       if (/suffix|search list|hostname|wins|netbios|node type|vendor/i.test(kl)) continue;
       if (dnsValueListsResolver(v)) return true;
     }
     for (const { k, v } of pickDnsDetailEntries(fields)) {
-      const kl = k.toLowerCase();
+      const kl = msinfoFieldKeyNormLower(k);
       if (/suffix|search list/i.test(kl)) continue;
       if (dnsValueListsResolver(v)) return true;
     }
@@ -1906,7 +2051,7 @@
     )
       s += 7;
     if (
-      /media state[^\n]*connected|netconnectionstatus.*2|connection.*\bconnected\b|operational status[^\n]*up|подключен|включен|接続済み|接続されています|状態[^\n]*接続/i.test(
+      /media state[^\n]*connected|netconnectionstatus.*2|connection.*\bconnected\b|operational status[^\n]*up|подключен|включен|bağlı|bağlandı|etkin|çalışıyor|接続済み|接続されています|状態[^\n]*接続/i.test(
         blob
       )
     ) {
@@ -1968,6 +2113,35 @@
   }
 
   /**
+   * Stable key so Turkish + English MSInfo labels for the same fact collapse to one row
+   * (first wins — usually the canonical English label from {@code detailKeyGroups}).
+   * @param {string} k
+   * @param {string} v
+   */
+  function networkDetailSemanticDedupeKey(k, v) {
+    const vTrim = String(v || "").trim();
+    const a = networkFieldKeyAsciiFold(k).replace(/\s+/g, " ");
+    if (/^dhcp (server|sunucusu)$/.test(a)) return `dhcp_srv\t${vTrim}`;
+    /** tr-TR lowers “IP …” to “ıp …” — fold already applied in {@code a}. */
+    if (/^ı?p addresses?$/.test(a) || /^ı?p adresi$/.test(a)) return `ip_combo\t${vTrim.replace(/\s+/g, " ")}`;
+    return `${a}\t${vTrim}`;
+  }
+
+  /** @param {{ k: string, v: string }[]} details */
+  function dedupeNetworkDetailRows(details) {
+    const seen = new Set();
+    /** @type {{ k: string, v: string }[]} */
+    const out = [];
+    for (const d of details) {
+      const sig = networkDetailSemanticDedupeKey(d.k, d.v);
+      if (seen.has(sig)) continue;
+      seen.add(sig);
+      out.push(d);
+    }
+    return out;
+  }
+
+  /**
    * @param {{ path: string, item: string, value: string }[]} kvs
    * @param {{ path: string, fields: Record<string, string> }[]} rows
    */
@@ -2021,10 +2195,31 @@
     }
 
     const detailKeyGroups = [
-      ["Connection Name", "NetConnectionID", "Имя подключения", "接続名", "ネットワーク接続名"],
-      ["Name", "Имя", "名前", "デバイス名", "Adapter Name", "Adapter name", "Adapter", "アダプター名", "アダプタ名"],
-      ["Product Type", "Тип продукта", "Тип продукции"],
-      ["Installed", "Установлен", "Установлено", "Установлена"],
+      [
+        "Connection Name",
+        "NetConnectionID",
+        "Имя подключения",
+        "接続名",
+        "ネットワーク接続名",
+        "Bağlantı Adı",
+        "Bağlantı adı",
+      ],
+      [
+        "Name",
+        "Adı",
+        "Имя",
+        "名前",
+        "デバイス名",
+        "Adapter Name",
+        "Adapter name",
+        "Adapter",
+        "アダプター名",
+        "アダプタ名",
+        "Ad",
+        "İsim",
+      ],
+      ["Product Type", "Тип продукта", "Тип продукции", "Ürün Türü", "Ürün türü"],
+      ["Installed", "Установлен", "Установлено", "Установлена", "Yüklü"],
       [
         "PNP Device ID",
         "ID PNP-устройства",
@@ -2033,28 +2228,42 @@
         "PNP-устройства",
         "PNP デバイス ID",
         "PNPデバイス ID",
+        "PNP Aygıt Kimliği",
+        "Tak ve Çalıştır Aygıt Kimliği",
       ],
-      ["Last Reset", "Последний сброс"],
-      ["Index", "Индекс"],
-      ["Service Name", "Имя службы"],
-      ["IP addresses", "IP-адрес", "IP Address"],
+      ["Last Reset", "Последний сброс", "Son Sıfırlama"],
+      ["Index", "Индекс", "Dizin"],
+      ["Service Name", "Имя службы", "Hizmet Adı"],
+      ["IP addresses", "IP-адрес", "IP Address", "IP Adresi", "IP adresi"],
       [
         "DHCP Lease Expires",
         "DHCP-аренда истекает",
         "Срок аренды DHCP истекает",
         "Дата окончания аренды DHCP",
+        "DHCP Kiralama Bitişi",
       ],
       [
         "DHCP Lease Obtained",
         "DHCP-аренда получена",
         "Срок аренды DHCP получен",
         "Дата получения аренды DHCP",
+        "DHCP Kiralama Başlangıcı",
       ],
-      ["Driver", "Драйвер", "ドライブ", "ドライバー", "ドライバ"],
+      ["Driver", "Драйвер", "Sürücü", "ドライブ", "ドライバー", "ドライバ"],
       ["Media State", "Состояние среды передачи"],
       ["Connection Status", "Состояние подключения"],
       ["Operational Status", "Рабочее состояние"],
-      ["Subnet Mask", "IP Subnet", "IP-подсеть", "IPv4 Subnet Mask", "Маска подсети"],
+      [
+        "Subnet Mask",
+        "IP Subnet",
+        "IP-подсеть",
+        "IPv4 Subnet Mask",
+        "Маска подсети",
+        "Alt Ağ Maskesi",
+        "IPv4 Alt Ağ Maskesi",
+        "IP Alt Ağı",
+        "IP alt ağı",
+      ],
       [
         "Default Gateway",
         "Default IP Gateway",
@@ -2062,21 +2271,42 @@
         "Шлюз IP по умолчанию",
         "Шлюз по умолчанию",
         "Основной шлюз",
+        "Varsayılan Ağ Geçidi",
+        "Varsayılan ağ geçidi",
+        "Varsayılan IP Ağ Geçidi",
+        "Varsayılan ip ağ geçidi",
         "デフォルト ゲートウェイ",
         "IPv4 デフォルト ゲートウェイ",
       ],
-      ["DHCP Enabled", "DHCP вкл.", "DHCP включен", "DHCP 有効", "DHCP を有効にする"],
-      ["DHCP Server", "DHCP-сервер", "DHCP сервер", "Сервер DHCP", "DHCP サーバー", "DHCPサーバー"],
-      ["Adapter Type", "Тип адаптера", "アダプターの種類", "アダプタの種類"],
-      ["MAC Address", "Physical Address", "MAC-адрес", "Физический адрес", "物理アドレス", "MAC アドレス"],
-      ["Speed", "Скорость"],
+      ["DHCP Enabled", "DHCP вкл.", "DHCP включен", "DHCP 有効", "DHCP を有効にする", "DHCP Etkin"],
+      ["DHCP Server", "DHCP-сервер", "DHCP сервер", "Сервер DHCP", "DHCP サーバー", "DHCPサーバー", "DHCP Sunucusu"],
+      ["Adapter Type", "Тип адаптера", "Bağdaştırıcı Türü", "アダプターの種類", "アダプタの種類"],
+      [
+        "MAC Address",
+        "Physical Address",
+        "MAC-адрес",
+        "Физический адрес",
+        "Fiziksel Adres",
+        "MAC Adresi",
+        "MAC adresi",
+        "物理アドレス",
+        "MAC アドレス",
+      ],
+      ["Memory Address", "Bellek Adresi", "Bellek adresi", "Memory address"],
+      ["IRQ Channel", "IRQ Kanalı", "IRQ kanalı", "IRQ Channel(s)"],
+      ["Speed", "Скорость", "Hız"],
     ];
 
     const detailKeySet = new Set();
+    /** tr-TR + ascii-fold — skips “extras” rows already surfaced under an English canonical label. */
+    const detailKeyNormSet = new Set();
     for (const kg of detailKeyGroups) {
       for (const x of kg) {
         detailKeySet.add(x);
         detailKeySet.add(x.trim().toLowerCase());
+        const t = x.trim();
+        detailKeyNormSet.add(msinfoFieldKeyNormLower(t));
+        detailKeyNormSet.add(networkFieldKeyAsciiFold(t));
       }
     }
 
@@ -2088,13 +2318,14 @@
 
       const name =
         fields.Name ||
+        fields["Adı"] ||
         fields.Имя ||
         fields["名前"] ||
         fields["デバイス名"] ||
         fields.Device ||
         fields.Item ||
         fields.Description ||
-        getNetworkField(fields, "Adapter Name", "アダプター名", "アダプタ名") ||
+        getNetworkField(fields, "Adapter Name", "アダプター名", "アダプタ名", "Adı") ||
         path.split(" / ").pop() ||
         "";
       if (!name && Object.keys(fields).length < 2) continue;
@@ -2124,13 +2355,18 @@
         if (!v || !String(v).trim()) continue;
         if (/^Item$/i.test(k) || /^Value$/i.test(k)) continue;
         const kNorm = k.trim().toLowerCase();
+        const kNormTr = msinfoFieldKeyNormLower(k.trim());
+        const kFold = networkFieldKeyAsciiFold(k.trim());
         if (detailKeySet.has(k) || detailKeySet.has(kNorm)) continue;
+        if (detailKeyNormSet.has(kNormTr) || detailKeyNormSet.has(kFold)) continue;
         if (/^IPv6/i.test(k)) continue;
-        if (/^ip/i.test(k.toLowerCase()) && k.toLowerCase().includes("address") && !/ipv6/i.test(k)) continue;
+        if (/^ip\s/.test(kFold) && /adres|address/.test(kFold) && !kFold.includes("ipv6")) continue;
         if (/dns|suffix/i.test(k.toLowerCase())) continue;
         if (details.some((d) => d.k === k)) continue;
         if (details.length < 32) details.push({ k, v: String(v).trim() });
       }
+
+      const detailsDeduped = dedupeNetworkDetailRows(details);
 
       out.push({
         path,
@@ -2139,7 +2375,7 @@
         ipv4Display,
         ipv6Display,
         ipv6,
-        details,
+        details: detailsDeduped,
         score,
         primary: false,
       });
@@ -2149,10 +2385,42 @@
     return out;
   }
 
+  /** @param {unknown} adapters */
+  function networkSectionNeedsTranslateHint(adapters) {
+    if (!Array.isArray(adapters) || adapters.length === 0) return false;
+    const parts = [];
+    for (const a of adapters) {
+      if (!a || typeof a !== "object") continue;
+      const rec = /** @type {Record<string, unknown>} */ (a);
+      for (const kk of ["name", "medium", "ipv4Display", "ipv6Display"]) {
+        const v = rec[kk];
+        if (v != null && String(v).trim()) parts.push(String(v));
+      }
+      const i6 = rec.ipv6;
+      if (i6 && typeof i6 === "object" && "summary" in i6 && String(/** @type {{ summary?: string }} */ (i6).summary || "").trim()) {
+        parts.push(String(/** @type {{ summary?: string }} */ (i6).summary));
+      }
+      const det = rec.details;
+      if (Array.isArray(det)) {
+        for (const row of det) {
+          if (row && typeof row === "object") {
+            const d = /** @type {{ k?: string, v?: string }} */ (row);
+            if (d.k) parts.push(String(d.k));
+            if (d.v) parts.push(String(d.v));
+          }
+        }
+      }
+    }
+    const blob = parts.join(" ");
+    return localeScriptLooksNonEnglishListed(blob) || /\bEvet\b|\bHayır\b|\bKBayt\b|\bBayt\b/i.test(blob);
+  }
+
   /** @param {string} line */
   function extractWindowsBuildFromVersionLine(line) {
     const s = String(line || "");
     let m = s.match(/Build\s+(\d{4,6})\b/i);
+    if (m) return m[1];
+    m = s.match(/\bDerleme\s+(\d{4,6})\b/i);
     if (m) return m[1];
     m = s.match(/\b10\.0\.(\d{4,6})\b/);
     if (m) return m[1];
@@ -2234,7 +2502,10 @@
         /ドライブ\s+[A-Z]:/i.test(s) ||
         /(?:^|[\s/])ドライブ\s+[A-Z]:/i.test(s) ||
         /(?:^|[\s/])ディスク\s*\d+/i.test(s) ||
-        /ストレージ.*ドライブ|ドライブ.*ストレージ/i.test(s)
+        /ストレージ.*ドライブ|ドライブ.*ストレージ/i.test(s) ||
+        /Sürücü\s+[A-Z]:/i.test(s) ||
+        /Diskler.*Sürücü|Depolama.*Sürücü|Depolama.*Disk|Bileşenler.*Depolama.*Disk/i.test(s) ||
+        /Bileşenler\/Depolama\/Diskler/i.test(s)
       );
     };
 
@@ -2248,17 +2519,25 @@
     };
 
     const looksLikePhysicalDisk = (/** @type {Record<string, string>} */ f) => {
-      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Model"] || ""} ${f["Модель"] || ""} ${f["モデル"] || ""} ${f["製品名"] || ""}`.toLowerCase();
-      const hasModel = !!(f["Model"] || f["Модель"] || f["Model Number"] || f["Номер модели"] || f["モデル"] || f["製品名"]);
+      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Açıklama"] || ""} ${f["Model"] || ""} ${f["Модель"] || ""} ${f["Modeli"] || ""} ${f["モデル"] || ""} ${f["製品名"] || ""}`.toLowerCase();
+      const hasModel = !!(
+        f["Model"] ||
+        f["Модель"] ||
+        f["Modeli"] ||
+        f["Model Number"] ||
+        f["Номер модели"] ||
+        f["モデル"] ||
+        f["製品名"]
+      );
       const hasDesc = !!(f["Описание"] || f["Description"] || f["説明"]);
-      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""} ${f["サイズ"] || ""} ${f["合計サイズ"] || ""}`.trim();
+      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""} ${f["Toplam Boyut"] || ""} ${f["サイズ"] || ""} ${f["合計サイズ"] || ""}`.trim();
       const hasSized =
         sizeBlob.length > 2 &&
         /[\d,\s]+/.test(sizeBlob) &&
-        /(байт|тб|гб|tb|gb|mb|bytes|go|to|バイト)/i.test(sizeBlob);
+        /(байт|тб|гб|tb|gb|mb|bytes|go|to|bayt|gigabayt|バイト)/i.test(sizeBlob);
       const hasSector = !!(f["Bytes/sector"] || f["Bytes per sector"] || f["Байт/сектор"] || f["バイト/セクター"] || f["バイト／セクター"]);
       const diskish =
-        /дисков|накопител|hard\s*disk|disk\s+drive|physical\s+drive|hdd|ssd|nvme|scsi|sata|st\d{4,}|wdc|wd\s|seagate|samsung\s+ssd|intel\s+ssd|物理ディスク|固定ディスク|ハード\s*ディスク/i.test(
+        /дисков|накопител|hard\s*disk|disk\s+drive|physical\s+drive|hdd|ssd|nvme|scsi|sata|st\d{4,}|wdc|wd\s|seagate|samsung\s+ssd|intel\s+ssd|sabit\s*disk|fiziksel|物理ディスク|固定ディスク|ハード\s*ディスク/i.test(
           desc
         );
       /** JP plain-text disks often list capacity + bytes/sector without a separate model line. */
@@ -2276,16 +2555,22 @@
           f["Sistema de archivos"] ||
           f["Sistema de ficheiros"] ||
           f["Файловая система"] ||
+          f["Dosya Sistemi"] ||
+          f["Dosya sistemi"] ||
           f["ファイル システム"] ||
           f["ファイルシステム"]
         ) ||
-        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["合計サイズ"] || f["サイズ"] || f["総容量"]) &&
+        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["Toplam Boyut"] || f["合計サイズ"] || f["サイズ"] || f["総容量"]) &&
           !!(
             f["Free Space"] ||
             f["Available Space"] ||
             f["Freier Speicherplatz"] ||
             f["Verfügbarer Speicherplatz"] ||
             f["Espace libre"] ||
+            f["Boş Alan"] ||
+            f["Boş alan"] ||
+            f["Kullanılabilir Alan"] ||
+            f["Kullanılabilir alan"] ||
             f["Свободно"] ||
             f["Свободное место"] ||
             f["Доступно"] ||
@@ -2296,7 +2581,7 @@
             f["空きの容量"] ||
             f["未使用領域"]
           )) ||
-        (/ntfs|fat32|refs|exfat/i.test(blob) && /gb|tb|bytes|mb|гб|тб|バイト/i.test(blob)) ||
+        (/ntfs|fat32|refs|exfat/i.test(blob) && /gb|tb|bytes|mb|гб|тб|bayt|gigabayt|バイト/i.test(blob)) ||
         looksLikePhysicalDisk(f)
       );
     };
@@ -2312,13 +2597,104 @@
     const looksLikeDriveSizeValue = (/** @type {string} */ v) => {
       const s = String(v || "").trim();
       if (!s || s.length < 2) return false;
-      return /[\d.,]/.test(s) && /(tb|gb|mb|kb|bytes|байт|バイト|go|to|mo|ko)/i.test(s);
+      return (
+        /[\d.,]/.test(s) &&
+        /(tb|gb|mb|kb|bytes|байт|バイト|go|to|mo|ko|bayt|gigabayt|megabayt|terabayt|kilobayt)/i.test(s)
+      );
+    };
+
+    const driveKeyNorm = (/** @type {string} */ k) => msinfoFieldKeyNormLower(String(k || ""));
+
+    /**
+     * Turkish (and other) MSInfo column names vary; match normalized keys when exact labels miss.
+     * @param {Record<string, string>} f
+     */
+    const pickDriveTotalSizeLoose = (/** @type {Record<string, string>} */ f) => {
+      const bad =
+        /boş|bos|kullanılabilir|kullanilabilir|kullanılan|kullanilan|dolu|seri|serial|^dosya|^file\s*system|^sistem/i;
+      for (const [k, raw] of Object.entries(f)) {
+        const v = String(raw || "").trim();
+        if (!v || !looksLikeDriveSizeValue(v)) continue;
+        const nk = driveKeyNorm(k);
+        if (!nk || bad.test(nk)) continue;
+        if (
+          (nk.includes("toplam") && (nk.includes("boyut") || nk.includes("kapasite") || nk.includes("alan"))) ||
+          ((nk.includes("sürücü") || nk.includes("surucu")) && nk.includes("boyut")) ||
+          nk.includes("disk boyutu") ||
+          nk.includes("büyüklük") ||
+          nk.includes("buyukluk") ||
+          (nk.includes("sabit") && nk.includes("disk") && nk.includes("boyut")) ||
+          (nk.includes("birim") && nk.includes("boyut")) ||
+          nk === "kapasite" ||
+          nk === "boyut"
+        )
+          return v;
+      }
+      return "";
+    };
+
+    /** @param {Record<string, string>} f */
+    const pickDriveUsedLoose = (/** @type {Record<string, string>} */ f) => {
+      for (const [k, raw] of Object.entries(f)) {
+        const v = String(raw || "").trim();
+        if (!v || !looksLikeDriveSizeValue(v)) continue;
+        const nk = driveKeyNorm(k);
+        if (/kullanılabilir|kullanilabilir|boş|bos|seri|serial|^dosya|^file\s*system|free|available/i.test(nk))
+          continue;
+        if (
+          ((nk.includes("kullanılan") || nk.includes("kullanilan")) && nk.includes("alan")) ||
+          (nk.includes("dolu") && nk.includes("alan"))
+        )
+          return v;
+        if (nk.includes("belegt") || nk.includes("использ")) return v;
+      }
+      return "";
+    };
+
+    /** @param {Record<string, string>} f */
+    const pickDriveVolumeLabelLoose = (/** @type {Record<string, string>} */ f) => {
+      for (const [k, raw] of Object.entries(f)) {
+        const v = String(raw || "").trim();
+        if (!v || looksLikeDriveSizeValue(v)) continue;
+        const nk = driveKeyNorm(k);
+        if (
+          /seri|serial|dosya|sistemi|boyut|alan|kapasite|boş|bos|filesystem|partition|bölüm|açıklama|aciklama|türü|type$/i.test(
+            nk
+          )
+        )
+          continue;
+        if (nk.includes("etiket")) return v;
+      }
+      return "";
     };
 
     /** @param {Record<string, string>} f */
     const pickDriveUsedFromFields = (/** @type {Record<string, string>} */ f) => {
       if (!f || typeof f !== "object") return "";
       const direct =
+        displayFieldByLabels(f, [
+          "Used",
+          "Used(%)",
+          "% Used",
+          "Belegt",
+          "Utilisé",
+          "Используется",
+          "Kullanılan Alan",
+          "Kullanılan alan",
+          "Kullanilan Alan",
+          "Kullanilan alan",
+          "Dolu Alan",
+          "Dolu alan",
+          "使用中",
+          "使用済み",
+          "使用中の容量",
+          "使用済みの容量",
+          "使用済み容量",
+          "使用容量",
+          "占有領域",
+          "使用中の領域",
+          "使用領域",
+        ]) ||
         f["Used"] ||
         f["Used(%)"] ||
         f["% Used"] ||
@@ -2340,7 +2716,7 @@
       for (const [k, v] of Object.entries(f)) {
         const kk = String(k || "").trim();
         const vv = String(v || "").trim();
-        if (!vv || /空き|使用可能|利用可能|未使用|free|available|unused/i.test(kk)) continue;
+        if (!vv || /空き|使用可能|利用可能|未使用|free|available|unused|boş\s*alan|kullanılabilir/i.test(kk)) continue;
         if (/シリアル|serial/i.test(kk)) continue;
         if (/^使用中|^使用済|^占有/.test(kk) && /(容量|領域|サイズ|スペース|space)/i.test(kk) && looksLikeDriveSizeValue(vv)) return vv;
         if ((kk === "使用中" || kk === "使用済み") && looksLikeDriveSizeValue(vv)) return vv;
@@ -2352,6 +2728,29 @@
     const pickDriveVolumeNameFromFields = (/** @type {Record<string, string>} */ f) => {
       if (!f || typeof f !== "object") return "";
       const direct =
+        displayFieldByLabels(f, [
+          "Volume Name",
+          "Label",
+          "Datenträgerbezeichnung",
+          "Nom de volume",
+          "Метка тома",
+          "Метка",
+          "ボリューム ラベル",
+          "ボリュームラベル",
+          "ボリューム名",
+          "ボリューム のラベル",
+          "ドライブのラベル",
+          "ドライブ ラベル",
+          "Birim Etiketi",
+          "Birim etiketi",
+          "Birim Etiket",
+          "Birim Adı",
+          "Birim adı",
+          "Birim Adi",
+          "Sürücü Etiketi",
+          "Sürücü etiketi",
+          "Surucu Etiketi",
+        ]) ||
         f["Volume Name"] ||
         f["Label"] ||
         f["Datenträgerbezeichnung"] ||
@@ -2364,6 +2763,8 @@
         f["ボリューム のラベル"] ||
         f["ドライブのラベル"] ||
         f["ドライブ ラベル"] ||
+        f["Birim Etiketi"] ||
+        f["Birim etiketi"] ||
         "";
       const d = String(direct || "").trim();
       if (d) return d;
@@ -2388,9 +2789,11 @@
         f["Name"] ||
         f["Описание"] ||
         f["Модель"] ||
+        f["Sürücü"] ||
+        f["Yerel Disk"] ||
         f["ドライブ"] ||
         f["ディスク"] ||
-        (path.match(/Drive\s+[A-Z]:/i) || path.match(/ドライブ\s+[A-Z]:/i) || [""])[0] ||
+        (path.match(/Drive\s+[A-Z]:/i) || path.match(/ドライブ\s+[A-Z]:/i) || path.match(/Sürücü\s+[A-Z]:/i) || [""])[0] ||
         path.split(" / ").pop() ||
         "Drive";
       const tTrim = String(title).trim();
@@ -2398,66 +2801,155 @@
       const titleDiskN = tTrim.match(/^ディスク\s*(\d+)$/i);
       if (titleDiskN) title = `Disk ${titleDiskN[1]}`;
       else if (/^ディスク$/i.test(tTrim) && pathDiskN) title = `Disk ${pathDiskN[1]}`;
+      let fileSystem =
+        displayFieldByLabels(f, [
+          "File System",
+          "Filesystem",
+          "Dateisystem",
+          "Système de fichiers",
+          "Sistema de archivos",
+          "Sistema de ficheiros",
+          "Файловая система",
+          "Dosya Sistemi",
+          "Dosya sistemi",
+          "ファイル システム",
+          "ファイルシステム",
+        ]) ||
+        f["File System"] ||
+        f.Filesystem ||
+        f.Dateisystem ||
+        f["Système de fichiers"] ||
+        f["Sistema de archivos"] ||
+        f["Sistema de ficheiros"] ||
+        f["Файловая система"] ||
+        f["Dosya Sistemi"] ||
+        f["Dosya sistemi"] ||
+        f["ファイル システム"] ||
+        f["ファイルシステム"] ||
+        "";
+      let totalSize =
+        displayFieldByLabels(f, [
+          "Total Size",
+          "Size",
+          "Gesamtgröße",
+          "Kapazität",
+          "Kapasite",
+          "Taille totale",
+          "Размер",
+          "Полный размер",
+          "Ёмкость",
+          "Toplam Boyut",
+          "Toplam boyut",
+          "Sürücü Boyutu",
+          "Sürücü boyutu",
+          "Surucu Boyutu",
+          "Disk Boyutu",
+          "Disk boyutu",
+          "Birim Boyutu",
+          "Birim boyutu",
+          "Toplam Alan",
+          "Toplam alan",
+          "合計サイズ",
+          "サイズ",
+          "総容量",
+        ]) ||
+        f["Total Size"] ||
+        f["Size"] ||
+        f["Gesamtgröße"] ||
+        f["Kapazität"] ||
+        f["Taille totale"] ||
+        f["Размер"] ||
+        f["Полный размер"] ||
+        f["Ёмкость"] ||
+        f["Toplam Boyut"] ||
+        f["Toplam boyut"] ||
+        f["合計サイズ"] ||
+        f["サイズ"] ||
+        f["総容量"] ||
+        "";
+      let freeSpace =
+        displayFieldByLabels(f, [
+          "Free Space",
+          "Available Space",
+          "Freier Speicherplatz",
+          "Verfügbarer Speicherplatz",
+          "Espace libre",
+          "Espace disponible",
+          "Свободно",
+          "Свободное место",
+          "Доступно",
+          "Boş Alan",
+          "Boş alan",
+          "Kullanılabilir Alan",
+          "Kullanılabilir alan",
+          "空き領域",
+          "空き容量",
+          "使用可能領域",
+          "使用可能な容量",
+          "空きの容量",
+          "未使用領域",
+        ]) ||
+        f["Free Space"] ||
+        f["Available Space"] ||
+        f["Freier Speicherplatz"] ||
+        f["Verfügbarer Speicherplatz"] ||
+        f["Espace libre"] ||
+        f["Espace disponible"] ||
+        f["Свободно"] ||
+        f["Свободное место"] ||
+        f["Доступно"] ||
+        f["Boş Alan"] ||
+        f["Boş alan"] ||
+        f["Kullanılabilir Alan"] ||
+        f["空き領域"] ||
+        f["空き容量"] ||
+        f["使用可能領域"] ||
+        f["使用可能な容量"] ||
+        f["空きの容量"] ||
+        f["未使用領域"] ||
+        "";
+      let used = pickDriveUsedFromFields(f);
+      let volumeName = pickDriveVolumeNameFromFields(f);
+      let serialNumber =
+        displayFieldByLabels(f, [
+          "Serial Number",
+          "Volume Serial Number",
+          "Seriennummer",
+          "Серийный номер",
+          "シリアル番号",
+          "ボリューム シリアル番号",
+          "Birim Seri Numarası",
+          "Birim seri numarası",
+          "Seri Numarası",
+          "Seri numarası",
+        ]) ||
+        f["Serial Number"] ||
+        f["Volume Serial Number"] ||
+        f["Seriennummer"] ||
+        f["Серийный номер"] ||
+        f["シリアル番号"] ||
+        f["ボリューム シリアル番号"] ||
+        f["Birim Seri Numarası"] ||
+        f["Seri Numarası"] ||
+        "";
+      if (!String(totalSize).trim()) totalSize = pickDriveTotalSizeLoose(f);
+      if (!String(used).trim()) used = pickDriveUsedLoose(f);
+      if (!String(volumeName).trim()) volumeName = pickDriveVolumeLabelLoose(f);
       out.push({
         title: String(title),
-        fileSystem:
-          f["File System"] ||
-          f.Filesystem ||
-          f.Dateisystem ||
-          f["Système de fichiers"] ||
-          f["Sistema de archivos"] ||
-          f["Sistema de ficheiros"] ||
-          f["Файловая система"] ||
-          f["ファイル システム"] ||
-          f["ファイルシステム"] ||
-          "",
-        totalSize:
-          f["Total Size"] ||
-          f["Size"] ||
-          f["Gesamtgröße"] ||
-          f["Kapazität"] ||
-          f["Taille totale"] ||
-          f["Размер"] ||
-          f["Полный размер"] ||
-          f["Ёмкость"] ||
-          f["合計サイズ"] ||
-          f["サイズ"] ||
-          f["総容量"] ||
-          "",
-        freeSpace:
-          f["Free Space"] ||
-          f["Available Space"] ||
-          f["Freier Speicherplatz"] ||
-          f["Verfügbarer Speicherplatz"] ||
-          f["Espace libre"] ||
-          f["Espace disponible"] ||
-          f["Свободно"] ||
-          f["Свободное место"] ||
-          f["Доступно"] ||
-          f["空き領域"] ||
-          f["空き容量"] ||
-          f["使用可能領域"] ||
-          f["使用可能な容量"] ||
-          f["空きの容量"] ||
-          f["未使用領域"] ||
-          "",
-        used: pickDriveUsedFromFields(f),
-        volumeName: pickDriveVolumeNameFromFields(f),
-        serialNumber:
-          f["Serial Number"] ||
-          f["Volume Serial Number"] ||
-          f["Seriennummer"] ||
-          f["Серийный номер"] ||
-          f["シリアル番号"] ||
-          f["ボリューム シリアル番号"] ||
-          "",
+        fileSystem,
+        totalSize,
+        freeSpace,
+        used,
+        volumeName,
+        serialNumber,
         path,
       });
     };
 
     /** JP exports split volumes on ドライブ / ローカル ディスク (C:); physical disks repeat ディスク / ディスク 1. */
     const driveRecordStartRe =
-      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?)$/i;
+      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?|Yerel\s+Disk(?:\s*\([A-Z]:?\))?|Yerel\s+disk(?:\s*\([A-Z]:?\))?|Sürücü(?:\s+[A-Z]:)?|Yerel\s+sürücü(?:\s*\([A-Z]:?\))?)$/iu;
     const emitDrivesForPath = (/** @type {string} */ p) => {
       const chunks = chunkKvsPlainSectionRecords(kvs, p, driveRecordStartRe, 2);
       let any = false;
@@ -2484,8 +2976,8 @@
     if (!out.length) {
       for (const p of [...new Set(kvs.map((k) => k.path))]) {
         if (
-          !/Storage|Запоминающ|Накопител|Диски|Компоненты|ストレージ|ディスク|ドライブ|ボリューム|コンポーネント/i.test(p) ||
-          !/Disks?|Logical|Drive|Partition|Диск|Том|ドライブ|ディスク|ボリューム|パーティション/i.test(p)
+          !/Storage|Запоминающ|Накопител|Диски|Компоненты|ストレージ|ディスク|ドライブ|ボリューム|コンポーネント|Depolama|Diskler|Bileşenler/i.test(p) ||
+          !/Disks?|Logical|Drive|Partition|Диск|Том|ドライブ|ディスク|ボリューム|パーティション|Sürücü|Disk|Bölüm/i.test(p)
         )
           continue;
         if (/Problem|Printer|Floppy|USB.*Mass|DVD|CD-ROM|Controller\s*Host|Принтер|Накопител.*гибк/i.test(p)) continue;
@@ -3007,6 +3499,7 @@
         f["Stare"] ||
         f["Állapot"] ||
         f["Durum"] ||
+        f["Durumu"] ||
         f["Κατάσταση"] ||
         f["현재 상태"] ||
         f["当前状态"] ||
@@ -3022,9 +3515,10 @@
         const vv = String(v || "").trim();
         if (!vv || /^недоступно$/i.test(vv)) continue;
         if (
-          /^(state|status|zustand|состояни|статус|текущ|état|estado|stato|stan|tila|tilstand|állapot|durum|κατάσταση|상태|状态|狀態|状態|現在の状態|الحالة)/i.test(
-            kt
-          )
+          /^(state|status|zustand|состояни|статус|текущ|état|estado|stato|stan|tila|tilstand|állapot|durum|durumu|κατάσταση|상태|状态|狀態|状態|現在の状態|الحالة)/i.test(
+            kt.replace(/_/g, " ")
+          ) ||
+          /^durum$/iu.test(kt.replace(/_/g, " ").trim())
         )
           return vv;
         if (/^состоян/i.test(kt) && !/шаблон|template/i.test(kt)) return vv;
@@ -3058,6 +3552,10 @@
         f["Tipo di avvio"] ||
         f["Type de démarrage"] ||
         f["Başlangıç türü"] ||
+        f["Başlangıç Türü"] ||
+        f["Başlangıç_Modu"] ||
+        f["Başlangıç_modu"] ||
+        f["Baslangic Modu"] ||
         f["Tipo de arranque"] ||
         f["Indítás típusa"] ||
         f["Tip pornire"] ||
@@ -3078,8 +3576,8 @@
         const vv = String(v || "").trim();
         if (!vv || /^недоступно$/i.test(vv)) continue;
         if (
-          /^(startup|start\s*type|starttyp|запуск|тип\s*запуска|typ\s*uruchomienia|spouštěcí|käynnistys|käivitus|opstart|tipo\s*de\s*inicio|tipo\s*di\s*avvio|type\s*de\s*démarrage|başlangıç|indítás|tip\s*pornire|τύπος\s*εκκίνησης|시작|启动|啟動|起動|スタート|نوع)/i.test(
-            kt
+          /^(startup|start\s*type|starttyp|запуск|тип\s*запуска|typ\s*uruchomienia|spouštěcí|käynnistys|käivitus|opstart|tipo\s*de\s*inicio|tipo\s*di\s*avvio|type\s*de\s*démarrage|başlangıç|baslangic|indítás|tip\s*pornire|τύπος\s*εκκίνησης|시작|启动|啟動|起動|スタート|نوع)/i.test(
+            kt.replace(/_/g, " ")
           )
         )
           return vv;
@@ -3090,46 +3588,65 @@
       return "";
     };
 
+    /** Path leaf or bogus “name” rows that are the Services category title, not a service. */
+    const isMsinfoServiceSectionTitleName = (/** @type {string} */ n) =>
+      /^(hizmetler|services|dienste|servicios|serviços|servizi|службы|сервисы|palvelut|tjenester|tjänster|usługi|服务|服務|서비스|サービス|実行中のサービス|起動しているサービス|çalışan\s+hizmetler|calisan\s+hizmetler)$/iu.test(
+        String(n || "").trim()
+      );
+
     /** @param {Record<string, string>} f @param {string} pathLeaf */
     const pickServiceNameFromFields = (f, pathLeaf) => {
-      if (!f || typeof f !== "object") return pathLeaf || "";
-      return (
-        f["Выводимое_имя"] ||
-        f["Выводимое имя"] ||
-        f["Display Name"] ||
-        f["Anzeigename"] ||
-        f["Weergavenaam"] ||
-        f["Visningsnavn"] ||
-        f["Visningsnamn"] ||
-        f["Näyttönimi"] ||
-        f["Zobrazovaný název"] ||
-        f["Zobrazovaný názov"] ||
-        f["Wyświetlana nazwa"] ||
-        f["Megjelenítendő név"] ||
-        f["Nume afișat"] ||
-        f["Nome visualizzato"] ||
-        f["Nome de exibição"] ||
-        f["Nombre para mostrar"] ||
-        f["Görünen ad"] ||
-        f["Εμφανιζόμενο όνομα"] ||
-        f["サービス名"] ||
-        f["表示名"] ||
-        f["名前"] ||
-        f["표시 이름"] ||
-        f["显示名称"] ||
-        f["顯示名稱"] ||
-        f["الاسم المعروض"] ||
-        f.Name ||
-        f["Имя"] ||
-        f["Service Name"] ||
-        f["Dienstname"] ||
-        f.Service ||
-        f["Отображаемое имя"] ||
-        f["Имя службы"] ||
-        f["Название службы"] ||
-        pathLeaf ||
-        ""
-      );
+      if (!f || typeof f !== "object") {
+        const pl = String(pathLeaf || "").trim();
+        return isMsinfoServiceSectionTitleName(pl) ? "" : pl;
+      }
+      const raw = String(
+        f["Görünen_Ad"] ||
+          f["Görünen_ad"] ||
+          f["Gorunen_Ad"] ||
+          f["Выводимое_имя"] ||
+          f["Выводимое имя"] ||
+          f["Display Name"] ||
+          f["Anzeigename"] ||
+          f["Weergavenaam"] ||
+          f["Visningsnavn"] ||
+          f["Visningsnamn"] ||
+          f["Näyttönimi"] ||
+          f["Zobrazovaný název"] ||
+          f["Zobrazovaný názov"] ||
+          f["Wyświetlana nazwa"] ||
+          f["Megjelenítendő név"] ||
+          f["Nume afișat"] ||
+          f["Nome visualizzato"] ||
+          f["Nome de exibição"] ||
+          f["Nombre para mostrar"] ||
+          f["Görünen Ad"] ||
+          f["Görünen ad"] ||
+          f["Hizmet Adı"] ||
+          f["Hizmet adı"] ||
+          f["Adı"] ||
+          f["Adi"] ||
+          f["Εμφανιζόμενο όνομα"] ||
+          f["サービス名"] ||
+          f["表示名"] ||
+          f["名前"] ||
+          f["표시 이름"] ||
+          f["显示名称"] ||
+          f["顯示名稱"] ||
+          f["الاسم المعروض"] ||
+          f.Name ||
+          f["Имя"] ||
+          f["Service Name"] ||
+          f["Dienstname"] ||
+          f.Service ||
+          f["Отображаемое имя"] ||
+          f["Имя службы"] ||
+          f["Название службы"] ||
+          pathLeaf ||
+          ""
+      ).trim();
+      if (isMsinfoServiceSectionTitleName(raw)) return "";
+      return raw;
     };
 
     /** @param {string} st */
@@ -3158,6 +3675,10 @@
         /\bkäynnissä\b/i.test(s) ||
         /\bkjører\b/i.test(s) ||
         /\bçalışıyor\b/i.test(s) ||
+        /\bçalisiyor\b/i.test(s) ||
+        /\bbaşlatıldı\b/i.test(s) ||
+        /\bbaslatildi\b/i.test(s) ||
+        /\betkin\b/i.test(s) ||
         /正在运行/.test(s) ||
         /実行中/.test(s) ||
         /실행 중/.test(s) ||
@@ -3205,11 +3726,11 @@
     };
 
     const serviceRecordStartRe =
-      /^(表示名|サービス名|Display Name|Service Name|サービス\s*名|Отображаемое имя|Имя службы|Имя\s*службы|Dienstname|Nom du service|Nombre del servicio)$/i;
+      /^(表示名|サービス名|Display Name|Service Name|サービス\s*名|Отображаемое имя|Имя службы|Имя\s*службы|Dienstname|Nom du service|Nombre del servicio|Görünen_Ad|Görünen_ad|Gorunen_Ad|Görünen\s+Ad|Görünen\s+ad|Görüntülenen\s+Ad|Hizmet\s+Adı|Hizmet\s+adı|Hizmetin\s+görüntülenen\s+adı)$/iu;
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!isServicesSectionPath(p)) continue;
-      const fieldMaps = chunkKvsPlainSectionRecords(kvs, p, serviceRecordStartRe, 3);
+      const fieldMaps = chunkKvsPlainSectionRecords(kvs, p, serviceRecordStartRe, 2);
       for (const f of fieldMaps) {
         const pathLeaf = p.split(" / ").pop() || "";
         const name = pickServiceNameFromFields(f, pathLeaf);
@@ -3247,7 +3768,8 @@
       return (
         !!(s.name || "").trim() &&
         (/\b(запущенн[\s\w,.-]{0,40}служб|работающ[\s\w,.-]{0,40}служб)\b/i.test(p) ||
-          /実行中のサービス|起動しているサービス/.test(p))
+          /実行中のサービス|起動しているサービス/.test(p) ||
+          /çalışan\s+hizmetler|calisan\s+hizmetler/i.test(p))
       );
     });
     return { all: all.slice(0, 800), running: running.slice(0, 400) };
@@ -3272,7 +3794,7 @@
 
   /** @param {Record<string, string>} fields */
   function werPickTime(fields) {
-    return werFirstFieldMatch(fields, [
+    const hit = werFirstFieldMatch(fields, [
       /^time$/i,
       /^heure$/i,
       /^hora$/i,
@@ -3288,7 +3810,7 @@
       /^čas$/i,
       /^tid$/i,
       /^tidspunkt$/i,
-      /^saat$/i,
+      /^saat$/iu,
       /^aeg$/i,
       /^kellonaika$/i,
       /^وقت$/i,
@@ -3297,6 +3819,14 @@
       /^記録日時$/i,
       /^記録された日時$/i,
     ]);
+    if (hit) return hit;
+    for (const [k, v] of Object.entries(fields)) {
+      const vv = String(v || "").trim();
+      if (!vv) continue;
+      const kn = msinfoFieldKeyNormLower(k);
+      if (kn === "saat" || kn === "time") return vv;
+    }
+    return "";
   }
 
   /** @param {Record<string, string>} fields */
@@ -3318,7 +3848,7 @@
         /^fault\s*bucket$/i,
         /^bucket\s*id$/i,
         /^tyyppi$/i,
-        /^tür$/i,
+        /^tür$/iu,
         /^typ\s+problemu$/i,
         /^type\s+de\s+probl/i,
         /^tipo\s+de\s+problema$/i,
@@ -3327,6 +3857,12 @@
         /^probleemtypen$/i,
       ]) || "";
     if (t) return t;
+    for (const [k, v] of Object.entries(fields)) {
+      const vv = String(v || "").trim();
+      if (!vv) continue;
+      const kn = msinfoFieldKeyNormLower(k);
+      if (kn === "tür" || kn === "type") return vv;
+    }
     const fb = werFirstFieldMatch(fields, [
       /fault/i,
       /wer\s*report/i,
@@ -3363,8 +3899,18 @@
         /^yksityiskohdat$/i,
         /^podrobnosti$/i,
         /^detaljer$/i,
+        /** Turkish MSInfo — “Details” column (not {@code Açıklama}). */
+        /^ayrıntılar$/iu,
+        /^ayrintilar$/iu,
       ]) || "";
     if (d) return d;
+    for (const [k, v] of Object.entries(fields)) {
+      const vv = String(v || "").trim();
+      if (!vv) continue;
+      const kn = msinfoFieldKeyNormLower(k);
+      const kf = networkFieldKeyAsciiFold(k);
+      if (kn === "ayrıntılar" || kn === "details" || kf === "ayrintilar") return vv;
+    }
     /** @type {string[]} */
     const skip = [];
     const time = werPickTime(fields);
@@ -3386,7 +3932,7 @@
   function werCategorize(type, details) {
     const t = `${type} ${details}`.toLowerCase();
     if (
-      /appcrash|application|\.exe|faulting\s*application|app\s*error|ошибк.*приложен|приложени.*ошиб|сбой\s*прилож/i.test(
+      /appcrash|application|\.exe|faulting\s*application|app\s*error|application\s*hang|ошибк.*приложен|приложени.*ошиб|сбой\s*прилож|uygulama\s+askıda|uygulama\s+askida|uygulama\s+hatası|hatalı\s+uygulama|çalışmayı\s+durdurdu|çalismayi\s+durdurdu/i.test(
         t
       )
     )
@@ -3447,6 +3993,8 @@
       /^hora$/i,
       /^zeit$/i,
       /^data\s*[\/\u2215]\s*ora$/i,
+      /** Turkish WER timeline table (“Saat” starts each row in MSInfo). */
+      /^saat$/iu,
       /^時間$/i,
       /^时间$/i,
       /^日時$/i,
@@ -3459,7 +4007,9 @@
     ];
     const isAnchor = (/** @type {string} */ item) => {
       const it = (item || "").trim();
-      return anchorRes.some((re) => re.test(it));
+      if (anchorRes.some((re) => re.test(it))) return true;
+      const kn = msinfoFieldKeyNormLower(it);
+      return kn === "saat" || kn === "time" || kn.startsWith("время");
     };
 
     /** @type {Record<string, string>[]} */
@@ -3469,7 +4019,7 @@
     for (const k of pathKvs) {
       const item = (k.item || "").trim();
       if (!item) continue;
-      if (isAnchor(item) && Object.keys(cur).length && cur[item]) {
+      if (isAnchor(item) && Object.keys(cur).length) {
         chunks.push(cur);
         cur = {};
       }
@@ -3549,10 +4099,42 @@
    * @returns {WerTimelineEntry[]}
    */
   function extractWindowsErrorReports(kvs, rows) {
+    /**
+     * True when Item/Value rows look like the WER timeline table even if the category path string
+     * is an uncommon Turkish (or mixed) variant not listed in {@code pathOk}.
+     * @param {{ path: string, item: string, value: string }[]} pathKvs
+     */
+    function pathLooksLikeWerFromKvs(pathKvs) {
+      if (!pathKvs || pathKvs.length < 3) return false;
+      let timeCol = 0;
+      let typeCol = 0;
+      let detailCol = 0;
+      const blob = pathKvs.map((k) => `${k.item}\t${k.value}`).join("\n");
+      const bl = blob.toLowerCase();
+      if (
+        /hata\s+demeti|olay\s+adı|olay\s+adi|hatalı\s+uygulama|hatali\s+uygulama|fault\s*bucket|problem\s*signature|appcrash|radar_|bex\d|windows\s+error\s+reporting|application\s+error|application\s*hang|uygulama\s+askıda|uygulama\s+askida|windows\s+ile\s+birlikte\s+çalışmayı|windows\s+ile\s+birlikte\s+calismayi|&#x000d;&#x000a;|&#x000d|&#x000a/i.test(
+          bl
+        )
+      )
+        return true;
+      for (const k of pathKvs) {
+        const it = (k.item || "").trim();
+        if (!it) continue;
+        const kn = msinfoFieldKeyNormLower(it);
+        const kf = networkFieldKeyAsciiFold(it);
+        if (kn === "saat" || kn === "time") timeCol++;
+        if (kn === "tür" || kn === "type") typeCol++;
+        if (kn === "ayrıntılar" || kn === "details" || kf === "ayrintilar") detailCol++;
+      }
+      return timeCol > 0 && typeCol > 0 && detailCol > 0;
+    }
+
     const pathOk = (/** @type {string} */ p) => {
       const s = String(p || "");
       const hit =
-        /Windows Error Reporting|Problem Reports|Reliability|WER|Report\s*Archive|Fault\s*Bucket/i.test(s) ||
+        /Windows Error Reporting|Problem Reports|Reliability|WER|Report\s*Archive|Fault\s*Bucket|Windows\s+Hata\s+Raporları|Windows\s+Hata\s+Raporlaması|Windows\s+Hata\s+Raporlama|Windows\s+Hata\s+Bildirimleri|Windows\s+Sorun\s+Bildirimleri|Sorun\s+Bildirimleri|Hata\s+raporları|Hata\s+raporlaması|Hata\s+raporlama|Hata\s+bildirimleri|\bHata\s+Raporlama\b|Yazılım\s+Ortamı\s*\/\s*Hata|Yazilim\s+Ortami\s*\/\s*Hata/i.test(
+          s
+        ) ||
         /Windows\s*エラー報告|エラー\s*報告|ソフトウェア環境.*エラー|エラー\s*コンテナ/i.test(s) ||
         /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
           s
@@ -3568,6 +4150,35 @@
       )
         return false;
       return true;
+    };
+
+    /** Path title match or WER-shaped Item/Value stream under this path (covers uncommon Turkish path spellings). */
+    const pathOkOrContent = (/** @type {string} */ p) => {
+      const s = String(p || "");
+      if (
+        /Group\s*Policy|Registry\s*key|групповых\s*политик|раздел\s*реестра|グループ\s*ポリシー|レジストリ\s*キー|レジストリのキー/i.test(
+          s
+        )
+      )
+        return false;
+      if (pathOk(p)) return true;
+      return pathLooksLikeWerFromKvs(kvs.filter((k) => k.path === p));
+    };
+
+    /** One MSInfo {@code <Data>} row with child elements Saat / Tür / Ayrıntılar (path title may not match {@code pathOk}). */
+    const rowFieldsLookLikeWerTable = (/** @type {Record<string, string>} */ fields) => {
+      if (!fields || typeof fields !== "object") return false;
+      let timeCol = 0;
+      let typeCol = 0;
+      let detailCol = 0;
+      for (const k of Object.keys(fields)) {
+        const kn = msinfoFieldKeyNormLower(k);
+        const kf = networkFieldKeyAsciiFold(k);
+        if (kn === "saat" || kn === "time") timeCol++;
+        if (kn === "tür" || kn === "type") typeCol++;
+        if (kn === "ayrıntılar" || kn === "details" || kf === "ayrintilar") detailCol++;
+      }
+      return timeCol > 0 && typeCol > 0 && detailCol > 0;
     };
 
     /** @param {WerTimelineEntry} a @param {WerTimelineEntry} b */
@@ -3592,12 +4203,12 @@
     };
 
     for (const r of rows) {
-      if (!pathOk(r.path)) continue;
+      if (!pathOkOrContent(r.path) && !rowFieldsLookLikeWerTable(r.fields)) continue;
       const ent = werEntryFromRowFields(r.fields, r.path);
       if (ent) pushDeduped(ent);
     }
 
-    const pathsFromKvs = [...new Set(kvs.map((k) => k.path))].filter(pathOk);
+    const pathsFromKvs = [...new Set(kvs.map((k) => k.path))].filter(pathOkOrContent);
     for (const p of pathsFromKvs) {
       const pathKvs = kvs.filter((k) => k.path === p);
       const title = p.split(" / ").slice(-2).join(" / ") || p;
@@ -3621,7 +4232,7 @@
     softwareEnvPath:
       /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービス|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
     memoryRowPath:
-      /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件/i,
+      /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama/i,
     /** @param {RegExp | RegExp[]} labelRe */
     itemPatterns(labelRe) {
       return Array.isArray(labelRe) ? labelRe : [labelRe];
@@ -3634,7 +4245,10 @@
    * @param {string} p
    */
   function msinfoSummaryPathMatches(p) {
-    const s = String(p || "");
+    const s = String(p || "")
+      .normalize("NFC")
+      .replace(/\s+/g, " ")
+      .trim();
     if (MSINFO_I18N.summaryPath.test(s)) return true;
     return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения|システムの要約/i.test(
       s
@@ -3725,15 +4339,19 @@
    * @param {{ path: string, item: string, value: string }[]} kvs
    */
   function pickSystemTypeFromBareTypKvs(kvs) {
-    const cand = kvs.filter((k) => msinfoSummaryPathMatches(k.path) && /^Тип$/i.test((k.item || "").trim()));
+    const cand = kvs.filter(
+      (k) =>
+        msinfoSummaryPathMatches(k.path) &&
+        (/^Тип$/i.test((k.item || "").trim()) || /^Tür$/u.test((k.item || "").trim()))
+    );
     if (!cand.length) return "";
     const vOf = (/** @type {{ value?: string }} */ k) => String(k.value || "").trim();
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
-      /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller/i.test(t);
+      /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller|sürücü|çekirdek/i.test(t);
     const best = [...cand].sort((a, b) => {
       const va = vOf(a);
       const vb = vOf(b);
@@ -3755,18 +4373,18 @@
     for (const r of rows) {
       if (!msinfoSummaryPathMatches(r.path)) continue;
       for (const [k, v] of Object.entries(r.fields)) {
-        if (!/^Тип$/i.test(k.trim())) continue;
+        if (!/^Тип$/i.test(k.trim()) && !/^Tür$/u.test(k.trim())) continue;
         const t = String(v || "").trim();
         if (t) vals.push(t);
       }
     }
     if (!vals.length) return "";
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
-      /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller/i.test(t);
+      /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller|sürücü|çekirdek/i.test(t);
     const pick =
       [...vals].sort((a, b) => {
         const sa = looksLikePcKind(a) ? 2 : looksLikeDriverKind(a) ? 0 : 1;
@@ -3820,6 +4438,7 @@
       /^处理器$/,
       /^プロセッサ$/,
       /^プロセッサー$/,
+      /^İşlemci$/u,
     ];
     const badItem = (/** @type {string} */ it) => /ドライバー|driver$/i.test(String(it || "").trim());
     /** @type {{ v: string, score: number }[]} */
@@ -3833,6 +4452,7 @@
       let score = 2;
       if (/^プロセッサ$/.test(it)) score += 8;
       if (/^(Processor|Процессор)$/i.test(it)) score += 5;
+      if (/^İşlemci$/u.test(it)) score += 5;
       if (
         /intel|amd|apple|qualcomm|snapdragon|core|ryzen|xeon|threadripper|インテル|エイジーエス|\.ghz|ghz|mhz|@|ファミリ/i.test(
           v
@@ -3851,16 +4471,31 @@
   function extractSystemSummary(data) {
     const { kvs, rows } = data;
 
-    const boardPathRe = /Motherboard|Base\s*Board|BaseBoard|System Board|Mainboard|Main Board/i;
+    const boardPathRe =
+      /Motherboard|Base\s*Board|BaseBoard|System Board|Mainboard|Main Board|Anakart|Temel\s*Kart/i;
+    const boardItemPrefixRe = /^(BaseBoard|Base\s*Board|Temel\s+Kart|Anakart)\b/i;
     let boardKvs = kvs.filter((k) => boardPathRe.test(k.path));
     if (!boardKvs.length) {
       boardKvs = kvs.filter((k) => /^(BaseBoard|Base Board)\s+/i.test((k.item || "").trim()));
     }
+    /** Turkish (and some locales) list “Temel Kart …” under System Summary, not a separate board path. */
+    const summaryBoardKvs = kvs.filter(
+      (k) => msinfoSummaryPathMatches(k.path) && boardItemPrefixRe.test((k.item || "").trim())
+    );
+    if (summaryBoardKvs.length) {
+      const seen = new Set(boardKvs.map((k) => `${k.path}\u0001${k.item}`));
+      for (const k of summaryBoardKvs) {
+        const key = `${k.path}\u0001${k.item}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        boardKvs.push(k);
+      }
+    }
     const pickBoard = (label) => {
       const lab = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const re = new RegExp(
-        `^(BaseBoard|Base\\s*Board)\\s+${lab}$|^${lab}$`,
-        "i"
+        `^(BaseBoard|Base\\s*Board|Temel\\s*Kart|Anakart)\\s+${lab}$|^${lab}$`,
+        "iu"
       );
       const x = boardKvs.find((k) => re.test((k.item || "").trim()));
       return x?.value || "";
@@ -3868,11 +4503,11 @@
     const pickBoardFromRows = (label) => {
       const lab = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const re = new RegExp(
-        `^(BaseBoard|Base\\s*Board)\\s+${lab}$|^${lab}$`,
-        "i"
+        `^(BaseBoard|Base\\s*Board|Temel\\s*Kart|Anakart)\\s+${lab}$|^${lab}$`,
+        "iu"
       );
       for (const r of rows) {
-        if (!boardPathRe.test(r.path)) continue;
+        if (!boardPathRe.test(r.path) && !msinfoSummaryPathMatches(r.path)) continue;
         for (const [k, v] of Object.entries(r.fields)) {
           if (re.test(k.trim()) && v && String(v).trim()) return String(v).trim();
         }
@@ -3886,9 +4521,48 @@
       }
       return "";
     };
+    /** System Summary item (not necessarily “Temel Kart …”); used when board OEM was misread as Microsoft. */
+    const pickSummaryValueByItemRe = (/** @type {RegExp} */ itemRe) => {
+      for (const k of kvs) {
+        if (!msinfoSummaryPathMatches(k.path)) continue;
+        const it = (k.item || "").trim();
+        if (itemRe.test(it) && String(k.value || "").trim()) return String(k.value).trim();
+      }
+      for (const r of rows) {
+        if (!msinfoSummaryPathMatches(r.path)) continue;
+        for (const [kk, v] of Object.entries(r.fields)) {
+          if (itemRe.test(kk.trim()) && String(v || "").trim()) return String(v).trim();
+        }
+      }
+      return "";
+    };
     let motherboard = {
-      manufacturer: pickBoardML(["Manufacturer", "Hersteller", "Fabricant", "Fabricante", "Производитель", "制造商"]),
+      manufacturer: pickBoardML([
+        "Temel Kart Üreticisi",
+        "Temel kart üreticisi",
+        "Temel Kart Ureticisi",
+        "Anakart Üreticisi",
+        "Anakart üreticisi",
+        "BaseBoard Manufacturer",
+        "Base Board Manufacturer",
+        "Manufacturer",
+        "Hersteller",
+        "Fabricant",
+        "Fabricante",
+        "Производитель",
+        "制造商",
+        "Üretici",
+      ]),
       product: pickBoardML([
+        "Temel Kart Ürünü",
+        "Temel kart ürünü",
+        "Temel Kart Urunu",
+        "Temel Kart Modeli",
+        "Temel kart modeli",
+        "Anakart Ürünü",
+        "Anakart ürünü",
+        "Anakart Modeli",
+        "Anakart modeli",
         "Product",
         "Model",
         "Product Name",
@@ -3899,8 +4573,12 @@
         "Nombre de producto",
         "Продукт",
         "型号",
+        "Ürün",
       ]),
       version: pickBoardML([
+        "Temel Kart Sürümü",
+        "Temel kart sürümü",
+        "Temel Kart Surumu",
         "Version",
         "Serial Number",
         "Seriennummer",
@@ -3908,6 +4586,7 @@
         "Número de serie",
         "Версия",
         "版本",
+        "Seri Numarası",
       ]),
     };
     if (!motherboard.manufacturer && !motherboard.product) {
@@ -3915,19 +4594,26 @@
         kvs.find((k) => itemRe.test((k.item || "").trim()));
       const m =
         anyBoard(/^BaseBoard Manufacturer$/i) ||
-        anyBoard(/^Mainboardhersteller$/i);
+        anyBoard(/^Mainboardhersteller$/i) ||
+        anyBoard(/^Temel Kart Üreticisi$/iu) ||
+        anyBoard(/^Temel kart üreticisi$/iu);
       const p =
         anyBoard(/^BaseBoard Product$/i) ||
         anyBoard(/^BaseBoard Model$/i) ||
         anyBoard(/^Base Board Product$/i) ||
         anyBoard(/^Mainboardprodukt$/i) ||
-        anyBoard(/^Mainboardmodell$/i);
+        anyBoard(/^Mainboardmodell$/i) ||
+        anyBoard(/^Temel Kart Ürünü$/iu) ||
+        anyBoard(/^Temel kart ürünü$/iu) ||
+        anyBoard(/^Temel Kart Modeli$/iu);
       const v =
         anyBoard(/^BaseBoard Version$/i) ||
         anyBoard(/^BaseBoard Serial Number$/i) ||
         anyBoard(/^Base Board Serial Number$/i) ||
         anyBoard(/^Mainboardversion$/i) ||
-        anyBoard(/^Mainboardseriennummer$/i);
+        anyBoard(/^Mainboardseriennummer$/i) ||
+        anyBoard(/^Temel Kart Sürümü$/iu) ||
+        anyBoard(/^Temel kart sürümü$/iu);
       motherboard = {
         manufacturer: m?.value?.trim() || "",
         product: p?.value?.trim() || "",
@@ -3938,11 +4624,21 @@
       for (const r of rows) {
         const f = r.fields;
         const man =
+          f["Temel Kart Üreticisi"] ||
+          f["Temel kart üreticisi"] ||
+          f["Anakart Üreticisi"] ||
+          f["Anakart üreticisi"] ||
           f["BaseBoard Manufacturer"] ||
           f["Base Board Manufacturer"] ||
           f["Изготовитель основной платы"] ||
           f.Hersteller;
         const prod =
+          f["Temel Kart Ürünü"] ||
+          f["Temel kart ürünü"] ||
+          f["Temel Kart Modeli"] ||
+          f["Anakart Ürünü"] ||
+          f["Anakart ürünü"] ||
+          f["Anakart Modeli"] ||
           f["BaseBoard Product"] ||
           f["Base Board Product"] ||
           f["BaseBoard Model"] ||
@@ -3954,6 +4650,8 @@
           f["BaseBoard Version"] ||
           f["BaseBoard Serial Number"] ||
           f["Версия основной платы"] ||
+          f["Temel Kart Sürümü"] ||
+          f["Temel kart sürümü"] ||
           f.Seriennummer;
         if (man || prod || ver) {
           motherboard = {
@@ -3971,15 +4669,60 @@
         const x = kvs.find((k) => msinfoSummaryPathMatches(k.path) && itemRe.test((k.item || "").trim()));
         return (x?.value || "").trim();
       };
-      const mfr = pickSmKv(/^Изготовитель основной платы$/i);
-      const prod = pickSmKv(/^Модель основной платы$/i);
-      const ver = pickSmKv(/^Версия основной платы$/i);
+      const mfr =
+        pickSmKv(/^Изготовитель основной платы$/i) ||
+        pickSmKv(/^Temel Kart Üreticisi$/iu) ||
+        pickSmKv(/^Temel kart üreticisi$/iu);
+      const prod =
+        pickSmKv(/^Модель основной платы$/i) ||
+        pickSmKv(/^Temel Kart Ürünü$/iu) ||
+        pickSmKv(/^Temel kart ürünü$/iu) ||
+        pickSmKv(/^Temel Kart Modeli$/iu);
+      const ver =
+        pickSmKv(/^Версия основной платы$/i) ||
+        pickSmKv(/^Temel Kart Sürümü$/iu) ||
+        pickSmKv(/^Temel kart sürümü$/iu);
       if (mfr || prod || ver) {
         motherboard = {
           manufacturer: mfr || motherboard.manufacturer,
           product: prod || motherboard.product,
           version: ver || motherboard.version,
         };
+      }
+    }
+
+    /** Generic “Manufacturer” / BIOS rows sometimes read as Microsoft; retail board model + Turkish system fields fix it. */
+    {
+      const m = (motherboard.manufacturer || "").trim();
+      const p = (motherboard.product || "").trim();
+      const blob = `${p} ${motherboard.version || ""}`;
+      if (
+        /^microsoft\b/i.test(m) &&
+        /\b(aorus|gigabyte|asus|asrock|msi|tuf|rog|prime|b550|x570|z690|b650|x670|wrx80|tr\d\d|maximus|crosshair|tomahawk|unify|carbon|phantom|taichi|fatal|diamond|hawk|aero|master|elite|proart|strix)\b/i.test(
+          blob
+        )
+      ) {
+        const cands = [
+          pickBoardML([
+            "Temel Kart Üreticisi",
+            "Temel kart üreticisi",
+            "Temel Kart Ureticisi",
+            "Anakart Üreticisi",
+            "Anakart üreticisi",
+            "BaseBoard Manufacturer",
+            "Base Board Manufacturer",
+          ]),
+          pickSummaryValueByItemRe(/^Sistem Üreticisi$/iu),
+          pickSummaryValueByItemRe(/^Sistem üreticisi$/iu),
+          pickSummaryValueByItemRe(/^System Manufacturer$/i),
+        ];
+        for (const c of cands) {
+          const t = String(c || "").trim();
+          if (t && !/^microsoft\b/i.test(t)) {
+            motherboard.manufacturer = t;
+            break;
+          }
+        }
       }
     }
 
@@ -3996,11 +4739,15 @@
     pushItem(/PC System Type/i);
     pushItem(/^PC-Systemtyp$/i);
     pushItem(/^Platform Role$/i);
+    pushItem(/^Platform Rolü$/u);
     pushItem(/^Роль платформы$/i);
     pushItem(/^Systemrolle$/i);
     pushItem(/^System SKU$/i);
     pushItem(/^Тип системы$/i);
     pushItem(/^Systemtyp$/i);
+    pushItem(/^Sistem Ailesi$/u);
+    pushItem(/^Kasa Türü$/u);
+    pushItem(/^Bilgisayar Sistemi Türü$/u);
     for (const r of rows) {
       const f = r.fields;
       const blob = [
@@ -4033,11 +4780,20 @@
           /^操作系统名称$/i,
           /^OS\s*名$/,
           /^OS名$/,
+          /^İşletim Sistemi Adı$/u,
         ],
         kvs
       ) ||
       kvValI18n(
-        [/^OS Name$/i, /^Betriebssystemname$/i, /^Имя ОС$/i, /^Название ОС$/i, /^OS\s*名$/, /^OS名$/],
+        [
+          /^OS Name$/i,
+          /^Betriebssystemname$/i,
+          /^Имя ОС$/i,
+          /^Название ОС$/i,
+          /^OS\s*名$/,
+          /^OS名$/,
+          /^İşletim Sistemi Adı$/u,
+        ],
         kvs
       ) ||
       fieldFromRowsI18n(
@@ -4050,6 +4806,7 @@
           /^Имя ОС$/i,
           /^OS\s*名$/,
           /^OS名$/,
+          /^İşletim Sistemi Adı$/u,
         ],
         rows
       );
@@ -4066,6 +4823,8 @@
           /^Версия$/i,
           /^バージョン$/,
           /^OS\s*バージョン$/,
+          /^İşletim Sistemi Sürümü$/u,
+          /^Sürüm$/u,
         ],
         kvs
       ) ||
@@ -4078,11 +4837,22 @@
           /^Версия ОС$/i,
           /^バージョン$/,
           /^OS\s*バージョン$/,
+          /^İşletim Sistemi Sürümü$/u,
+          /^Sürüm$/u,
         ],
         kvs
       ) ||
       fieldFromRowsI18n(
-        [/^OS Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Версия ОС$/i, /^バージョン$/, /^OS\s*バージョン$/],
+        [
+          /^OS Version$/i,
+          /^Betriebssystemversion$/i,
+          /^Версия$/i,
+          /^Версия ОС$/i,
+          /^バージョン$/,
+          /^OS\s*バージョン$/,
+          /^İşletim Sistemi Sürümü$/u,
+          /^Sürüm$/u,
+        ],
         rows
       );
     if (!osVersionLine) {
@@ -4092,20 +4862,33 @@
           /^Version$/i.test(it) ||
           /^Betriebssystemversion$/i.test(it) ||
           /^OS Version$/i.test(it) ||
-          /^Versión$/i.test(it);
+          /^Versión$/i.test(it) ||
+          /^İşletim Sistemi Sürümü$/u.test(it) ||
+          /^Sürüm$/u.test(it);
         return (
           versionish &&
-          /\b(10|11)\.0\.\d+|Microsoft Windows|Майкрософт Windows|Windows \d+|\bСборка\s*\d+/i.test(k.value || "")
+          /\b(10|11)\.0\.\d+|Microsoft Windows|Майкрософт Windows|Windows \d+|\bСборка\s*\d+|\bDerleme\s*\d+/i.test(
+            k.value || ""
+          )
         );
       });
       osVersionLine = (verKv?.value || "").trim();
     }
     if (!osVersionLine) {
       osVersionLine =
-        kvValI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i], kvs) ||
-        fieldFromRowsI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i], rows);
+        kvValI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Sürüm$/u], kvs) ||
+        fieldFromRowsI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Sürüm$/u], rows);
     }
-    const osBuild = extractWindowsBuildFromVersionLine(osVersionLine);
+    let osBuild = extractWindowsBuildFromVersionLine(osVersionLine);
+    if (!osBuild) {
+      const buildLine =
+        kvFromSummaryI18n(
+          [/^İşletim Sistemi Derlemesi$/u, /^OS Derlemesi$/u, /^Derleme$/u, /^Windows Derlemesi$/u],
+          kvs
+        ) || kvValI18n([/^Derleme$/u, /^İşletim Sistemi Derlemesi$/u], kvs);
+      osBuild = extractWindowsBuildFromVersionLine(buildLine) || "";
+      if (!osBuild && /^\d{4,6}$/.test(String(buildLine || "").trim())) osBuild = String(buildLine).trim();
+    }
 
     const systemTypeRaw =
       kvFromSummaryI18n(
@@ -4122,6 +4905,7 @@
           /^系统类型$/i,
           /^システムの種類$/,
           /^システム\s*タイプ$/,
+          /^Sistem Türü$/u,
         ],
         kvs
       ) ||
@@ -4135,6 +4919,7 @@
           /^Тип компьютера$/i,
           /^Тип ПК$/i,
           /^Вид системы$/i,
+          /^Sistem Türü$/u,
         ],
         kvs
       ) ||
@@ -4149,6 +4934,7 @@
           /^Тип ПК$/i,
           /^Вид системы$/i,
           /^系统类型$/i,
+          /^Sistem Türü$/u,
         ],
         rows
       ) ||
@@ -4164,6 +4950,7 @@
           /^Тип ПК$/i,
           /^Вид системы$/i,
           /^系统类型$/i,
+          /^Sistem Türü$/u,
         ],
         rows
       );
@@ -4180,6 +4967,7 @@
           /^处理器$/i,
           /^プロセッサ$/,
           /^プロセッサー$/,
+          /^İşlemci$/u,
         ],
         kvs
       ) ||
@@ -4191,6 +4979,7 @@
           /^Процессор$/i,
           /^プロセッサ$/,
           /^プロセッサー$/,
+          /^İşlemci$/u,
         ],
         rows
       ) ||
@@ -4202,6 +4991,7 @@
           /^Процессор$/i,
           /^プロセッサ$/,
           /^プロセッサー$/,
+          /^İşlemci$/u,
         ],
         rows
       );
@@ -4218,19 +5008,47 @@
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
           /^時刻帯$/,
+          /^Saat Dilimi$/u,
         ],
         kvs
       ) ||
       kvValI18n(
-        [/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i, /^タイム\s*ゾーン$/, /^タイムゾーン$/, /^時刻帯$/],
+        [
+          /^Time Zone$/i,
+          /^Zeitzone$/i,
+          /^Fuseau horaire$/i,
+          /^Часовой пояс$/i,
+          /^タイム\s*ゾーン$/,
+          /^タイムゾーン$/,
+          /^時刻帯$/,
+          /^Saat Dilimi$/u,
+        ],
         kvs
       ) ||
       fieldFromRowsSummaryPathOnly(
-        [/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i, /^タイム\s*ゾーン$/, /^タイムゾーン$/, /^時刻帯$/],
+        [
+          /^Time Zone$/i,
+          /^Zeitzone$/i,
+          /^Fuseau horaire$/i,
+          /^Часовой пояс$/i,
+          /^タイム\s*ゾーン$/,
+          /^タイムゾーン$/,
+          /^時刻帯$/,
+          /^Saat Dilimi$/u,
+        ],
         rows
       ) ||
       fieldFromRowsI18n(
-        [/^Time Zone$/i, /^Zeitzone$/i, /^Fuseau horaire$/i, /^Часовой пояс$/i, /^タイム\s*ゾーン$/, /^タイムゾーン$/, /^時刻帯$/],
+        [
+          /^Time Zone$/i,
+          /^Zeitzone$/i,
+          /^Fuseau horaire$/i,
+          /^Часовой пояс$/i,
+          /^タイム\s*ゾーン$/,
+          /^タイムゾーン$/,
+          /^時刻帯$/,
+          /^Saat Dilimi$/u,
+        ],
         rows
       );
     const osInstallDate =
@@ -4246,6 +5064,9 @@
           /Data da instalação original/i,
           /Дата установки/i,
           /原始安装日期/i,
+          /Orijinal Kurulum Tarihi/u,
+          /Kurulum Tarihi/u,
+          /^İlk Kurulum Tarihi$/u,
         ],
         kvs
       ) ||
@@ -4256,13 +5077,55 @@
           /Ursprüngliches Installationsdatum/i,
           /^Installationsdatum$/i,
           /Date d'installation/i,
+          /Orijinal Kurulum Tarihi/u,
+          /Orijinal kurulum tarihi/u,
+          /^İlk Kurulum Tarihi$/u,
+          /^Ilk Kurulum Tarihi$/u,
+          /Kurulum Tarihi/u,
+          /^Kurulum tarihi$/u,
         ],
         kvs
       ) ||
       fieldFromRowsI18n(
-        [/Original Install Date/i, /Ursprüngliches Installationsdatum/i, /Date d'installation d'origine/i],
+        [
+          /Original Install Date/i,
+          /Ursprüngliches Installationsdatum/i,
+          /Date d'installation d'origine/i,
+          /Orijinal Kurulum Tarihi/u,
+          /Orijinal kurulum tarihi/u,
+          /^İlk Kurulum Tarihi$/u,
+          /^Ilk Kurulum Tarihi$/u,
+          /Kurulum Tarihi/u,
+        ],
         rows
-      );
+      ) ||
+      fieldFromRowsSummaryPathOnly(
+        [
+          /Original Install Date/i,
+          /Install Date/i,
+          /Orijinal Kurulum Tarihi/u,
+          /Orijinal kurulum tarihi/u,
+          /^İlk Kurulum Tarihi$/u,
+          /^Ilk Kurulum Tarihi$/u,
+          /Kurulum Tarihi/u,
+        ],
+        rows
+      ) ||
+      (() => {
+        const lab = /orijinal\s+kurulum\s+tarihi|ilk\s+kurulum\s+tarihi|kurulum\s+tarihi|original\s+install/i;
+        for (const k of kvs) {
+          if (!msinfoSummaryPathMatches(k.path)) continue;
+          const it = (k.item || "").trim();
+          if (lab.test(it) && String(k.value || "").trim()) return String(k.value).trim();
+        }
+        for (const r of rows) {
+          if (!msinfoSummaryPathMatches(r.path)) continue;
+          for (const [kk, v] of Object.entries(r.fields)) {
+            if (lab.test(kk.trim()) && String(v || "").trim()) return String(v).trim();
+          }
+        }
+        return "";
+      })();
 
     let platformRole =
       kvFromSummaryI18n(
@@ -4276,6 +5139,7 @@
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
+          /^Platform Rolü$/u,
         ],
         kvs
       ) ||
@@ -4290,6 +5154,7 @@
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
+          /^Platform Rolü$/u,
         ],
         kvs
       ) ||
@@ -4301,6 +5166,7 @@
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
+          /^Platform Rolü$/u,
         ],
         rows
       ) ||
@@ -4312,6 +5178,7 @@
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
+          /^Platform Rolü$/u,
         ],
         rows
       );
@@ -4341,26 +5208,44 @@
       fieldFromRowsI18n([/^Chassis Type$/i, /^Gehäusetyp$/i, /^Type de châssis$/i, /^Тип корпуса$/i], rows);
 
     let systemForm = "";
-    const pr = platformRole.toLowerCase();
+    /** Turkish (and similar) platform strings — JS \\b does not treat these letters as "word" chars. */
+    const prNorm = String(platformRole || "").toLocaleLowerCase("tr-TR");
+    const pr = prNorm;
     if (
-      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция/i.test(pr) &&
-      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук/i.test(pr)
-    ) {
-      systemForm = "Desktop / workstation-class";
-    } else if (/\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн/i.test(pr)) {
-      systemForm = "Laptop / mobile-class";
-    } else if (
-      pcSystemType &&
-      /\bdesktop\b|рабочий\s+стол|настольн/i.test(pcSystemType) &&
-      !/\bmobile\b|laptop|ноутбук|планшет/i.test(pcSystemType)
+      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu/i.test(
+        pr
+      ) &&
+      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(pr)
     ) {
       systemForm = "Desktop / workstation-class";
     } else if (
-      pcSystemType &&
-      /\bmobile\b|laptop|notebook|tablet|ноутбук|планшет|переносн/i.test(pcSystemType)
+      /\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
+        pr
+      )
     ) {
       systemForm = "Laptop / mobile-class";
-    } else if (chassisType && /\b(desktop|tower|mini|pizza|low profile|convertible|all in one|mainstream)\b/i.test(chassisType)) {
+    } else if (
+      pcSystemType &&
+      /\bdesktop\b|рабочий\s+стол|настольн|masaüstü|masaustu/i.test(
+        String(pcSystemType).toLocaleLowerCase("tr-TR")
+      ) &&
+      !/\bmobile\b|laptop|ноутбук|планшет|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
+        String(pcSystemType).toLocaleLowerCase("tr-TR")
+      )
+    ) {
+      systemForm = "Desktop / workstation-class";
+    } else if (
+      pcSystemType &&
+      /\bmobile\b|laptop|notebook|tablet|ноутбук|планшет|переносн|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
+        String(pcSystemType).toLocaleLowerCase("tr-TR")
+      )
+    ) {
+      systemForm = "Laptop / mobile-class";
+    } else if (
+      chassisType &&
+      (/\b(desktop|tower|mini|pizza|low profile|convertible|all in one|mainstream)\b/i.test(chassisType) ||
+        /masaüstü|masaustu/i.test(String(chassisType).toLocaleLowerCase("tr-TR")))
+    ) {
       if (/all\s*in\s*one|convertible/i.test(chassisType)) {
         systemForm = /convertible/i.test(chassisType)
           ? "Laptop / mobile-class (2-in-1 / convertible chassis)"
@@ -4370,20 +5255,27 @@
       }
     } else if (
       chassisType &&
-      /\b(notebook|laptop|portable|handheld|tablet|ноутбук|планшет|переносн)\b/i.test(chassisType)
+      (/\b(notebook|laptop|portable|handheld|tablet|ноутбук|планшет|переносн)\b/i.test(chassisType) ||
+        /dizüstü|dizustu|taşınabilir|tasinabilir/i.test(String(chassisType).toLocaleLowerCase("tr-TR")))
     ) {
       systemForm = "Laptop / mobile-class";
     } else {
-      let blob = formHints.join(" ").toLowerCase();
+      let blob = formHints.join(" ").toLocaleLowerCase("tr-TR");
       blob = blob
         .replace(/\blaptop\s*gpu\b/gi, " ")
         .replace(/\bmobile\s*gpu\b/gi, " ")
         .replace(/\bnotebook\s*gpu\b/gi, " ");
-      if (/laptop|notebook|portable|convertible|tablet|slate|book(?! drive)/i.test(blob)) {
+      if (
+        /laptop|notebook|portable|convertible|tablet|slate|book(?! drive)|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
+          blob
+        )
+      ) {
         systemForm = "Laptop / mobile-class";
       } else if (/all-in-one|\baio\b/i.test(blob)) {
         systemForm = "All-in-one (desktop with integrated display)";
-      } else if (/desktop|tower|mini pc|workstation|small form|sff|docking|docked/i.test(blob)) {
+      } else if (
+        /desktop|tower|mini pc|workstation|small form|sff|docking|docked|masaüstü|masaustu/i.test(blob)
+      ) {
         systemForm = "Desktop / workstation-class";
       } else if (blob.trim()) {
         systemForm = `See hints: ${formHints[0]}`;
@@ -4407,7 +5299,9 @@
         /^Версия BIOS\/дата$/i.test(it) ||
         /^Версия\s+BIOS\s*\/\s*дата$/i.test(it) ||
         /^Версия\s*BIOS$/i.test(it) ||
-        /^BIOS版本\/日期$/i.test(it)
+        /^BIOS版本\/日期$/i.test(it) ||
+        /^BIOS\s+Sürümü\s*\/\s*Tarihi$/iu.test(it) ||
+        /^BIOS\s+Sürümü\/Tarihi$/iu.test(it)
       );
     });
     if (biosKv) {
@@ -4421,10 +5315,10 @@
             /^BIOS-Version$/i.test((k.item || "").trim()) ||
             /^Version du BIOS$/i.test((k.item || "").trim()) ||
             /^Версия\s*BIOS$/i.test((k.item || "").trim())) &&
-          !/date|datum|fecha|дата|日期/i.test((k.item || "").trim())
+          !/date|datum|fecha|дата|日期|tarih/i.test((k.item || "").trim())
       );
       const d = kvs.find((k) =>
-        /BIOS.*Date|Release Date|BIOS-Datum|Datum du BIOS|fecha del BIOS|Data do BIOS|дата BIOS/i.test(
+        /BIOS.*Date|Release Date|BIOS-Datum|Datum du BIOS|fecha del BIOS|Data do BIOS|дата BIOS|BIOS.*Tarih/i.test(
           (k.item || "").trim()
         )
       );
@@ -4434,14 +5328,20 @@
         (k) =>
           /\/BIOS$/i.test(k.path) ||
           /Components.*BIOS/i.test(k.path) ||
-          /Компоненты.*BIOS/i.test(k.path)
+          /Компоненты.*BIOS/i.test(k.path) ||
+          /Bileşenler.*BIOS/i.test(k.path)
       );
       if (!biosVersion) {
-        const ver = pathBios.find((k) => /^Version$/i.test(k.item) || /^Версия$/i.test((k.item || "").trim()));
+        const ver = pathBios.find(
+          (k) =>
+            /^Version$/i.test(k.item) ||
+            /^Версия$/i.test((k.item || "").trim()) ||
+            /^Sürüm$/iu.test((k.item || "").trim())
+        );
         if (ver) biosVersion = ver.value;
       }
       if (!biosDate) {
-        const rd = pathBios.find((k) => /Date|Дата/i.test(k.item || ""));
+        const rd = pathBios.find((k) => /Date|Дата|Tarih/i.test(k.item || ""));
         if (rd) biosDate = rd.value;
       }
     }
@@ -4482,6 +5382,8 @@
             driverVersion: displayFieldByLabels(nvFields, [
               "Driver Version",
               "Версия драйвера",
+              "Sürücü Sürümü",
+              "Sürücü Versiyonu",
               "ドライバーのバージョン",
               "ドライバのバージョン",
               "ドライバー バージョン",
@@ -4490,6 +5392,7 @@
             driverDate: displayFieldByLabels(nvFields, [
               "Driver Date",
               "Дата драйвера",
+              "Sürücü Tarihi",
               "ドライバーの日付",
               "ドライバの日付",
               "ドライバー 日付",
@@ -4505,11 +5408,14 @@
               "PNP デバイス ID",
               "PNPデバイス ID",
               "Plug and Play デバイス ID",
+              "Tak ve Çalıştır Aygıt Kimliği",
+              "Tak ve Çalıştır aygıt kimliği",
             ]),
             adapterType: displayFieldByLabels(nvFields, [
               "Adapter Type",
               "Тип адаптера",
               "Описание адаптера",
+              "Bağdaştırıcı Türü",
               "アダプターの種類",
               "アダプター種類",
               "アダプタの種類",
@@ -4522,6 +5428,7 @@
               "Adapter RAM",
               "ОЗУ адаптера",
               "Память адаптера",
+              "Bağdaştırıcı RAM",
               "アダプター RAM",
               "アダプタ RAM",
               "アダプターの RAM",
@@ -4576,7 +5483,7 @@
     const problems = [];
     /** MSInfo “Problem Devices” lives under Components; Russian builds often use «Устройства с неполадками». */
     const problemPathRe =
-      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス/i;
+      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス|Sorunlu\s+Aygıtlar|Sorunlu\s+aygıtlar|Sorunlu\s+Cihazlar|Sorunlu\s+cihazlar/i;
     const pathLooksLikeProblemDevices = (/** @type {string} */ p) => {
       const s = String(p || "");
       if (problemPathRe.test(s)) return true;
@@ -4585,13 +5492,18 @@
       return false;
     };
     /** Normalize MSInfo row/item labels (spaces, underscores, NBSP, BOM) for column matching. */
-    const problemFieldKeyCompact = (/** @type {string} */ s) =>
-      String(s || "")
+    const problemFieldKeyCompact = (/** @type {string} */ s) => {
+      const t = String(s || "")
         .replace(/^\ufeff/, "")
         .replace(/\u00a0/g, " ")
         .trim()
-        .toLowerCase()
-        .replace(/[\s_-]+/g, "");
+        .replace(/[\s_.-]+/g, "");
+      try {
+        return t.toLocaleLowerCase("tr-TR");
+      } catch {
+        return t.toLowerCase();
+      }
+    };
     /** @param {Record<string, string>} f */
     const rowValueByCompactKeys = (f, /** @type {string[]} */ wantedCompacts) => {
       const want = new Set(wantedCompacts);
@@ -4623,6 +5535,8 @@
           "название",
           "デバイス名",
           "デバイス",
+          "aygıt",
+          "cihaz",
         ]) ||
         "";
       const vendor =
@@ -4632,7 +5546,15 @@
         f["Код устройства PNP"] ||
         f["PNP デバイス ID"] ||
         f["PNPデバイス ID"] ||
-        rowValueByCompactKeys(f, ["pnpdeviceid", "кодустройстваpnp", "pnpデバイスid", "plugandplayデバイスid"]) ||
+        f["Tak ve Çalıştır Aygıt Kimliği"] ||
+        f["Tak ve Çalıştır aygıt kimliği"] ||
+        rowValueByCompactKeys(f, [
+          "pnpdeviceid",
+          "кодустройстваpnp",
+          "pnpデバイスid",
+          "plugandplayデバイスid",
+          "takveçalıştıraygıtkimliği",
+        ]) ||
         f.Vendor ||
         f.Manufacturer ||
         f.Provider ||
@@ -4662,6 +5584,9 @@
           "問題のコード",
           "問題コード",
           "エラーコード",
+          "sorunkodu",
+          "hatakodu",
+          "sorun",
         ]) ||
         f.Error ||
         f.Status ||
@@ -4691,7 +5616,9 @@
           c === "устройство" ||
           c === "название" ||
           c === "デバイス名" ||
-          c === "デバイス"
+          c === "デバイス" ||
+          c === "aygıt" ||
+          c === "cihaz"
         );
       };
       const isPnpItem = (/** @type {string} */ it) => {
@@ -4701,7 +5628,8 @@
           c === "pnp_device_id" ||
           c === "кодустройстваpnp" ||
           c === "pnpデバイスid" ||
-          c === "plugandplayデバイスid"
+          c === "plugandplayデバイスid" ||
+          c === "takveçalıştıraygıtkimliği"
         );
       };
       const isErrorDetailItem = (/** @type {string} */ it) => {
@@ -4719,7 +5647,11 @@
           c === "問題コード" ||
           c === "エラーコード" ||
           /^問題/.test(c) ||
-          /^エラー/.test(c)
+          /^エラー/.test(c) ||
+          c === "sorunkodu" ||
+          c === "hatakodu" ||
+          c === "sorun" ||
+          /^sorun/.test(c)
         );
       };
       for (const k of kvs) {
@@ -4778,12 +5710,13 @@
           /ページ\s*ファイルの場所/i,
           /ページング\s*ファイルの場所/i,
           /ページ\s*ファイル\s*の\s*場所/i,
+          /Sayfalama\s+Dosyası(?:\s+Konumları?|\s+Konumu)/iu,
         ]) || "";
       if (v) return v;
       for (const k of kvs) {
         const it = (k.item || "").trim();
         if (
-          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所/i.test(
+          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum/i.test(
             it
           ) &&
           k.value.trim()
@@ -4800,6 +5733,7 @@
             /^archivo de paginación$/i.test(it) ||
             /^arquivo de paginação$/i.test(it) ||
             /^файл подкачки$/i.test(it) ||
+            /^sayfalama\s+dosyası$/iu.test(it) ||
             /^ページ\s*ファイル$/i.test(it) ||
             /^ページング\s*ファイル$/i.test(it)) &&
           looksLikePageFilePath(k.value)
@@ -4810,14 +5744,16 @@
       for (const r of rows) {
         if (
           !MSINFO_I18N.memoryRowPath.test(r.path) &&
-          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页|подкачк|ページ|メモリ/i.test(r.path)
+          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页|подкачк|ページ|メモリ|Sayfalama|sayfalama/i.test(
+            r.path
+          )
         ) {
           continue;
         }
         for (const [key, val] of Object.entries(r.fields)) {
           const kt = key.trim();
           if (
-            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所/i.test(
+            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum/i.test(
               kt
             ) &&
             String(val).trim()
@@ -4830,6 +5766,7 @@
               /^fichier d'échange$/i.test(kt) ||
               /^archivo de paginación$/i.test(kt) ||
               /^файл подкачки$/i.test(kt) ||
+              /^sayfalama\s+dosyası$/iu.test(kt) ||
               /^ページ\s*ファイル$/i.test(kt) ||
               /^ページング\s*ファイル$/i.test(kt)) &&
             looksLikePageFilePath(String(val))
@@ -4858,6 +5795,8 @@
         /^已安装的物理内存/i,
         /^インストール済み(?:の)?物理メモリ/i,
         /物理メモリ.*RAM|RAM.*物理メモリ/i,
+        /Yüklü\s+Fiziksel\s+Bellek\s*\(\s*RAM\s*\)/iu,
+        /^Yüklü\s+Fiziksel\s+Bellek$/iu,
       ]),
       totalPhysical: pickSummaryMemory([
         /^Total Physical Memory$/i,
@@ -4871,6 +5810,7 @@
         /^合計の物理メモリ/i,
         /^合計\s*物理メモリ/i,
         /^物理メモリの合計/i,
+        /^Toplam Fiziksel Bellek$/iu,
       ]),
       availablePhysical: pickSummaryMemory([
         /^Available Physical Memory$/i,
@@ -4883,6 +5823,7 @@
         /^可用物理内存$/i,
         /^利用可能な物理メモリ/i,
         /^使用可能な物理メモリ/i,
+        /^Kullanılabilir Fiziksel Bellek$/iu,
       ]),
       totalVirtual: pickSummaryMemory([
         /^Total Virtual Memory$/i,
@@ -4895,6 +5836,7 @@
         /^合計の仮想メモリ/i,
         /^合計\s*仮想メモリ/i,
         /^仮想メモリの合計/i,
+        /^Toplam Sanal Bellek$/iu,
       ]),
       availableVirtual: pickSummaryMemory([
         /^Available Virtual Memory$/i,
@@ -4907,6 +5849,7 @@
         /^可用虚拟内存$/i,
         /^利用可能な仮想メモリ/i,
         /^使用可能な仮想メモリ/i,
+        /^Kullanılabilir Sanal Bellek$/iu,
       ]),
       pageFileSpace: pickSummaryMemory([
         /Page File Space/i,
@@ -4921,6 +5864,7 @@
         /^ページ\s*ファイルのサイズ/i,
         /^ページング\s*ファイルのサイズ/i,
         /^ページ\s*ファイル\s*空間/i,
+        /^Sayfalama\s+Dosyası\s+Alanı$/iu,
       ]),
       pageFileLocation: pickPageFileLocation(),
     };
@@ -5207,6 +6151,8 @@
     if (!item.trim() && imFr) item = imFr[2] != null ? imFr[2] : imFr[3] || "";
     const imJa = attrBlob.match(/(?:^|[\s,])項目\s*=\s*("([^"]*)"|'([^']*)')/);
     if (!item.trim() && imJa) item = imJa[2] != null ? imJa[2] : imJa[3] || "";
+    const imTr = attrBlob.match(/(?:^|[\s,])Öğe\s*=\s*("([^"]*)"|'([^']*)')/iu);
+    if (!item.trim() && imTr) item = imTr[2] != null ? imTr[2] : imTr[3] || "";
     const vm = attrBlob.match(/\bValue\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (vm) value = vm[2] != null ? vm[2] : vm[3] || "";
     const vmRu = attrBlob.match(/(?:^|[\s,])Значение\s*=\s*("([^"]*)"|'([^']*)')/i);
@@ -5215,6 +6161,8 @@
     if (!value.trim() && vmFr) value = vmFr[2] != null ? vmFr[2] : vmFr[3] || "";
     const vmJa = attrBlob.match(/(?:^|[\s,])値\s*=\s*("([^"]*)"|'([^']*)')/);
     if (!value.trim() && vmJa) value = vmJa[2] != null ? vmJa[2] : vmJa[3] || "";
+    const vmTr = attrBlob.match(/(?:^|[\s,])Değer\s*=\s*("([^"]*)"|'([^']*)')/iu);
+    if (!value.trim() && vmTr) value = vmTr[2] != null ? vmTr[2] : vmTr[3] || "";
     return { item: norm(item), value: norm(decodeXmlishText(value)) };
   }
 
@@ -5230,6 +6178,7 @@
       [/<元素\b[^>]*>([\s\S]*?)<\/元素>/, /<值\b[^>]*>([\s\S]*?)<\/值>/],
       [/<항목\b[^>]*>([\s\S]*?)<\/항목>/, /<값\b[^>]*>([\s\S]*?)<\/값>/],
       [/<Eintrag\b[^>]*>([\s\S]*?)<\/Eintrag>/i, /<Wert\b[^>]*>([\s\S]*?)<\/Wert>/i],
+      [/<Öğe\b[^>]*>([\s\S]*?)<\/Öğe>/iu, /<Değer\b[^>]*>([\s\S]*?)<\/Değer>/iu],
     ];
     for (const [itemRe, valRe] of pairs) {
       const im = inner.match(itemRe);
@@ -5266,6 +6215,7 @@
 
       let m = rest.match(/^<Category\b[^>]*\bname\s*=\s*("([^"]*)"|'([^']*)')[^>]*>/i);
       if (!m) m = rest.match(/^<Category\b[^>]*名前\s*=\s*("([^"]*)"|'([^']*)')[^>]*>/);
+      if (!m) m = rest.match(/^<Category\b[^>]*\b(?:Ad|İsim)\s*=\s*("([^"]*)"|'([^']*)')[^>]*>/iu);
       if (m) {
         const name = (m[2] != null ? m[2] : m[3] || "").replace(/\s+/g, " ").trim();
         if (name) stack.push(name);
@@ -5367,6 +6317,7 @@
         ["élément", "valeur"],
         ["element", "wert"],
         ["elemento", "valor"],
+        ["öğe", "değer"],
       ];
       return pairs.some(([p, q]) => a === p && b === q);
     };
@@ -5752,6 +6703,17 @@
   }
 
   /**
+   * Turkish Windows strings often use only ASCII + a few letters; still needs Translate (e.g. service display names).
+   * @param {string} s
+   */
+  function looksLikeTurkishWindowsLatinHint(s) {
+    const u = String(s || "");
+    return /\bhizmeti\b|\bHizmeti\b|\bUygulama\b|\bYönlendirici\b|\byönlendirici\b|\bAltyapı\b|\bAltyapi\b|\bOluşturucu\b|\bOlusturucu\b|\bYöneticisi\b|\bYoneticisi\b|\sGeçidi\b|\sGecidi\b|\bKatmanı\b|\bKatmani\b|\bBilgileri\b|\bKimliği\b|\bKimligi\b|\bCihazlar\b|\bYetenek\b|\bGörevleri\b|\bGorevleri\b|\bArka\s+Plan\b|\bBağlı\b|\bBagli\b|\bBitiş\b|\bBitis\b|\bNoktası\b|\bNoktasi\b|\bErişim\b|\bErisim\b|\bWindows\s+Ses\b|\bHazır\b|\bHazir\b|\bYönetimi\b|\bYonetimi\b|\bDurumu\b|\bModu\b|\bTürü\b|\bTuru\b|\bAtamalı\b|\bAtamali\b|\bHatalı\b|\bHatali\b|\bBildirimi\b|\bRaporlaması\b|\bRaporlamasi\b|\bHata\s+demeti\b|\bOlay\s+Adı\b|\bOlay\s+adi\b|\bÖzel\s+durum\b|\bOzel\s+durum\b|\bmodül\b|\bmodul\b|\bzaman\s+damgası\b|\bzaman\s+damgasi\b|\bRapor\s+kimliği\b|\bRapor\s+kimligi\b|\bWindows\s+ile\s+birlikte\s+çalışmayı\b|\bWindows\s+ile\s+birlikte\s+calismayi\b/i.test(
+      u
+    );
+  }
+
+  /**
    * True when text looks non-English for common Windows display languages (Arabic, CJK, Cyrillic, Greek, Hangul, kana, Latin with European diacritics).
    * Used to show the section Translate control; phrase maps cover Russian + intl. pairs below as best-effort.
    * @param {string} s
@@ -5766,7 +6728,47 @@
     if (/[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/.test(t)) return true;
     if (/[\uAC00-\uD7AF]/.test(t)) return true;
     if (/[\u0100-\u024F\u1E00-\u1EFF]/.test(t)) return true;
+    /** Latin-1 letters (ü, ö, ç, ñ, …) — needed for Turkish/German/etc. not covered by U+0100+. */
+    if (/[\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u00FF]/.test(t)) return true;
+    /** Turkish MSInfo sizes often use ASCII “Bayt” / “…bayt” with no accented letters — still needs Translate. */
+    if (/\bBayt\b/i.test(t)) return true;
+    if (/\b(Giga|Mega|Tera|Kilo)bayt\b/i.test(t)) return true;
+    /** “Derleme” (build) and similar OS strings are Turkish but all-ASCII. */
+    if (/\bDerleme\b/i.test(t)) return true;
+    if (/\bİşletim\b/i.test(t) || /\bIsletim\b/i.test(t)) return true;
+    /** Turkish display exports: “NVIDIA uyumlu”, etc. (ASCII-only; needs Translate + phrase map). */
+    if (/\buyumlu\b/i.test(t)) return true;
+    if (looksLikeTurkishWindowsLatinHint(t)) return true;
     return false;
+  }
+
+  /**
+   * Offer section-level Translate on Graphics (GPU) when values look localized.
+   * @param {unknown} graphics
+   */
+  function graphicsNeedsTranslateHint(graphics) {
+    if (!graphics || typeof graphics !== "object") return false;
+    const g = /** @type {Record<string, unknown>} */ (graphics);
+    const parts = [];
+    for (const a of Array.isArray(g.adapters) ? g.adapters : []) {
+      if (!a || typeof a !== "object") continue;
+      const rec = /** @type {Record<string, unknown>} */ (a);
+      for (const k of ["name", "driverVersionDisplay", "driverFull", "adapterType", "driverDate", "adapterRam", "resolution"]) {
+        const v = rec[k];
+        if (v != null && String(v).trim()) parts.push(String(v));
+      }
+    }
+    for (const slot of ["intel", "nvidia"]) {
+      const a = g[slot];
+      if (!a || typeof a !== "object") continue;
+      const rec = /** @type {Record<string, unknown>} */ (a);
+      for (const k of ["name", "driverVersionDisplay", "adapterType", "driverDate", "adapterRam", "resolution"]) {
+        const v = rec[k];
+        if (v != null && String(v).trim()) parts.push(String(v));
+      }
+    }
+    const blob = parts.join(" ");
+    return localeScriptLooksNonEnglishListed(blob) || /\buyumlu\b/i.test(blob);
   }
 
   /**
@@ -5956,6 +6958,136 @@
    * @type {readonly (readonly [string, string])[]}
    */
   const LOCALE_PAIRS_MSINFO_INTL = [
+    // --- Turkish (tr) ---
+    ["Yazılım Ortamı / Windows Hata Raporları", "Software Environment / Windows Error Reporting"],
+    ["Yazılım Ortamı / Windows Hata Bildirimleri", "Software Environment / Windows Error Reporting"],
+    ["Windows Hata Raporları", "Windows Error Reporting"],
+    ["Windows Hata Raporlaması", "Windows Error Reporting"],
+    ["Windows Hata Raporlama", "Windows Error Reporting"],
+    ["Yazılım Ortamı / Windows Hata Raporlaması", "Software Environment / Windows Error Reporting"],
+    ["Yazılım Ortamı / Windows Hata Raporlama", "Software Environment / Windows Error Reporting"],
+    ["Windows Hata Bildirimleri", "Windows Error Reporting"],
+    ["Yazılım Ortamı / Windows Hata Bildirimi", "Software Environment / Windows Error Reporting"],
+    ["Windows Hata Bildirimi", "Windows Error Reporting"],
+    ["Windows ile birlikte çalışmayı durdurdu ve kapatıldı", "stopped working with Windows and was closed"],
+    ["Windows ile birlikte calismayi durdurdu ve kapatildi", "stopped working with Windows and was closed"],
+    ["Hatalı paketle ilgili uygulama kimliği:", "Faulting package-relative application ID:"],
+    ["Hatali paketle ilgili uygulama kimligi:", "Faulting package-relative application ID:"],
+    ["Hatalı paket tam adı:", "Faulting package full name:"],
+    ["Hatali paket tam adi:", "Faulting package full name:"],
+    ["Uygulama başlangıç zamanı:", "Application start time:"],
+    ["Uygulama baslangic zamani:", "Application start time:"],
+    ["Hatalı uygulama yolu:", "Faulting application path:"],
+    ["Hatali uygulama yolu:", "Faulting application path:"],
+    ["Hatalı modül yolu:", "Faulting module path:"],
+    ["Hatali modul yolu:", "Faulting module path:"],
+    ["Hatalı işlem kimliği:", "Faulting process id:"],
+    ["Hatali islem kimligi:", "Faulting process id:"],
+    ["Hatalı uygulama adı:", "Faulting application name:"],
+    ["Hatali uygulama adi:", "Faulting application name:"],
+    ["Hatalı modül adı:", "Faulting module name:"],
+    ["Hatali modul adi:", "Faulting module name:"],
+    ["Özel durum kodu:", "Exception code:"],
+    ["Ozel durum kodu:", "Exception code:"],
+    ["zaman damgası:", "Time stamp:"],
+    ["zaman damgasi:", "Time stamp:"],
+    ["Hata uzaklığı:", "Fault offset:"],
+    ["Hata uzakligi:", "Fault offset:"],
+    ["Rapor kimliği:", "Report ID:"],
+    ["Rapor kimligi:", "Report ID:"],
+    ["Hata demeti", "Fault bucket"],
+    ["Olay Adı:", "Event name:"],
+    ["Olay adı:", "Event name:"],
+    ["Olay Adı", "Event name"],
+    ["Yanıt:", "Response:"],
+    ["Yanit:", "Response:"],
+    ["Kullanılamıyor", "Not available"],
+    ["Kullanilamiyor", "Not available"],
+    ["Uygulama Hatası", "Application Error"],
+    ["Uygulama Hatasi", "Application Error"],
+    ["Uygulama Askıda", "Application Hang"],
+    ["Uygulama Askida", "Application Hang"],
+    ["sürüm:", "version:"],
+    ["surum:", "version:"],
+    ["Sistem özeti", "System Summary"],
+    ["Bileşenler", "Components"],
+    ["Görüntü", "Display"],
+    ["Grafikler", "Graphics"],
+    ["Ağ", "Network"],
+    ["Ağ bağdaştırıcıları", "Network Adapters"],
+    ["İşletim Sistemi Adı", "OS Name"],
+    ["İşletim Sistemi Sürümü", "OS Version"],
+    ["Derleme", "Build"],
+    ["İşletim Sistemi Derlemesi", "OS Build"],
+    ["Sistem Türü", "System Type"],
+    ["İşlemci", "Processor"],
+    ["Saat Dilimi", "Time Zone"],
+    ["Platform Rolü", "Platform Role"],
+    ["Orijinal Kurulum Tarihi", "Original Install Date"],
+    ["Yüklü Fiziksel Bellek (RAM)", "Installed Physical Memory (RAM)"],
+    ["Yüklü Fiziksel Bellek", "Installed Physical Memory"],
+    ["Toplam Fiziksel Bellek", "Total Physical Memory"],
+    ["Kullanılabilir Fiziksel Bellek", "Available Physical Memory"],
+    ["Toplam Sanal Bellek", "Total Virtual Memory"],
+    ["Kullanılabilir Sanal Bellek", "Available Virtual Memory"],
+    ["Sayfalama Dosyası", "Page File"],
+    ["Sayfalama Dosyası Alanı", "Page File Space"],
+    ["Sayfalama Dosyası Konumu", "Page File Location(s)"],
+    ["Sayfalama Dosyası Konumları", "Page File Location(s)"],
+    ["Dosya Sistemi", "File System"],
+    ["Toplam Boyut", "Total Size"],
+    ["Boş Alan", "Free Space"],
+    ["Kullanılan Alan", "Used"],
+    ["Sürücü Harfi", "Drive Letter"],
+    ["Yerel Disk", "Local Disk"],
+    ["Sabit Disk", "Local Fixed Disk"],
+    ["Ağ Sürücüsü", "Network drive"],
+    ["Çıkarılabilir Depolama", "Removable storage"],
+    ["DVD Sürücüsü", "Optical drive"],
+    ["Sürücü Sürümü", "Driver Version"],
+    ["Sürücü Versiyonu", "Driver Version"],
+    ["Sürücü Tarihi", "Driver Date"],
+    ["Bağdaştırıcı Türü", "Adapter Type"],
+    ["Bağdaştırıcı RAM", "Adapter RAM"],
+    ["Tak ve Çalıştır Aygıt Kimliği", "PNP Device ID"],
+    ["Çözünürlük", "Resolution"],
+    ["Geçerli Çözünürlük", "Current Resolution"],
+    ["Bağlantı Adı", "Connection Name"],
+    ["Varsayılan Ağ Geçidi", "Default Gateway"],
+    ["Alt Ağ Maskesi", "Subnet Mask"],
+    ["Fiziksel Adres", "Physical Address"],
+    ["Hız", "Speed"],
+    ["Üretici", "Manufacturer"],
+    ["Ürün", "Product"],
+    ["Seri Numarası", "Serial Number"],
+    ["Anakart", "Motherboard"],
+    ["Kasa Türü", "Chassis Type"],
+    ["Bilgisayar Sistemi Türü", "PC System Type"],
+    ["Sistem Ailesi", "System Family"],
+    ["Evet", "Yes"],
+    ["Hayır", "No"],
+    ["Çalışıyor", "Running"],
+    ["Durduruldu", "Stopped"],
+    ["Devre Dışı", "Disabled"],
+    ["Otomatik", "Automatic"],
+    ["Elle", "Manual"],
+    ["Uyumlu", "compatible"],
+    ["NVIDIA uyumlu", "NVIDIA-compatible"],
+    ["Intel uyumlu", "Intel-compatible"],
+    ["AMD uyumlu", "AMD-compatible"],
+    ["x64 tabanlı bilgisayar", "x64-based PC"],
+    ["x86 tabanlı bilgisayar", "x86-based PC"],
+    ["ARM64 tabanlı bilgisayar", "ARM64-based PC"],
+    ["Hata kapsayıcısı", "Error container"],
+    ["Olay Adı:", "Event name:"],
+    ["Yanıt: Veri yok", "Response: No data"],
+    ["Veri yok", "No data"],
+    ["Sorun İmzası:", "Problem signature:"],
+    ["Ekli Dosyalar:", "Attached files:"],
+    ["Dosya sistemi", "File System"],
+    ["Toplam boyut", "Total Size"],
+    ["Boş alan", "Free Space"],
+    ["Kullanılamıyor", "Unavailable"],
     // --- German (de) ---
     ["Softwareumgebung / Windows-Fehlerberichte", "Software Environment / Windows Error Reporting"],
     ["Windows-Fehlerberichte", "Windows Error Reporting"],
@@ -6390,29 +7522,6 @@
     ["Igen", "Yes"],
     ["Nem", "No"],
     ["Nem érhető el", "Unavailable"],
-    // --- Turkish (tr) ---
-    ["Yazılım Ortamı / Windows Hata Bildirimleri", "Software Environment / Windows Error Reporting"],
-    ["Windows Hata Bildirimleri", "Windows Error Reporting"],
-    ["Hata kapsayıcısı", "Error container"],
-    ["Olay Adı:", "Event name:"],
-    ["Yanıt: Veri yok", "Response: No data"],
-    ["Veri yok", "No data"],
-    ["Sorun İmzası:", "Problem signature:"],
-    ["Ekli Dosyalar:", "Attached files:"],
-    ["x64 tabanlı bilgisayar", "x64-based PC"],
-    ["Yüklü Fiziksel Bellek (RAM)", "Installed Physical Memory (RAM)"],
-    ["Dosya sistemi", "File System"],
-    ["Toplam boyut", "Total Size"],
-    ["Boş alan", "Free Space"],
-    ["Kullanılan", "Used"],
-    ["Çalışıyor", "Running"],
-    ["Durduruldu", "Stopped"],
-    ["Devre Dışı", "Disabled"],
-    ["Otomatik", "Automatic"],
-    ["Elle", "Manual"],
-    ["Evet", "Yes"],
-    ["Hayır", "No"],
-    ["Kullanılamıyor", "Unavailable"],
     // --- Greek (el) ---
     ["Λογισμικό / Αναφορές σφαλμάτων των Windows", "Software Environment / Windows Error Reporting"],
     ["Αναφορές σφαλμάτων των Windows", "Windows Error Reporting"],
@@ -6698,9 +7807,65 @@
     ["사용할 수 없음", "Unavailable"],
   ];
 
+  /**
+   * Turkish Windows service / UI display strings → English (offline; best-effort for Translate).
+   * Longer phrases first; merged into {@link MSINFO_I18N_EN_TOKEN_PAIRS} after sort.
+   * @type {readonly (readonly [string, string])[]}
+   */
+  const LOCALE_PAIRS_MSINFO_TR_SERVICES = [
+    ["Windows Ses Bitiş Noktası Oluşturucu", "Windows Audio Endpoint Builder"],
+    ["Arka Plan Görevleri Altyapı Hizmeti", "Background Tasks Infrastructure Service"],
+    ["Yetenek Erişim Yöneticisi Hizmeti", "Capability Access Manager Service"],
+    ["Bağlı Cihazlar Platformu Hizmeti", "Connected Devices Platform Service"],
+    ["Uygulama Katmanı Ağ Geçidi Hizmeti", "Application Layer Gateway Service"],
+    ["Uygulama Katmanı Network Geçidi Hizmeti", "Application Layer Gateway Service"],
+    ["Uygulama Hazır Olma Durumu", "Application Readiness"],
+    ["AssignedAccessManager Hizmeti", "AssignedAccessManager Service"],
+    ["AllJoyn Yönlendirici Hizmeti", "AllJoyn Router Service"],
+    ["Temel Filtre Altyapısı", "Base Filtering Engine"],
+    ["Uygulama Bilgileri", "Application Information"],
+    ["Uygulama Yönetimi", "Application Management"],
+    ["Uygulama Kimliği", "Application Identity"],
+    ["Uygulama Katmanı", "Application Layer"],
+    ["Yazdırma Biriktiricisi", "Print Spooler"],
+    ["Uzaktan Kayıt Defteri", "Remote Registry"],
+    ["Konuk Ağ Hizmeti", "Guest Service"],
+    ["Konum Bildirimi", "Location Notification"],
+    ["Ağ Bağlantısı Yardımcısı", "Network Connection Broker"],
+    ["Ağ Listesi Hizmeti", "Network List Service"],
+    ["Ağ Depolama Hizmeti", "Network Store Interface Service"],
+    ["Yerel Oturum Yardımcısı", "Local Session Manager"],
+    ["Yerel Olay Günlüğü", "Windows Event Log"],
+    ["Güvenlik Hesabı Yöneticisi", "Security Accounts Manager"],
+    ["Güvenlik Merkezi", "Security Center"],
+    ["Windows Güvenlik Hizmeti", "Microsoft Defender Antivirus Service"],
+    ["Windows Güncelleştirmesi", "Windows Update"],
+    ["Windows Zamanı", "Windows Time"],
+    ["Windows Bağlantısı", "Windows Connection"],
+    ["Windows Yönetim Araçları", "Windows Management Instrumentation"],
+    ["Windows Yönetim Araçları Hizmeti", "Windows Management Instrumentation"],
+    ["Yönetim Araçları", "Management Instrumentation"],
+    ["Cihaz Kurulum Yöneticisi", "Device Setup Manager"],
+    ["Cihaz Seçici", "Device Association Service"],
+    ["Dağıtılmış Bağlantı İzleme İstemcisi", "Distributed Link Tracking Client"],
+    ["Dağıtılmış İşlem Düzenleyicisi", "Distributed Transaction Coordinator"],
+    ["DNS İstemcisi", "DNS Client"],
+    ["DHCP İstemcisi", "DHCP Client"],
+    ["Görev Zamanlayıcı", "Task Scheduler"],
+    ["Uzaktan Yordam Çağrısı", "Remote Procedure Call"],
+    ["Uzaktan Yordam Çağrısı (RPC)", "Remote Procedure Call (RPC)"],
+    ["Windows Ses", "Windows Audio"],
+    ["AVCTP hizmeti", "AVCTP service"],
+    ["AVCTP Hizmeti", "AVCTP service"],
+    ["uygulama bilgileri", "Application Information"],
+    ["windows ses", "Windows Audio"],
+  ];
+
   const MSINFO_I18N_EN_TOKEN_PAIRS = Object.freeze(
     /** @type {readonly (readonly [string, string])[]} */ (
-      [...LOCALE_PAIRS_MSINFO_RU, ...LOCALE_PAIRS_MSINFO_INTL].sort((a, b) => b[0].length - a[0].length)
+      [...LOCALE_PAIRS_MSINFO_RU, ...LOCALE_PAIRS_MSINFO_INTL, ...LOCALE_PAIRS_MSINFO_TR_SERVICES].sort(
+        (a, b) => b[0].length - a[0].length
+      )
     )
   );
 
@@ -6733,7 +7898,14 @@
 
   /** Decode common MSInfo / WER HTML-style line breaks so Russian tokens match across “&#x000d;&#x000a;”. */
   function normalizeMsinfoLineBreakEntities(s) {
-    return decodeMsinfoNumericHtmlEntities(String(s ?? ""))
+    let t = String(s ?? "");
+    /** Exports sometimes double-escape numeric refs ({@code &amp;#x000d;}) so they survive as literals in text. */
+    for (let i = 0; i < 4; i++) {
+      const n = t.replace(/&amp;(#x[0-9a-fA-F]{1,6};|#\d{1,7};)/gi, "&$1");
+      if (n === t) break;
+      t = n;
+    }
+    return decodeMsinfoNumericHtmlEntities(t)
       .replace(/&#x000d;&#x000a;/gi, "\n")
       .replace(/&#000d;&#000a;/gi, "\n")
       .replace(/&#13;&#10;/gi, "\n")
@@ -6779,7 +7951,51 @@
       .replace(/(\d)\s*ヘルツ/g, "$1 Hz")
       .replace(/(\d+)\s*ビット/g, "$1-bit")
       .replace(/、/g, ", ")
-      .replace(/\bMhz\b/gi, "MHz");
+      .replace(/\bMhz\b/gi, "MHz")
+      /** No \\b: JS word boundaries only treat ASCII [A-Za-z0-9_] as words, so Turkish letters break \\b…\\b matches. */
+      .replace(/Mantıksal\s+İşlemci/giu, "logical processor")
+      .replace(/Mantıksal\s+Processor/giu, "logical processor")
+      .replace(/Çekirdek/giu, "core")
+      .replace(/Masaüstü/giu, "Desktop")
+      .replace(/Dizüstü/giu, "Laptop")
+      .replace(/Taşınabilir/giu, "Mobile")
+      .replace(/Türkiye\s+Standart\s+Saati/giu, "Turkey Standard Time")
+      /** Turkish disk lines: “217,40 GB (233.429.532.672 Bayt)”. Order: *bayt before bare Bayt. */
+      .replace(/\bTerabayt\b/gi, "TB")
+      .replace(/\bGigabayt\b/gi, "GB")
+      .replace(/\bMegabayt\b/gi, "MB")
+      .replace(/\bKilobayt\b/gi, "KB")
+      .replace(/\(\s*([\d.\s]+)\s*Bayt\s*\)/gi, "($1 bytes)")
+      .replace(/\bBayt\b/gi, "bytes")
+      .replace(/\bDerleme\b/giu, "Build")
+      /** Remaining Turkish service title fragments (after full-phrase table). */
+      .replace(/\s+Hizmeti\b/giu, " Service")
+      .replace(/\bYönlendirici\s+/giu, "Router ")
+      .replace(/\byönlendirici\s+/giu, "Router ")
+      .replace(/\bAltyapısı\b/giu, "Infrastructure")
+      .replace(/\bAltyapisi\b/giu, "Infrastructure")
+      .replace(/\bOluşturucu\b/giu, "Builder")
+      .replace(/\bOlusturucu\b/giu, "Builder")
+      .replace(/\bYöneticisi\s+/giu, "Manager ")
+      .replace(/\bYoneticisi\s+/giu, "Manager ")
+      .replace(/\bGeçidi\b/giu, "Gateway")
+      .replace(/\bGecidi\b/giu, "Gateway")
+      .replace(/\s+hertz\b/giu, " Hz")
+      .replace(/\bHertz\b/g, "Hz")
+      .replace(/\bNVIDIA\s+uyumlu\b/giu, "NVIDIA-compatible")
+      .replace(/\bAMD\s+uyumlu\b/giu, "AMD-compatible")
+      .replace(/\bIntel\s+uyumlu\b/giu, "Intel-compatible")
+      .replace(/\buyumlu\b/giu, "compatible")
+      /** Turkish MSInfo yes/no and size tokens (network + driver lines). */
+      .replace(/\bEvet\b/gu, "Yes")
+      .replace(/\bHayır\b/gu, "No")
+      .replace(/\bKBayt\b/giu, "KB")
+      .replace(/\bMBayt\b/giu, "MB")
+      .replace(/\bGBayt\b/giu, "GB")
+      /** Turkish network / IRQ row titles when shown as raw keys. */
+      .replace(/\bBellek Adresi\b/giu, "Memory address")
+      .replace(/\bIRQ Kanalı\b/giu, "IRQ channel")
+      .replace(/\bDHCP Sunucusu\b/giu, "DHCP server");
     return out;
   }
 
@@ -6818,7 +8034,7 @@
    * @param {string} title
    * @param {string} bodyHtml inner HTML only
    * @param {(s: string) => string} esc
-   * @param {{ count?: number | null, open?: boolean, icon?: string, variant?: "default" | "alert" }} [opts]
+   * @param {{ count?: number | null, open?: boolean, icon?: string, variant?: "default" | "alert", alwaysOfferTranslate?: boolean }} [opts]
    */
   function renderReportCategoryAccordion(title, bodyHtml, esc, opts) {
     const o = opts || {};
@@ -6834,7 +8050,8 @@
       /&[a-zA-Z]+;/g,
       " "
     );
-    const needsTranslate = localeScriptLooksNonEnglishListed(plainForDetect);
+    const needsTranslate =
+      !!o.alwaysOfferTranslate || localeScriptLooksNonEnglishListed(plainForDetect);
     const translateBtn = needsTranslate
       ? `<button type="button" class="report-category__translate" aria-pressed="false">Translate</button>`
       : "";
@@ -7395,15 +8612,19 @@
             .join("")}</tbody></table></div>`
         : `<p class="summary-empty">No service rows found.</p>`;
     const servicesBody = svcRows(svcAll);
+    const svcNeedsI18n = svcAll.some((s) =>
+      localeScriptLooksNonEnglishListed(`${s.name} ${s.state} ${s.startMode}`)
+    );
     const servicesHtml = renderReportCategoryAccordion("Services", servicesBody, esc, {
       count: svcAll.length || null,
       icon: "services",
+      alwaysOfferTranslate: svcNeedsI18n,
     });
     const runningList = sum.runningServices || [];
     const runningBody =
       runningList.length > 0
         ? svcRows(runningList)
-        : `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
+        : `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Çalışıyor</em>, <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
     const runningHtml = renderReportCategoryAccordion("Running Services", runningBody, esc, {
       count: runningList.length || null,
       icon: "running",
@@ -7424,7 +8645,10 @@
       <dt>Original Install Date</dt><dd>${sumI18nSpan(os.installDate, esc)}</dd>
     </dl>`;
     const osBody = `${osDl}${renderWindowsUpdatesOsEmbed(sum, esc)}`;
-    const osHtml = renderReportCategoryAccordion("OS Information", osBody, esc, { icon: "os" });
+    const osHtml = renderReportCategoryAccordion("OS Information", osBody, esc, {
+      icon: "os",
+      alwaysOfferTranslate: true,
+    });
 
     const recHtml = renderReportCategoryAccordion("Recommendations & Updates", renderRecommendationsCard(sum, true), esc, {
       icon: "rec",
@@ -7433,11 +8657,13 @@
       count: gpuCount || null,
       icon: "gpu",
       open: true,
+      alwaysOfferTranslate: graphicsNeedsTranslateHint(sum.graphics),
     });
     const netCount = Array.isArray(sum.networkAdapters) ? sum.networkAdapters.length : 0;
     const networkHtml = renderReportCategoryAccordion("Network (Internet)", netBody, esc, {
       count: netCount || null,
       icon: "network",
+      alwaysOfferTranslate: networkSectionNeedsTranslateHint(sum.networkAdapters),
     });
 
     el.innerHTML = `${xmlRepairBanner}${recoveryBanner}
@@ -10048,19 +11274,29 @@
 
     /** @returns {string} */
     function canonicalPanelHash() {
-      const raw = (location.hash || "#tool-panel-system").split("?")[0].toLowerCase();
+      const raw = (location.hash || "").split("?")[0].toLowerCase();
+      if (!raw) return "#tool-panel-system";
       const mapped = LEGACY[raw] || raw;
       return TAB_HREFS.includes(mapped) ? mapped : "#tool-panel-system";
     }
 
     function replaceHashIfNeeded() {
-      const want = canonicalPanelHash();
-      if ((location.hash || "").toLowerCase() !== want) {
+      const raw = (location.hash || "").split("?")[0].toLowerCase();
+      if (!raw) return;
+      const mapped = LEGACY[raw] || raw;
+      if (LEGACY[raw] && TAB_HREFS.includes(mapped)) {
         try {
-          history.replaceState(null, "", want);
+          history.replaceState(null, "", mapped);
         } catch {
           /* file:// or restricted */
         }
+        return;
+      }
+      if (TAB_HREFS.includes(mapped)) return;
+      try {
+        history.replaceState(null, "", `${location.pathname}${location.search}`);
+      } catch {
+        /* file:// or restricted */
       }
     }
 

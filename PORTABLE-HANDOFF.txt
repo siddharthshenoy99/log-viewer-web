@@ -8,6 +8,11 @@ WHAT THIS IS
   charts, and summaries run in the browser from files on disk. No npm, Node,
   Python, installers, CDN, cloud API, or database.
 
+  Multilingual System Information (.nfo) exports: summaries and labels use
+  local normalization and offline phrase mapping (no remote translation API).
+  Dedicated handling is included for Russian, Japanese, Turkish, and Spanish
+  in addition to English.
+
 ================================================================================
   FOLDER MANIFEST (keep these together in ONE directory)
 ================================================================================

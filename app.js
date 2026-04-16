@@ -4047,6 +4047,96 @@
    * @typedef {{ time: string, type: string, details: string, severity: 'error'|'warning'|'info', category: string, sourceTitle: string, path: string }} WerTimelineEntry
    */
 
+  /** Milliseconds from 1601-01-01 UTC to 1970-01-01 UTC (for Windows FILETIME). */
+  const WER_FILETIME_EPOCH_MS = 11644473600000;
+
+  /**
+   * Parse WER/MSInfo hex timestamps: 32-bit {@code 0x........} as Unix seconds;
+   * wider values as 100-ns FILETIME intervals since 1601-01-01 UTC.
+   * @param {string} hexToken e.g. {@code 0x6d10fba1} or {@code 0x1DCC3DC2788568D}
+   * @returns {Date | null}
+   */
+  function werHexTimestampToDate(hexToken) {
+    const s = String(hexToken || "").trim();
+    const m = s.match(/^0x([0-9a-f]+)$/i);
+    if (!m) return null;
+    const bits = BigInt("0x" + m[1]);
+    const max32 = 0xffffffffn;
+    if (bits <= max32) {
+      const sec = Number(bits);
+      const d = new Date(sec * 1000);
+      if (!isNaN(d.getTime()) && d.getUTCFullYear() >= 1990 && d.getUTCFullYear() <= 2100) return d;
+      return null;
+    }
+    const ms = Number(bits / 10000n - BigInt(WER_FILETIME_EPOCH_MS));
+    if (!Number.isFinite(ms)) return null;
+    const d2 = new Date(ms);
+    if (!isNaN(d2.getTime()) && d2.getUTCFullYear() >= 1990 && d2.getUTCFullYear() <= 2100) return d2;
+    return null;
+  }
+
+  /**
+   * Extract an event time from WER detail text (hex Time stamp, FILETIME start time, localized labels).
+   * @param {string} blob
+   * @returns {Date | null}
+   */
+  function werExtractEventDateFromText(blob) {
+    const t = String(blob || "");
+    if (!t.trim()) return null;
+    /** Prefer exception time, then localized stamps, then process FILETIME (often start time). */
+    const labeled = [
+      /Time\s+stamp\s*:\s*(0x[0-9a-f]+)/i,
+      /carimbo\s+de\s+data\/hora\s*:\s*(0x[0-9a-f]+)/i,
+      /Faulting\s+application\s+start\s+time\s*:\s*(0x[0-9a-f]+)/i,
+      /Hora\s+de\s+in[ií]cio\s+do\s+aplicativo\s+com\s+falha\s*:\s*(0x[0-9a-f]+)/i,
+      /Timestamp\s*:\s*(0x[0-9a-f]+)/i,
+    ];
+    for (const re of labeled) {
+      const m = t.match(re);
+      if (m && m[1]) {
+        const d = werHexTimestampToDate(m[1]);
+        if (d) return d;
+      }
+    }
+    const generic = /\b(0x[0-9a-f]{8,16})\b/gi;
+    let best = null;
+    let mm;
+    while ((mm = generic.exec(t)) !== null) {
+      const d = werHexTimestampToDate(mm[1]);
+      if (d && (!best || d.getTime() < best.getTime())) best = d;
+    }
+    return best;
+  }
+
+  /**
+   * Normalize WER row time + body into an ISO timestamp when possible (fixes “Unknown time” when only hex appears in Details).
+   * @param {string} rawTime
+   * @param {string} type
+   * @param {string} details
+   * @returns {string} ISO string or best-effort parseable string, else original / empty
+   */
+  function werResolveWerTimeString(rawTime, type, details) {
+    const r = String(rawTime || "").trim();
+    const blob = `${r}\n${String(type || "")}\n${String(details || "")}`;
+    if (r && r !== "Unknown time") {
+      const p = Date.parse(r);
+      if (!Number.isNaN(p)) return new Date(p).toISOString();
+    }
+    const fromHex = werExtractEventDateFromText(blob);
+    if (fromHex) return fromHex.toISOString();
+    return r;
+  }
+
+  /**
+   * @param {{ time: string, type: string, details: string }} e
+   * @returns {Date | null}
+   */
+  function werEntryToEventDate(e) {
+    const p = Date.parse(e.time);
+    if (!Number.isNaN(p)) return new Date(p);
+    return werExtractEventDateFromText(`${e.time}\n${e.type}\n${e.details}`);
+  }
+
   /** @param {Record<string, string>} fields @param {RegExp[]} patterns */
   function werFirstFieldMatch(fields, patterns) {
     for (const [k, v] of Object.entries(fields)) {
@@ -4093,6 +4183,12 @@
       if (!vv) continue;
       const kn = msinfoFieldKeyNormLower(k);
       if (kn === "saat" || kn === "time" || kn === "hora") return vv;
+    }
+    for (const [k, v] of Object.entries(fields)) {
+      const vv = String(v || "").trim();
+      if (!vv || vv.length > 500000) continue;
+      const d = werExtractEventDateFromText(vv);
+      if (d) return d.toISOString();
     }
     return "";
   }
@@ -4233,7 +4329,8 @@
 
   /** @param {string} time @param {string} type @param {string} details @param {string} path @param {string} sourceTitle */
   function werMakeEntry(time, type, details, path, sourceTitle) {
-    const ti = (time || "").trim() || "Unknown time";
+    const resolved = werResolveWerTimeString(time, type, details).trim();
+    const ti = resolved || (time || "").trim() || "Unknown time";
     const ty = (type || "").trim() || "Windows Error Reporting";
     const de = (details || "").trim() || "No details in export.";
     return {
@@ -4348,8 +4445,8 @@
     for (const e of entries) {
       if (e.severity === "error") criticalCount++;
       if (e.type) types.add(e.type.slice(0, 120));
-      const d = Date.parse(e.time);
-      if (!Number.isNaN(d)) dates.push(new Date(d));
+      const d = werEntryToEventDate(e);
+      if (d && !isNaN(d.getTime())) dates.push(d);
     }
     let timeSpan = 0;
     if (dates.length > 1) {
@@ -9145,6 +9242,14 @@
     const cats = [...new Set(entries.map((e) => werNormalizeCategory(e.category)))].sort();
     const showTabs = cats.length > 1;
 
+    /** Human-readable local time when {@code time} is ISO from hex parsing. */
+    const fmtWerTime = (/** @type {string} */ s) => {
+      if (!s || s === "Unknown time") return s;
+      const t = Date.parse(s);
+      if (Number.isNaN(t)) return s;
+      return new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    };
+
     const timeAgo = (/** @type {string} */ timeStr) => {
       if (!timeStr || timeStr === "Unknown time") return timeStr;
       const t = Date.parse(timeStr);
@@ -9209,7 +9314,7 @@
             <span class="wer-item__type">${sumI18nSpan(e.type, esc, undefined, i18nOpts)}</span>
             <span class="wer-item__when">${esc(timeAgo(e.time))}</span>
           </div>
-          <div class="wer-item__meta"><span class="muted-label">Time</span> ${sumI18nSpan(e.time, esc, undefined, i18nOpts)} · <span class="muted-label">Source</span> ${sumI18nSpan(
+          <div class="wer-item__meta"><span class="muted-label">Time</span> ${esc(fmtWerTime(e.time))} · <span class="muted-label">Source</span> ${sumI18nSpan(
           e.sourceTitle,
           esc,
           undefined,

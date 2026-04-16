@@ -4867,7 +4867,7 @@ html[data-theme="light"] .site-header {
   background: radial-gradient(ellipse 120% 90% at 50% -20%, rgba(255, 255, 255, 0.9) 0%, transparent 58%);
 }
 
-html[data-theme="light"] .site-header::after {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-header::after {
   background: linear-gradient(
     90deg,
     transparent 0%,
@@ -4878,18 +4878,62 @@ html[data-theme="light"] .site-header::after {
   );
 }
 
-html[data-theme="light"] .logo-wrap {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(244, 63, 94, 0.2) 22%,
+    rgba(225, 29, 72, 0.32) 50%,
+    rgba(244, 63, 94, 0.2) 78%,
+    transparent 100%
+  );
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(16, 185, 129, 0.2) 22%,
+    rgba(5, 150, 105, 0.3) 50%,
+    rgba(16, 185, 129, 0.2) 78%,
+    transparent 100%
+  );
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .logo-wrap {
   background: linear-gradient(155deg, #ffffff 0%, #faf5ff 100%);
   border-color: rgba(226, 232, 240, 0.95);
   box-shadow: var(--lm-shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
 }
 
-html[data-theme="light"] .logo-wrap:hover {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .logo-wrap:hover {
   border-color: rgba(196, 181, 253, 0.65);
   box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
 }
 
-html[data-theme="light"] .brand-text h1 {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .logo-wrap {
+  background: linear-gradient(155deg, #ffffff 0%, #fffbfb 100%);
+  border-color: #fecdd3;
+  box-shadow: var(--lm-shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .logo-wrap:hover {
+  border-color: #fda4af;
+  box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .logo-wrap {
+  background: linear-gradient(155deg, #ffffff 0%, #f0fdf4 100%);
+  border-color: #bbf7d0;
+  box-shadow: var(--lm-shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .logo-wrap:hover {
+  border-color: #6ee7b7;
+  box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .brand-text h1 {
   filter: none;
   background: linear-gradient(108deg, #4c1d95 0%, #5b21b6 45%, #6d28d9 100%);
   -webkit-background-clip: text;
@@ -4897,8 +4941,36 @@ html[data-theme="light"] .brand-text h1 {
   color: transparent;
 }
 
-html[data-theme="light"] .hero-kicker {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .brand-text h1 {
+  filter: none;
+  background: linear-gradient(108deg, #9f1239 0%, #e11d48 48%, #be123c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .brand-text h1 {
+  filter: none;
+  background: linear-gradient(108deg, #047857 0%, #059669 42%, #10b981 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .hero-kicker {
   color: #6d28d9;
+  text-shadow: none;
+  letter-spacing: 0.14em;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .hero-kicker {
+  color: #e11d48;
+  text-shadow: none;
+  letter-spacing: 0.14em;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .hero-kicker {
+  color: #059669;
   text-shadow: none;
   letter-spacing: 0.14em;
 }
@@ -4908,13 +4980,51 @@ html[data-theme="light"] .tagline {
   text-shadow: none;
 }
 
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-header .tagline-arrow__svg {
+  color: #7c3aed;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-header .tagline-arrow__svg {
+  color: #e11d48;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-header .tagline-arrow__svg {
+  color: #059669;
+}
+
 html[data-theme="light"] .lede {
   color: #475569;
   text-shadow: none;
 }
 
-html[data-theme="light"] .lede strong {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .lede strong {
   color: #5b21b6;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .lede strong {
+  color: #be123c;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .lede strong {
+  color: #047857;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-header code {
+  color: #4338ca;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-header code {
+  color: #be123c;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-header code {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
 }
 
 html[data-theme="light"] .workspace-invite {
@@ -4925,14 +5035,63 @@ html[data-theme="light"] .workspace-invite {
   text-shadow: none;
 }
 
-html[data-theme="light"] .workspace-invite strong {
-  color: #db2777;
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .workspace-invite {
+  border-color: #e9d5ff;
+  background: linear-gradient(180deg, #ffffff 0%, #faf5ff 100%);
 }
 
-html[data-theme="light"] .privacy-badge {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .workspace-invite {
+  border-color: #fecdd3;
+  background: linear-gradient(180deg, #ffffff 0%, #fffbfb 100%);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .workspace-invite {
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%);
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .workspace-invite strong {
+  color: #5b21b6;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .workspace-invite strong {
+  color: #e11d48;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .workspace-invite strong {
+  color: #059669;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .workspace-invite .tagline-arrow__svg {
+  color: #7c3aed;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .workspace-invite .tagline-arrow__svg {
+  color: #e11d48;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .workspace-invite .tagline-arrow__svg {
+  color: #059669;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .privacy-badge {
   color: #5b21b6;
   border-color: rgba(167, 139, 250, 0.42);
   background: #f5f3ff;
+  box-shadow: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .privacy-badge {
+  color: #be123c;
+  border-color: rgba(253, 164, 175, 0.65);
+  background: #fff1f2;
+  box-shadow: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .privacy-badge {
+  color: #047857;
+  border-color: rgba(110, 231, 183, 0.65);
+  background: #ecfdf5;
   box-shadow: none;
 }
 

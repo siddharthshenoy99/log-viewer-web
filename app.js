@@ -7317,7 +7317,7 @@
         u
       ) ||
       /** WER / fault text (often ASCII; still needs section Translate + phrase map). */
-      /\bNome\s+do\s+aplicativo\s+com\s+falha\b|\bCaminho\s+do\s+aplicativo\s+com\s+falha\b|\bC[oó]digo\s+de\s+exce[cç][aã]o\b|\bTipo\s+de\s+adaptador\b|\bGateway\s+IP\s+padr[aã]o\b|\bConcess[aã]o\s+DHCP\b/i.test(
+      /\bNome\s+do\s+aplicativo\s+com\s+falha\b|\bCaminho\s+do\s+aplicativo\s+com\s+falha\b|\bC[oó]digo\s+de\s+exce[cç][aã]o\b|\bTipo\s+de\s+adaptador\b|\bGateway\s+IP\s+padr[aã]o\b|\bConcess[aã]o\s+DHCP\b|\bEsses\s+arquivos\s+talvez\b|\bVerificando\s+novamente\b|\bStatus\s+do\s+Relatório\b|\bBucket\s+com\s+hash\b/i.test(
         u
       ) ||
       /\bItem\b.*\bValor\b/is.test(u)
@@ -7928,8 +7928,16 @@
     ["Sem dados", "No data"],
     ["Assinatura do problema:", "Problem signature:"],
     ["Arquivos anexados:", "Attached files:"],
+    ["Esses arquivos talvez estejam disponíveis em:", "These files may be available at:"],
     ["Esses arquivos podem estar disponíveis aqui:", "These files can be found here:"],
+    ["Verificando novamente se há uma solução:", "Searching for solutions:"],
+    ["Símbolo da análise:", "Analysis symbol:"],
     ["Símbolo de análise:", "Analysis symbol:"],
+    ["Status do Relatório:", "Report status:"],
+    ["ID do Relatório:", "Report ID:"],
+    ["Bucket com hash:", "Hashed container:"],
+    ["Guid do CAB:", "CAB ID:"],
+    ["GUID do CAB:", "CAB ID:"],
     ["Computador baseado em x64", "x64-based PC"],
     ["Memória física instalada (RAM)", "Installed Physical Memory (RAM)"],
     ["Memória física instalada", "Installed Physical Memory"],
@@ -8008,6 +8016,8 @@
     ["versão:", "version:"],
     ["Versão:", "Version:"],
     ["ID do relatório:", "Report ID:"],
+    /** Common export typo / font glitch: “Y” instead of “Sí” at line start. */
+    ["Yesmbolo da análise:", "Analysis symbol:"],
     ["Relatório de erros do Windows", "Windows Error Reporting"],
     ["Erro de aplicativo", "Application Error"],
     ["Ambiente de Software", "Software Environment"],
@@ -8847,6 +8857,15 @@
       .replace(/\bArea\s+de\s+Trabalho\b/giu, "Desktop")
       /** Portuguese MSInfo GPU / adapter strings (“… compatível com NVIDIA”). */
       .replace(/\bcompat[ií]vel\s+com\b/giu, "compatible with")
+      /** pt-BR WER: alternate wording, line breaks, or OCR (“Yesmbolo”) vs exact {@link MSINFO_I18N_EN_TOKEN_PAIRS} keys. */
+      .replace(/\bYesmbolo\s+da\s+análise\s*:/giu, "Analysis symbol:")
+      .replace(/ID\s+do\s+Relatório\s*:/giu, "Report ID:")
+      .replace(/Status\s+do\s+Relatório\s*:/giu, "Report status:")
+      .replace(/Esses\s+arquivos\s+talvez\s+estejam\s+disponíveis\s+em\s*:/giu, "These files may be available at:")
+      .replace(/Verificando\s+novamente\s+se\s+há\s+uma\s+solução\s*:/giu, "Searching for solutions:")
+      .replace(/Bucket\s+com\s+hash\s*:/giu, "Hashed container:")
+      .replace(/GUID\s+do\s+CAB\s*:/giu, "CAB ID:")
+      .replace(/Guid\s+do\s+CAB\s*:/giu, "CAB ID:")
       .replace(/(^|[\s,;:])(Sim)([\s,;:\)]|$)/gu, "$1Yes$3")
       .replace(/(^|[\s,;:])(Não|Nao)([\s,;:\)]|$)/gu, "$1No$3")
       /** Portuguese Windows Services table cells (state / startup); complements case-sensitive {@link MSINFO_I18N_EN_TOKEN_PAIRS}. */

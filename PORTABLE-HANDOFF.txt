@@ -10,8 +10,8 @@ WHAT THIS IS
 
   Multilingual System Information (.nfo) exports: summaries and labels use
   local normalization and offline phrase mapping (no remote translation API).
-  Dedicated handling is included for Russian, Japanese, Turkish, and Spanish
-  in addition to English.
+  Dedicated handling is included for Russian, Japanese, Turkish, Spanish, and
+  Portuguese in addition to English.
 
 ================================================================================
   FOLDER MANIFEST (keep these together in ONE directory)

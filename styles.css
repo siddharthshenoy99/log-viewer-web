@@ -4588,3 +4588,432 @@ details.report-category__details:not([open]) .report-category__chevron {
     animation: dz-soft-glow 5.2s cubic-bezier(0.42, 0, 0.58, 1) infinite;
   }
 }
+
+/* =============================================================================
+   Theme: dark (default, :root) vs light — toggle #theme-toggle (fixed, top-right)
+   ============================================================================= */
+
+.theme-toggle {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 200;
+  width: 3rem;
+  height: 3rem;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(155deg, rgba(22, 30, 26, 0.95) 0%, rgba(10, 14, 12, 0.98) 100%);
+  border: 1px solid rgba(118, 185, 0, 0.35);
+  box-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(0, 0, 0, 0.2) inset;
+  color: #c8e6c9;
+  transition:
+    transform 0.22s var(--ease-spring),
+    box-shadow 0.22s var(--ease-soft),
+    border-color 0.2s var(--ease-soft);
+}
+
+.theme-toggle:hover {
+  transform: scale(1.06);
+  border-color: rgba(143, 214, 48, 0.55);
+  box-shadow:
+    0 6px 28px rgba(118, 185, 0, 0.18),
+    0 0 0 1px rgba(0, 0, 0, 0.15) inset;
+}
+
+.theme-toggle:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px rgba(143, 214, 48, 0.45),
+    0 4px 18px rgba(0, 0, 0, 0.45);
+}
+
+.theme-toggle__icon {
+  width: 1.55rem;
+  height: 1.55rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.theme-toggle__icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+html[data-theme="dark"] .theme-toggle__icon--sun {
+  display: none;
+}
+
+html[data-theme="light"] .theme-toggle__icon--moon {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .theme-toggle {
+    top: 0.65rem;
+    right: 0.65rem;
+    width: 2.65rem;
+    height: 2.65rem;
+  }
+
+  .theme-toggle__icon {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+}
+
+/* --- Light mode: colorful palette (sky / coral / lavender / NVIDIA green) --- */
+html[data-theme="light"] {
+  color-scheme: light;
+  --nv-green: #5cb400;
+  --nv-green-dim: #4a9a00;
+  --nv-green-glow: rgba(92, 180, 0, 0.22);
+  --nv-green-soft: rgba(33, 150, 243, 0.12);
+  --nv-green-border: rgba(33, 150, 243, 0.28);
+  --bg-deep: #e8f4fc;
+  --bg-panel: #ffffff;
+  --bg-elevated: #f8fbff;
+  --border: rgba(30, 136, 229, 0.22);
+  --text: #1a237e;
+  --muted: #5c6bc0;
+  --system-accent: #0288d1;
+  --gpu-accent: #558b2f;
+  --accent-coral: #ff7043;
+  --accent-violet: #7e57c2;
+  --accent-amber: #ffa726;
+}
+
+html[data-theme="light"] body {
+  color: var(--text);
+  background: linear-gradient(165deg, #e3f2fd 0%, #fff8e1 38%, #fce4ec 72%, #ede7f6 100%);
+  background-attachment: fixed;
+}
+
+html[data-theme="light"] .ambient {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(255, 255, 255, 0.15) 42%, transparent 55%),
+    radial-gradient(ellipse 90% 55% at 85% 0%, rgba(255, 183, 77, 0.18) 0%, transparent 50%),
+    radial-gradient(ellipse 70% 50% at 10% 15%, rgba(100, 181, 246, 0.2) 0%, transparent 55%),
+    radial-gradient(ellipse 88% 62% at 50% 115%, rgba(171, 71, 188, 0.08) 0%, transparent 55%);
+}
+
+html[data-theme="light"] .theme-toggle {
+  background: linear-gradient(145deg, #fff 0%, #e3f2fd 55%, #fff9c4 100%);
+  border-color: rgba(255, 152, 0, 0.45);
+  color: #f57c00;
+  box-shadow:
+    0 6px 28px rgba(33, 150, 243, 0.22),
+    0 2px 8px rgba(255, 152, 0, 0.15);
+}
+
+html[data-theme="light"] .theme-toggle:hover {
+  border-color: rgba(255, 193, 7, 0.75);
+  color: #ef6c00;
+}
+
+html[data-theme="light"] .site-header {
+  background: radial-gradient(ellipse 95% 140% at 50% -25%, rgba(255, 255, 255, 0.92) 0%, rgba(227, 242, 253, 0.5) 48%, transparent 72%);
+}
+
+html[data-theme="light"] .site-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(33, 150, 243, 0.2) 15%,
+    rgba(255, 152, 0, 0.45) 50%,
+    rgba(156, 39, 176, 0.25) 85%,
+    transparent 100%
+  );
+}
+
+html[data-theme="light"] .logo-wrap {
+  background: linear-gradient(155deg, #ffffff 0%, #e3f2fd 45%, #fff8e1 100%);
+  border-color: rgba(33, 150, 243, 0.45);
+  box-shadow:
+    0 0 24px rgba(33, 150, 243, 0.2),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+html[data-theme="light"] .logo-wrap:hover {
+  border-color: rgba(255, 152, 0, 0.55);
+  box-shadow:
+    0 0 28px rgba(255, 152, 0, 0.15),
+    0 1px 0 rgba(255, 255, 255, 0.95) inset;
+}
+
+html[data-theme="light"] .brand-text h1 {
+  background: linear-gradient(105deg, #0d47a1 0%, #1565c0 35%, #2e7d32 70%, #f57c00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html[data-theme="light"] .hero-kicker {
+  color: #7e57c2;
+  text-shadow: none;
+}
+
+html[data-theme="light"] .lede {
+  color: #3949ab;
+  text-shadow: none;
+}
+
+html[data-theme="light"] .lede strong {
+  color: #1565c0;
+}
+
+html[data-theme="light"] .workspace-invite {
+  color: #3949ab;
+  border-color: rgba(33, 150, 243, 0.28);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(227, 242, 253, 0.5) 100%);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  text-shadow: none;
+}
+
+html[data-theme="light"] .workspace-invite strong {
+  color: #c62828;
+}
+
+html[data-theme="light"] .privacy-badge {
+  color: #5c6bc0;
+  border-color: rgba(126, 87, 194, 0.35);
+  background: linear-gradient(135deg, rgba(237, 231, 246, 0.9) 0%, rgba(255, 255, 255, 0.85) 100%);
+}
+
+html[data-theme="light"] code {
+  background: rgba(227, 242, 253, 0.85);
+  border-color: rgba(33, 150, 243, 0.35);
+  color: #0d47a1;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+html[data-theme="light"] .tool-tabs {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(227, 242, 253, 0.75) 100%);
+  border-color: rgba(33, 150, 243, 0.28);
+  box-shadow:
+    0 -1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 6px 28px rgba(33, 150, 243, 0.12);
+}
+
+@supports (backdrop-filter: blur(6px)) {
+  html[data-theme="light"] .tool-tabs {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(227, 242, 253, 0.65) 100%);
+  }
+}
+
+html[data-theme="light"] .tool-tab {
+  color: #5c6bc0;
+}
+
+html[data-theme="light"] .tool-tab:hover {
+  color: #1a237e;
+  background: rgba(227, 242, 253, 0.85);
+  border-color: rgba(33, 150, 243, 0.2);
+}
+
+html[data-theme="light"] .tool-tab__desc {
+  color: rgba(57, 73, 171, 0.75);
+}
+
+html[data-theme="light"] .tool-tab__shortcut {
+  color: rgba(126, 87, 194, 0.55);
+}
+
+html[data-theme="light"] .workspace:is(:not(:has(> .tool-tab-panels > .tool-panel:target)), :has(#tool-panel-system:target)) .tool-tab--system {
+  color: #0d47a1;
+  background: linear-gradient(180deg, rgba(227, 242, 253, 0.95) 0%, rgba(187, 222, 251, 0.65) 100%);
+  border-color: rgba(33, 150, 243, 0.5);
+  box-shadow: 0 0 22px rgba(33, 150, 243, 0.2);
+}
+
+html[data-theme="light"]
+  .workspace:is(:not(:has(> .tool-tab-panels > .tool-panel:target)), :has(#tool-panel-system:target))
+  .tool-tab--system
+  .tool-tab__desc {
+  color: rgba(13, 71, 161, 0.85);
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-bsod:target) .tool-tab--bsod {
+  color: #ad1457;
+  background: linear-gradient(180deg, rgba(252, 228, 236, 0.95) 0%, rgba(255, 205, 210, 0.55) 100%);
+  border-color: rgba(233, 30, 99, 0.45);
+  box-shadow: 0 0 18px rgba(233, 30, 99, 0.15);
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-bsod:target) .tool-tab--bsod .tool-tab__desc {
+  color: rgba(173, 20, 87, 0.88);
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-gpu:target) .tool-tab--gpu {
+  color: #33691e;
+  background: linear-gradient(180deg, rgba(241, 248, 233, 0.98) 0%, rgba(200, 230, 201, 0.55) 100%);
+  border-color: rgba(85, 139, 47, 0.5);
+  box-shadow: 0 0 22px rgba(92, 180, 0, 0.18);
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-gpu:target) .tool-tab--gpu .tool-tab__desc {
+  color: rgba(51, 105, 30, 0.88);
+}
+
+html[data-theme="light"] .tool-tab-panels {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.55) 0%, var(--bg-panel) 14%);
+  border-color: rgba(33, 150, 243, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.85) inset,
+    0 12px 40px rgba(33, 150, 243, 0.1);
+}
+
+html[data-theme="light"] .panel {
+  box-shadow: 0 0 0 1px rgba(227, 242, 253, 0.9) inset;
+}
+
+html[data-theme="light"] .panel--system {
+  border-color: rgba(33, 150, 243, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(227, 242, 253, 0.9) inset,
+    0 0 28px rgba(33, 150, 243, 0.1);
+}
+
+html[data-theme="light"] .panel--system .panel__icon-wrap {
+  color: #1565c0;
+  border-color: rgba(33, 150, 243, 0.45);
+  background: linear-gradient(145deg, rgba(227, 242, 253, 0.9) 0%, rgba(255, 255, 255, 0.95) 100%);
+  box-shadow: 0 0 20px rgba(33, 150, 243, 0.2);
+}
+
+html[data-theme="light"] .panel--gpu .panel__icon-wrap {
+  color: #558b2f;
+  border-color: rgba(92, 180, 0, 0.5);
+  background: linear-gradient(145deg, rgba(241, 248, 233, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+  box-shadow: 0 0 22px rgba(92, 180, 0, 0.18);
+}
+
+html[data-theme="light"] .panel--bsod .panel__icon-wrap {
+  color: #e91e63;
+  border-color: rgba(233, 30, 99, 0.45);
+  background: linear-gradient(145deg, rgba(252, 228, 236, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+  box-shadow: 0 0 20px rgba(233, 30, 99, 0.15);
+}
+
+html[data-theme="light"] .panel--system .panel__head h2 {
+  color: #1565c0;
+}
+
+html[data-theme="light"] .panel--gpu .panel__head h2 {
+  color: #33691e;
+}
+
+html[data-theme="light"] .panel--bsod .panel__head h2,
+html[data-theme="light"] .panel--bsod .panel__head-inline-title {
+  color: #c2185b;
+}
+
+html[data-theme="light"] .panel-icon--system {
+  color: #1976d2;
+}
+
+html[data-theme="light"] .panel-icon--gpu {
+  color: #689f38;
+}
+
+html[data-theme="light"] .panel-icon--bsod {
+  color: #e91e63;
+}
+
+html[data-theme="light"] .system-analyzer__hero {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(227, 242, 253, 0.65) 45%, rgba(255, 248, 225, 0.5) 100%);
+  border-color: rgba(33, 150, 243, 0.28);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.85) inset,
+    0 8px 28px rgba(33, 150, 243, 0.1);
+}
+
+html[data-theme="light"] .dropzone {
+  border-color: rgba(92, 180, 0, 0.5);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(227, 242, 253, 0.35) 100%);
+}
+
+html[data-theme="light"] .site-footer {
+  color: #5c6bc0;
+  border-color: rgba(33, 150, 243, 0.15);
+}
+
+html[data-theme="light"] .scroll-to-top {
+  background: linear-gradient(145deg, #fff 0%, #e3f2fd 100%);
+  border-color: rgba(33, 150, 243, 0.35);
+  color: #1565c0;
+}
+
+html[data-theme="light"] .skip-link {
+  background: #fff;
+  border-color: rgba(33, 150, 243, 0.35);
+  color: #1565c0;
+}
+
+html[data-theme="light"] .report-category__summary {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(227, 242, 253, 0.75) 100%);
+  border-color: rgba(33, 150, 243, 0.28);
+}
+
+html[data-theme="light"] .summary-card {
+  border-color: rgba(33, 150, 243, 0.2);
+}
+
+html[data-theme="light"] .tagline-arrow__svg {
+  color: #7e57c2;
+}
+
+html[data-theme="light"] .site-footer {
+  background: linear-gradient(0deg, rgba(227, 242, 253, 0.55) 0%, transparent 100%);
+}
+
+html[data-theme="light"] .site-footer::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(33, 150, 243, 0.35),
+    rgba(255, 152, 0, 0.35),
+    rgba(156, 39, 176, 0.28),
+    transparent
+  );
+}
+
+html[data-theme="light"] .about-dialog__inner {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  border: 1px solid rgba(33, 150, 243, 0.22);
+  box-shadow: 0 24px 80px rgba(33, 150, 243, 0.15);
+}
+
+html[data-theme="light"] .about-dialog__head {
+  border-bottom-color: rgba(33, 150, 243, 0.18);
+}
+
+html[data-theme="light"] .about-dialog__head h2 {
+  color: #0d47a1;
+}
+
+html[data-theme="light"] .about-dialog__section h3 {
+  color: #1565c0;
+}
+
+html[data-theme="light"] .wer-dashboard {
+  background: linear-gradient(135deg, rgba(227, 242, 253, 0.6) 0%, rgba(255, 255, 255, 0.95) 100%);
+  border-color: rgba(33, 150, 243, 0.2);
+}
+
+html[data-theme="light"] .wer-stat__n {
+  color: #1565c0;
+}
+
+html[data-theme="light"] .wer-stat {
+  background: rgba(227, 242, 253, 0.55);
+  border-color: rgba(33, 150, 243, 0.22);
+}

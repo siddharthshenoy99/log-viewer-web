@@ -2422,6 +2422,8 @@
     if (m) return m[1];
     m = s.match(/\bDerleme\s+(\d{4,6})\b/i);
     if (m) return m[1];
+    m = s.match(/\bcompilaci[oó]n\s+(\d{4,6})\b/i);
+    if (m) return m[1];
     m = s.match(/\b10\.0\.(\d{4,6})\b/);
     if (m) return m[1];
     m = s.match(/\b11\.0\.(\d{4,6})\b/);
@@ -2505,7 +2507,11 @@
         /ストレージ.*ドライブ|ドライブ.*ストレージ/i.test(s) ||
         /Sürücü\s+[A-Z]:/i.test(s) ||
         /Diskler.*Sürücü|Depolama.*Sürücü|Depolama.*Disk|Bileşenler.*Depolama.*Disk/i.test(s) ||
-        /Bileşenler\/Depolama\/Diskler/i.test(s)
+        /Bileşenler\/Depolama\/Diskler/i.test(s) ||
+        (/Almacenamiento/i.test(s) && /Unidades/i.test(s) && /\bUnidad\b/i.test(s)) ||
+        (/Almacenamiento/i.test(s) && /Discos/i.test(s) && /\bDisco\b/i.test(s)) ||
+        /Unidad local\s*\([A-Z]:/i.test(s) ||
+        /(?:^|[\s/])Unidad\s+[A-Z]:/i.test(s)
       );
     };
 
@@ -2519,9 +2525,10 @@
     };
 
     const looksLikePhysicalDisk = (/** @type {Record<string, string>} */ f) => {
-      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Açıklama"] || ""} ${f["Model"] || ""} ${f["Модель"] || ""} ${f["Modeli"] || ""} ${f["モデル"] || ""} ${f["製品名"] || ""}`.toLowerCase();
+      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Descripción"] || ""} ${f["Açıklama"] || ""} ${f["Model"] || ""} ${f["Modelo"] || ""} ${f["Модель"] || ""} ${f["Modeli"] || ""} ${f["モデル"] || ""} ${f["製品名"] || ""}`.toLowerCase();
       const hasModel = !!(
         f["Model"] ||
+        f["Modelo"] ||
         f["Модель"] ||
         f["Modeli"] ||
         f["Model Number"] ||
@@ -2529,13 +2536,20 @@
         f["モデル"] ||
         f["製品名"]
       );
-      const hasDesc = !!(f["Описание"] || f["Description"] || f["説明"]);
-      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""} ${f["Toplam Boyut"] || ""} ${f["サイズ"] || ""} ${f["合計サイズ"] || ""}`.trim();
+      const hasDesc = !!(f["Описание"] || f["Description"] || f["Descripción"] || f["説明"]);
+      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""} ${f["Toplam Boyut"] || ""} ${f["Tamaño"] || ""} ${f["サイズ"] || ""} ${f["合計サイズ"] || ""}`.trim();
       const hasSized =
         sizeBlob.length > 2 &&
         /[\d,\s]+/.test(sizeBlob) &&
-        /(байт|тб|гб|tb|gb|mb|bytes|go|to|bayt|gigabayt|バイト)/i.test(sizeBlob);
-      const hasSector = !!(f["Bytes/sector"] || f["Bytes per sector"] || f["Байт/сектор"] || f["バイト/セクター"] || f["バイト／セクター"]);
+        /(байт|тб|гб|tb|gb|mb|bytes|go|to|bayt|gigabayt|octetos|バイト)/i.test(sizeBlob);
+      const hasSector = !!(
+        f["Bytes/sector"] ||
+        f["Bytes per sector"] ||
+        f["Bytes por sector"] ||
+        f["Байт/сектор"] ||
+        f["バイト/セクター"] ||
+        f["バイト／セクター"]
+      );
       const diskish =
         /дисков|накопител|hard\s*disk|disk\s+drive|physical\s+drive|hdd|ssd|nvme|scsi|sata|st\d{4,}|wdc|wd\s|seagate|samsung\s+ssd|intel\s+ssd|sabit\s*disk|fiziksel|物理ディスク|固定ディスク|ハード\s*ディスク/i.test(
           desc
@@ -2560,13 +2574,15 @@
           f["ファイル システム"] ||
           f["ファイルシステム"]
         ) ||
-        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["Toplam Boyut"] || f["合計サイズ"] || f["サイズ"] || f["総容量"]) &&
+        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["Toplam Boyut"] || f["Tamaño"] || f["合計サイズ"] || f["サイズ"] || f["総容量"]) &&
           !!(
             f["Free Space"] ||
             f["Available Space"] ||
             f["Freier Speicherplatz"] ||
             f["Verfügbarer Speicherplatz"] ||
             f["Espace libre"] ||
+            f["Espacio disponible"] ||
+            f["Espacio libre"] ||
             f["Boş Alan"] ||
             f["Boş alan"] ||
             f["Kullanılabilir Alan"] ||
@@ -2588,7 +2604,17 @@
 
     const driveSeenKey = (/** @type {string} */ path, /** @type {Record<string, string>} */ f) => {
       const tag =
-        (f["ドライブ"] || f["Drive"] || f["Volume"] || f["ディスク"] || f["合計サイズ"] || f["Total Size"] || f["Serial Number"] || f["シリアル番号"] || "")
+        (f["ドライブ"] ||
+          f["Drive"] ||
+          f["Volume"] ||
+          f["Unidad"] ||
+          f["ディスク"] ||
+          f["合計サイズ"] ||
+          f["Total Size"] ||
+          f["Tamaño"] ||
+          f["Serial Number"] ||
+          f["シリアル番号"] ||
+          "")
           .trim() || Object.keys(f).sort().join(",");
       return `${path}\u0001${tag}`;
     };
@@ -2626,7 +2652,8 @@
           (nk.includes("sabit") && nk.includes("disk") && nk.includes("boyut")) ||
           (nk.includes("birim") && nk.includes("boyut")) ||
           nk === "kapasite" ||
-          nk === "boyut"
+          nk === "boyut" ||
+          (nk.includes("tamaño") && !nk.includes("libre") && !nk.includes("disponible") && !nk.includes("usado"))
         )
           return v;
       }
@@ -2639,7 +2666,11 @@
         const v = String(raw || "").trim();
         if (!v || !looksLikeDriveSizeValue(v)) continue;
         const nk = driveKeyNorm(k);
-        if (/kullanılabilir|kullanilabilir|boş|bos|seri|serial|^dosya|^file\s*system|free|available/i.test(nk))
+        if (
+          /kullanılabilir|kullanilabilir|boş|bos|seri|serial|^dosya|^file\s*system|free|available|disponible|libre|tamaño$/i.test(
+            nk
+          )
+        )
           continue;
         if (
           ((nk.includes("kullanılan") || nk.includes("kullanilan")) && nk.includes("alan")) ||
@@ -2647,6 +2678,7 @@
         )
           return v;
         if (nk.includes("belegt") || nk.includes("использ")) return v;
+        if ((nk.includes("usado") && nk.includes("espacio")) || nk.includes("utilizado")) return v;
       }
       return "";
     };
@@ -2664,6 +2696,7 @@
         )
           continue;
         if (nk.includes("etiket")) return v;
+        if ((nk.includes("nombre") && nk.includes("volumen")) || nk.includes("etiqueta")) return v;
       }
       return "";
     };
@@ -2694,12 +2727,15 @@
           "占有領域",
           "使用中の領域",
           "使用領域",
+          "Espacio usado",
+          "% usado",
         ]) ||
         f["Used"] ||
         f["Used(%)"] ||
         f["% Used"] ||
         f["Belegt"] ||
         f["Utilisé"] ||
+        f["Espacio usado"] ||
         f["Используется"] ||
         f["使用中"] ||
         f["使用済み"] ||
@@ -2716,7 +2752,11 @@
       for (const [k, v] of Object.entries(f)) {
         const kk = String(k || "").trim();
         const vv = String(v || "").trim();
-        if (!vv || /空き|使用可能|利用可能|未使用|free|available|unused|boş\s*alan|kullanılabilir/i.test(kk)) continue;
+        if (
+          !vv ||
+          /空き|使用可能|利用可能|未使用|free|available|unused|boş\s*alan|kullanılabilir|Espacio disponible|Espacio libre/i.test(kk)
+        )
+          continue;
         if (/シリアル|serial/i.test(kk)) continue;
         if (/^使用中|^使用済|^占有/.test(kk) && /(容量|領域|サイズ|スペース|space)/i.test(kk) && looksLikeDriveSizeValue(vv)) return vv;
         if ((kk === "使用中" || kk === "使用済み") && looksLikeDriveSizeValue(vv)) return vv;
@@ -2750,8 +2790,12 @@
           "Sürücü Etiketi",
           "Sürücü etiketi",
           "Surucu Etiketi",
+          "Nombre de volumen",
+          "Nombre del volumen",
         ]) ||
         f["Volume Name"] ||
+        f["Nombre de volumen"] ||
+        f["Nombre del volumen"] ||
         f["Label"] ||
         f["Datenträgerbezeichnung"] ||
         f["Nom de volume"] ||
@@ -2786,6 +2830,7 @@
         f["Drive"] ||
         f.Laufwerk ||
         f["Volume"] ||
+        f["Unidad"] ||
         f["Name"] ||
         f["Описание"] ||
         f["Модель"] ||
@@ -2793,7 +2838,12 @@
         f["Yerel Disk"] ||
         f["ドライブ"] ||
         f["ディスク"] ||
-        (path.match(/Drive\s+[A-Z]:/i) || path.match(/ドライブ\s+[A-Z]:/i) || path.match(/Sürücü\s+[A-Z]:/i) || [""])[0] ||
+        (path.match(/Drive\s+[A-Z]:/i) ||
+          path.match(/ドライブ\s+[A-Z]:/i) ||
+          path.match(/Sürücü\s+[A-Z]:/i) ||
+          path.match(/Unidad local\s*\([A-Z]:/i) ||
+          path.match(/Unidad\s+[A-Z]:/i) ||
+          [""])[0] ||
         path.split(" / ").pop() ||
         "Drive";
       const tTrim = String(title).trim();
@@ -2852,6 +2902,7 @@
           "合計サイズ",
           "サイズ",
           "総容量",
+          "Tamaño",
         ]) ||
         f["Total Size"] ||
         f["Size"] ||
@@ -2863,6 +2914,7 @@
         f["Ёмкость"] ||
         f["Toplam Boyut"] ||
         f["Toplam boyut"] ||
+        f["Tamaño"] ||
         f["合計サイズ"] ||
         f["サイズ"] ||
         f["総容量"] ||
@@ -2875,6 +2927,8 @@
           "Verfügbarer Speicherplatz",
           "Espace libre",
           "Espace disponible",
+          "Espacio disponible",
+          "Espacio libre",
           "Свободно",
           "Свободное место",
           "Доступно",
@@ -2895,6 +2949,8 @@
         f["Verfügbarer Speicherplatz"] ||
         f["Espace libre"] ||
         f["Espace disponible"] ||
+        f["Espacio disponible"] ||
+        f["Espacio libre"] ||
         f["Свободно"] ||
         f["Свободное место"] ||
         f["Доступно"] ||
@@ -2922,8 +2978,10 @@
           "Birim seri numarası",
           "Seri Numarası",
           "Seri numarası",
+          "Número de serie",
         ]) ||
         f["Serial Number"] ||
+        f["Número de serie"] ||
         f["Volume Serial Number"] ||
         f["Seriennummer"] ||
         f["Серийный номер"] ||
@@ -2947,9 +3005,9 @@
       });
     };
 
-    /** JP exports split volumes on ドライブ / ローカル ディスク (C:); physical disks repeat ディスク / ディスク 1. */
+    /** JP exports split volumes on ドライブ / ローカル ディスク (C:); physical disks repeat ディスク / ディスク 1. Spanish uses Unidad / Disco. */
     const driveRecordStartRe =
-      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?|Yerel\s+Disk(?:\s*\([A-Z]:?\))?|Yerel\s+disk(?:\s*\([A-Z]:?\))?|Sürücü(?:\s+[A-Z]:)?|Yerel\s+sürücü(?:\s*\([A-Z]:?\))?)$/iu;
+      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?|Yerel\s+Disk(?:\s*\([A-Z]:?\))?|Yerel\s+disk(?:\s*\([A-Z]:?\))?|Sürücü(?:\s+[A-Z]:)?|Yerel\s+sürücü(?:\s*\([A-Z]:?\))?|Unidad|Disco(?:\s+\d+)?)$/iu;
     const emitDrivesForPath = (/** @type {string} */ p) => {
       const chunks = chunkKvsPlainSectionRecords(kvs, p, driveRecordStartRe, 2);
       let any = false;
@@ -2976,8 +3034,10 @@
     if (!out.length) {
       for (const p of [...new Set(kvs.map((k) => k.path))]) {
         if (
-          !/Storage|Запоминающ|Накопител|Диски|Компоненты|ストレージ|ディスク|ドライブ|ボリューム|コンポーネント|Depolama|Diskler|Bileşenler/i.test(p) ||
-          !/Disks?|Logical|Drive|Partition|Диск|Том|ドライブ|ディスク|ボリューム|パーティション|Sürücü|Disk|Bölüm/i.test(p)
+          !/Storage|Запоминающ|Накопител|Диски|Компоненты|ストレージ|ディスク|ドライブ|ボリューム|コンポーネント|Depolama|Diskler|Bileşenler|Almacenamiento|Unidades|Discos/i.test(
+            p
+          ) ||
+          !/Disks?|Logical|Drive|Partition|Диск|Том|ドライブ|ディスク|ボリューム|パーティション|Sürücü|Disk|Bölüm|Unidad|Disco/i.test(p)
         )
           continue;
         if (/Problem|Printer|Floppy|USB.*Mass|DVD|CD-ROM|Controller\s*Host|Принтер|Накопител.*гибк/i.test(p)) continue;
@@ -3645,8 +3705,26 @@
           pathLeaf ||
           ""
       ).trim();
-      if (isMsinfoServiceSectionTitleName(raw)) return "";
-      return raw;
+      let nameOut = raw;
+      if (!nameOut && f && typeof f === "object") {
+        for (const [k, v] of Object.entries(f)) {
+          const vv = String(v || "").trim();
+          if (!vv || vv.length > 220) continue;
+          const kn = String(k || "")
+            .replace(/_/g, " ")
+            .trim();
+          if (
+            /^(görünen|gorunen|display\s*name|anzeigename|weergavenaam|nombre\s+para\s+mostrar|nom\s+du\s*service)\b/i.test(
+              kn
+            )
+          ) {
+            nameOut = vv;
+            break;
+          }
+        }
+      }
+      if (isMsinfoServiceSectionTitleName(nameOut)) return "";
+      return nameOut;
     };
 
     /** @param {string} st */
@@ -3706,7 +3784,7 @@
 
     /** Windows Services table is often "... / Службы" with no per-service path segment; older matchers required another path segment and missed flat tables. */
     const isServicesSectionPath = (/** @type {string} */ p) => {
-      if (!MSINFO_I18N.softwareEnvPath.test(p)) return false;
+      if (!msinfoPathLooksLikeSoftwareEnvironment(p)) return false;
       if (
         /startup|autostart|автозагруз|планировщик|task\s*scheduler|scheduled\s*tasks|tâches planifiées|geplante tasks|スタートアップ\s*プログラム|スタートアッププログラム/i.test(
           p
@@ -3717,11 +3795,20 @@
       if (/системные драйверы|system\s*drivers/i.test(p)) return false;
       if (/Drivers$|Druckertreiber$/i.test(p)) return false;
       const parts = pathParts(p);
-      const idx = parts.findIndex((s) =>
-        /^(services|dienste|servicios|serviços|servizi|службы|сервисы|запущенные\s+службы|работающие\s+службы|palvelut|tjenester|tjänster|usługi|hizmetler|الخدمات|服务|服務|서비스|サービス|実行中のサービス|起動しているサービス|teenused|υπηρεσίες|szolgáltatások|servicii|služby|käynnissä\s+olevat\s+palvelut|uruchomione\s+usługi|çalışan\s+hizmetler)$/iu.test(
-          s
+      const isServicesLeafSegment = (/** @type {string} */ seg) => {
+        const s0 = String(seg || "").trim();
+        if (!s0) return false;
+        if (
+          /^(services|dienste|servicios|serviços|servizi|службы|сервисы|запущенные\s+службы|работающие\s+службы|palvelut|tjenester|tjänster|usługi|الخدمات|服务|服務|서비스|サービス|実行中のサービス|起動しているサービス|teenused|υπηρεσίες|szolgáltatások|servicii|služby|käynnissä\s+olevat\s+palvelut|uruchomione\s+usługi)$/iu.test(
+            s0
+          )
         )
-      );
+          return true;
+        if (/^hizmetler\b/i.test(s0) || /^servisler\b/i.test(s0)) return true;
+        if (/^çalışan\s+hizmetler\b/iu.test(s0) || /^calisan\s+hizmetler\b/iu.test(s0)) return true;
+        return false;
+      };
+      const idx = parts.findIndex((s) => isServicesLeafSegment(s));
       return idx >= 0;
     };
 
@@ -3824,7 +3911,7 @@
       const vv = String(v || "").trim();
       if (!vv) continue;
       const kn = msinfoFieldKeyNormLower(k);
-      if (kn === "saat" || kn === "time") return vv;
+      if (kn === "saat" || kn === "time" || kn === "hora") return vv;
     }
     return "";
   }
@@ -3861,7 +3948,7 @@
       const vv = String(v || "").trim();
       if (!vv) continue;
       const kn = msinfoFieldKeyNormLower(k);
-      if (kn === "tür" || kn === "type") return vv;
+      if (kn === "tür" || kn === "type" || kn === "tipo") return vv;
     }
     const fb = werFirstFieldMatch(fields, [
       /fault/i,
@@ -3909,7 +3996,7 @@
       if (!vv) continue;
       const kn = msinfoFieldKeyNormLower(k);
       const kf = networkFieldKeyAsciiFold(k);
-      if (kn === "ayrıntılar" || kn === "details" || kf === "ayrintilar") return vv;
+      if (kn === "ayrıntılar" || kn === "details" || kn === "detalles" || kf === "ayrintilar") return vv;
     }
     /** @type {string[]} */
     const skip = [];
@@ -3932,7 +4019,7 @@
   function werCategorize(type, details) {
     const t = `${type} ${details}`.toLowerCase();
     if (
-      /appcrash|application|\.exe|faulting\s*application|app\s*error|application\s*hang|ошибк.*приложен|приложени.*ошиб|сбой\s*прилож|uygulama\s+askıda|uygulama\s+askida|uygulama\s+hatası|hatalı\s+uygulama|çalışmayı\s+durdurdu|çalismayi\s+durdurdu/i.test(
+      /appcrash|application|\.exe|faulting\s*application|app\s*error|application\s*hang|ошибк.*приложен|приложени.*ошиб|сбой\s*прилож|uygulama\s+askıda|uygulama\s+askida|uygulama\s+hatası|hatalı\s+uygulama|çalışmayı\s+durdurdu|çalismayi\s+durdurdu|aplicación\s+con\s+errores|aplicacion\s+con\s+errores|dejó\s+de\s+interactuar|dejo\s+de\s+interactuar|dejó\s+de\s+funcionar|dejo\s+de\s+funcionar|informe\s+de\s+errores/i.test(
         t
       )
     )
@@ -3955,7 +4042,7 @@
     if (/critical|bsod|bugcheck|livekernel|kernel\s*power|0xc000021a|критич|синий\s*экран|журнал\s*ошибок\s*ядра/i.test(x))
       return "error";
     if (
-      /appcrash|application\s*error|exception|fault|driver\s*stopped|stopped\s*responding|ошибк.*приложен|исключен|сбой/i.test(
+      /appcrash|application\s*error|exception|fault|driver\s*stopped|stopped\s*responding|ошибк.*приложен|исключен|сбой|aplicación\s+con\s+errores|aplicacion\s+con\s+errores|dejó\s+de\s+interactuar|dejo\s+de\s+interactuar/i.test(
         x
       )
     )
@@ -4009,7 +4096,7 @@
       const it = (item || "").trim();
       if (anchorRes.some((re) => re.test(it))) return true;
       const kn = msinfoFieldKeyNormLower(it);
-      return kn === "saat" || kn === "time" || kn.startsWith("время");
+      return kn === "saat" || kn === "time" || kn === "hora" || kn.startsWith("время");
     };
 
     /** @type {Record<string, string>[]} */
@@ -4112,7 +4199,7 @@
       const blob = pathKvs.map((k) => `${k.item}\t${k.value}`).join("\n");
       const bl = blob.toLowerCase();
       if (
-        /hata\s+demeti|olay\s+adı|olay\s+adi|hatalı\s+uygulama|hatali\s+uygulama|fault\s*bucket|problem\s*signature|appcrash|radar_|bex\d|windows\s+error\s+reporting|application\s+error|application\s*hang|uygulama\s+askıda|uygulama\s+askida|windows\s+ile\s+birlikte\s+çalışmayı|windows\s+ile\s+birlikte\s+calismayi|&#x000d;&#x000a;|&#x000d|&#x000a/i.test(
+        /hata\s+demeti|olay\s+adı|olay\s+adi|hatalı\s+uygulama|hatali\s+uygulama|fault\s*bucket|problem\s*signature|appcrash|radar_|bex\d|windows\s+error\s+reporting|application\s+error|application\s*hang|uygulama\s+askıda|uygulama\s+askida|windows\s+ile\s+birlikte\s+çalışmayı|windows\s+ile\s+birlikte\s+calismayi|informes?\s+de\s+errores\s+de\s+windows|contenedor\s+de\s+errores|firma\s+del\s+problema|nombre\s+del\s+evento|aplicación\s+con\s+errores|aplicacion\s+con\s+errores|dejó\s+de\s+interactuar|dejo\s+de\s+interactuar|&#x000d;&#x000a;|&#x000d|&#x000a/i.test(
           bl
         )
       )
@@ -4122,9 +4209,9 @@
         if (!it) continue;
         const kn = msinfoFieldKeyNormLower(it);
         const kf = networkFieldKeyAsciiFold(it);
-        if (kn === "saat" || kn === "time") timeCol++;
-        if (kn === "tür" || kn === "type") typeCol++;
-        if (kn === "ayrıntılar" || kn === "details" || kf === "ayrintilar") detailCol++;
+        if (kn === "saat" || kn === "time" || kn === "hora") timeCol++;
+        if (kn === "tür" || kn === "type" || kn === "tipo") typeCol++;
+        if (kn === "ayrıntılar" || kn === "details" || kn === "detalles" || kf === "ayrintilar") detailCol++;
       }
       return timeCol > 0 && typeCol > 0 && detailCol > 0;
     }
@@ -4139,7 +4226,7 @@
         /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
           s
         ) ||
-        /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Relatórios de problemas|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Relatório de erros|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
+        /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Informes de errores de Windows|Informe de errores de Windows|Relatórios de problemas|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Relatório de erros|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
           s
         );
       if (!hit) return false;
@@ -4174,9 +4261,9 @@
       for (const k of Object.keys(fields)) {
         const kn = msinfoFieldKeyNormLower(k);
         const kf = networkFieldKeyAsciiFold(k);
-        if (kn === "saat" || kn === "time") timeCol++;
-        if (kn === "tür" || kn === "type") typeCol++;
-        if (kn === "ayrıntılar" || kn === "details" || kf === "ayrintilar") detailCol++;
+        if (kn === "saat" || kn === "time" || kn === "hora") timeCol++;
+        if (kn === "tür" || kn === "type" || kn === "tipo") typeCol++;
+        if (kn === "ayrıntılar" || kn === "details" || kn === "detalles" || kf === "ayrintilar") detailCol++;
       }
       return timeCol > 0 && typeCol > 0 && detailCol > 0;
     };
@@ -4230,7 +4317,7 @@
     summaryPath:
       /System Summary|Systemübersicht|Résumé du système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
     softwareEnvPath:
-      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービス|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
+      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービス|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
     memoryRowPath:
       /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama/i,
     /** @param {RegExp | RegExp[]} labelRe */
@@ -4238,6 +4325,22 @@
       return Array.isArray(labelRe) ? labelRe : [labelRe];
     },
   };
+
+  /**
+   * Turkish “Software Environment” paths vary in Unicode (İ/ı/I/i); {@link MSINFO_I18N.softwareEnvPath} can miss some exports.
+   * @param {string} p
+   */
+  function msinfoPathLooksLikeSoftwareEnvironment(p) {
+    const s = String(p || "")
+      .normalize("NFC")
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (MSINFO_I18N.softwareEnvPath.test(s)) return true;
+    if (/Yazilim\s+Ortami|Yaz\u0131l\u0131m\s+Ortam\u0131/i.test(s)) return true;
+    if (/\bYaz(ilim|ılım)\s+Ortam(i|ı|I|İ)\b/i.test(s)) return true;
+    return false;
+  }
 
   /**
    * True when an MSInfo category path is the localized “system summary” table (or parent chain contains it).
@@ -4342,7 +4445,9 @@
     const cand = kvs.filter(
       (k) =>
         msinfoSummaryPathMatches(k.path) &&
-        (/^Тип$/i.test((k.item || "").trim()) || /^Tür$/u.test((k.item || "").trim()))
+        (/^Тип$/i.test((k.item || "").trim()) ||
+          /^Tür$/u.test((k.item || "").trim()) ||
+          /^Tipo$/iu.test((k.item || "").trim()))
     );
     if (!cand.length) return "";
     const vOf = (/** @type {{ value?: string }} */ k) => String(k.value || "").trim();
@@ -4373,7 +4478,7 @@
     for (const r of rows) {
       if (!msinfoSummaryPathMatches(r.path)) continue;
       for (const [k, v] of Object.entries(r.fields)) {
-        if (!/^Тип$/i.test(k.trim()) && !/^Tür$/u.test(k.trim())) continue;
+        if (!/^Тип$/i.test(k.trim()) && !/^Tür$/u.test(k.trim()) && !/^Tipo$/iu.test(k.trim())) continue;
         const t = String(v || "").trim();
         if (t) vals.push(t);
       }
@@ -4714,7 +4819,9 @@
           ]),
           pickSummaryValueByItemRe(/^Sistem Üreticisi$/iu),
           pickSummaryValueByItemRe(/^Sistem üreticisi$/iu),
-          pickSummaryValueByItemRe(/^System Manufacturer$/i),
+          pickSummaryValueByItemRe(/^System Manufacturer$/i) ||
+          pickSummaryValueByItemRe(/^Fabricante del sistema$/i) ||
+          pickSummaryValueByItemRe(/^Fabricante del SO$/i),
         ];
         for (const c of cands) {
           const t = String(c || "").trim();
@@ -4739,6 +4846,10 @@
     pushItem(/PC System Type/i);
     pushItem(/^PC-Systemtyp$/i);
     pushItem(/^Platform Role$/i);
+    pushItem(/^Rol de la plataforma$/i);
+    pushItem(/^Rol de plataforma$/i);
+    pushItem(/^Función de la plataforma$/i);
+    pushItem(/^Tipo de sistema$/i);
     pushItem(/^Platform Rolü$/u);
     pushItem(/^Роль платформы$/i);
     pushItem(/^Systemrolle$/i);
@@ -4757,6 +4868,10 @@
         f["Тип корпуса"],
         f["Enclosure Type"],
         f["System Type"],
+        f["Rol de la plataforma"],
+        f["Rol de plataforma"],
+        f["Función de la plataforma"],
+        f["Tipo de sistema"],
         f["Роль платформы"],
         f.Description,
       ]
@@ -4772,6 +4887,8 @@
           /^Betriebssystemname$/i,
           /^Nom du système d'exploitation$/i,
           /^Nombre del sistema operativo$/i,
+          /** Spanish MSInfo “SO” abbreviation for the OS name row. */
+          /^Nombre del SO$/i,
           /^Nome do SO$/i,
           /^Nome do sistema operacional$/i,
           /^Nom du système$/i,
@@ -4792,6 +4909,7 @@
           /^Название ОС$/i,
           /^OS\s*名$/,
           /^OS名$/,
+          /^Nombre del SO$/i,
           /^İşletim Sistemi Adı$/u,
         ],
         kvs
@@ -4802,6 +4920,7 @@
           /^Betriebssystemname$/i,
           /^Nom du système d'exploitation$/i,
           /^Nombre del sistema operativo$/i,
+          /^Nombre del SO$/i,
           /^Название ОС$/i,
           /^Имя ОС$/i,
           /^OS\s*名$/,
@@ -4814,6 +4933,8 @@
       kvFromSummaryI18n(
         [
           /^Version$/i,
+          /** Spanish single-column “Version” row (often includes build text). */
+          /^Versión$/i,
           /^Betriebssystemversion$/i,
           /^Version du système$/i,
           /^Version du système d'exploitation$/i,
@@ -4837,6 +4958,7 @@
           /^Версия ОС$/i,
           /^バージョン$/,
           /^OS\s*バージョン$/,
+          /^Versión$/i,
           /^İşletim Sistemi Sürümü$/u,
           /^Sürüm$/u,
         ],
@@ -4850,6 +4972,7 @@
           /^Версия ОС$/i,
           /^バージョン$/,
           /^OS\s*バージョン$/,
+          /^Versión$/i,
           /^İşletim Sistemi Sürümü$/u,
           /^Sürüm$/u,
         ],
@@ -4883,9 +5006,21 @@
     if (!osBuild) {
       const buildLine =
         kvFromSummaryI18n(
-          [/^İşletim Sistemi Derlemesi$/u, /^OS Derlemesi$/u, /^Derleme$/u, /^Windows Derlemesi$/u],
+          [
+            /^İşletim Sistemi Derlemesi$/u,
+            /^OS Derlemesi$/u,
+            /^Derleme$/u,
+            /^Windows Derlemesi$/u,
+            /^Compilación del SO$/i,
+            /^Compilación de Windows$/i,
+            /^Compilación$/i,
+          ],
           kvs
-        ) || kvValI18n([/^Derleme$/u, /^İşletim Sistemi Derlemesi$/u], kvs);
+        ) ||
+        kvValI18n(
+          [/^Derleme$/u, /^İşletim Sistemi Derlemesi$/u, /^Compilación del SO$/i, /^Compilación de Windows$/i],
+          kvs
+        );
       osBuild = extractWindowsBuildFromVersionLine(buildLine) || "";
       if (!osBuild && /^\d{4,6}$/.test(String(buildLine || "").trim())) osBuild = String(buildLine).trim();
     }
@@ -5017,6 +5152,7 @@
           /^Time Zone$/i,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
+          /^Zona horaria$/i,
           /^Часовой пояс$/i,
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
@@ -5030,6 +5166,7 @@
           /^Time Zone$/i,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
+          /^Zona horaria$/i,
           /^Часовой пояс$/i,
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
@@ -5043,6 +5180,7 @@
           /^Time Zone$/i,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
+          /^Zona horaria$/i,
           /^Часовой пояс$/i,
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
@@ -5060,6 +5198,7 @@
           /^Installationsdatum$/i,
           /Date d'installation d'origine/i,
           /Date d'installation originale/i,
+          /Fecha de instalación original/i,
           /Data de instalação original/i,
           /Data da instalação original/i,
           /Дата установки/i,
@@ -5091,6 +5230,7 @@
           /Original Install Date/i,
           /Ursprüngliches Installationsdatum/i,
           /Date d'installation d'origine/i,
+          /Fecha de instalación original/i,
           /Orijinal Kurulum Tarihi/u,
           /Orijinal kurulum tarihi/u,
           /^İlk Kurulum Tarihi$/u,
@@ -5103,6 +5243,7 @@
         [
           /Original Install Date/i,
           /Install Date/i,
+          /Fecha de instalación original/i,
           /Orijinal Kurulum Tarihi/u,
           /Orijinal kurulum tarihi/u,
           /^İlk Kurulum Tarihi$/u,
@@ -5112,7 +5253,8 @@
         rows
       ) ||
       (() => {
-        const lab = /orijinal\s+kurulum\s+tarihi|ilk\s+kurulum\s+tarihi|kurulum\s+tarihi|original\s+install/i;
+        const lab =
+          /orijinal\s+kurulum\s+tarihi|ilk\s+kurulum\s+tarihi|kurulum\s+tarihi|original\s+install|fecha\s+de\s+instalación\s+original/i;
         for (const k of kvs) {
           if (!msinfoSummaryPathMatches(k.path)) continue;
           const it = (k.item || "").trim();
@@ -5135,6 +5277,9 @@
           /^Plattformrolle$/i,
           /^Rôle de la plateforme$/i,
           /^Rol de la plataforma$/i,
+          /^Rol de plataforma$/i,
+          /^Función de la plataforma$/i,
+          /^Función de plataforma$/i,
           /^Função da plataforma$/i,
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
@@ -5150,6 +5295,9 @@
           /^Plattformrolle$/i,
           /^Rôle de la plateforme$/i,
           /^Rol de la plataforma$/i,
+          /^Rol de plataforma$/i,
+          /^Función de la plataforma$/i,
+          /^Función de plataforma$/i,
           /^Função da plataforma$/i,
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
@@ -5163,6 +5311,10 @@
           /^Platform Role$/i,
           /^Systemrolle$/i,
           /^Rôle de la plateforme$/i,
+          /^Rol de la plataforma$/i,
+          /^Rol de plataforma$/i,
+          /^Función de la plataforma$/i,
+          /^Función de plataforma$/i,
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
@@ -5175,6 +5327,10 @@
           /^Platform Role$/i,
           /^Systemrolle$/i,
           /^Rôle de la plateforme$/i,
+          /^Rol de la plataforma$/i,
+          /^Rol de plataforma$/i,
+          /^Función de la plataforma$/i,
+          /^Función de plataforma$/i,
           /^Роль платформы$/i,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
@@ -5182,6 +5338,33 @@
         ],
         rows
       );
+    if (!String(platformRole || "").trim()) {
+      const roleItemRe = /^Rol(\s+de(\s+la)?)?\s+plataforma$/i;
+      const fnItemRe = /^Funci[oó]n(\s+de(\s+la)?)?\s+plataforma$/i;
+      for (const k of kvs) {
+        if (!msinfoSummaryPathMatches(k.path)) continue;
+        const it = (k.item || "").trim();
+        if (!roleItemRe.test(it) && !fnItemRe.test(it)) continue;
+        const v = String(k.value || "").trim();
+        if (v) {
+          platformRole = v;
+          break;
+        }
+      }
+      if (!String(platformRole || "").trim()) {
+        outerPlat: for (const r of rows) {
+          if (!msinfoSummaryPathMatches(r.path)) continue;
+          for (const [kk, v] of Object.entries(r.fields)) {
+            const kt = kk.trim();
+            if (!roleItemRe.test(kt) && !fnItemRe.test(kt)) continue;
+            if (String(v || "").trim()) {
+              platformRole = String(v).trim();
+              break outerPlat;
+            }
+          }
+        }
+      }
+    }
     let pcSystemType =
       kvValI18n(
         [
@@ -5212,14 +5395,16 @@
     const prNorm = String(platformRole || "").toLocaleLowerCase("tr-TR");
     const pr = prNorm;
     if (
-      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu/i.test(
+      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu|escritorio|sobremesa|equipo\s+de\s+escritorio/i.test(
         pr
       ) &&
-      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(pr)
+      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta/i.test(
+        pr
+      )
     ) {
       systemForm = "Desktop / workstation-class";
     } else if (
-      /\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
+      /\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|equipo\s+móvil|equipo\s+movil/i.test(
         pr
       )
     ) {
@@ -5241,6 +5426,20 @@
       )
     ) {
       systemForm = "Laptop / mobile-class";
+    } else if (
+      systemTypeRaw &&
+      /portátil|portatil|móvil|movil|tablet|tableta|2\s*en\s*1|convertible|dizüstü|dizustu|notebook|laptop/i.test(
+        String(systemTypeRaw).toLocaleLowerCase("tr-TR")
+      )
+    ) {
+      systemForm = "Laptop / mobile-class";
+    } else if (
+      systemTypeRaw &&
+      /escritorio|sobremesa|estación\s+de\s+trabajo|workstation|tower|todo\s+en\s+uno|todo-en-uno|equipo\s+de\s+escritorio/i.test(
+        String(systemTypeRaw).toLocaleLowerCase("tr-TR")
+      )
+    ) {
+      systemForm = "Desktop / workstation-class";
     } else if (
       chassisType &&
       (/\b(desktop|tower|mini|pizza|low profile|convertible|all in one|mainstream)\b/i.test(chassisType) ||
@@ -5279,6 +5478,9 @@
         systemForm = "Desktop / workstation-class";
       } else if (blob.trim()) {
         systemForm = `See hints: ${formHints[0]}`;
+      } else if (processor && /\b\d{4}HS\b|\b\d{4}HX\b|\b8945HS\b|\b7840HS\b|\bRyzen[^\n]{0,120}Radeon\s+\d{3,4}M\b/i.test(processor)) {
+        /** Spanish (and other) exports often omit Platform Role; mobile-class CPU suffixes are a strong hint. */
+        systemForm = "Laptop / mobile-class (inferred from CPU model in export)";
       } else {
         systemForm = "Not clearly stated in this export";
       }
@@ -5803,6 +6005,7 @@
         /^Gesamter physischer Arbeitsspeicher$/i,
         /^Mémoire physique totale$/i,
         /^Memoria física \(total\)/i,
+        /^Memoria física total$/i,
         /^Memória física total$/i,
         /^Всего физической памяти/i,
         /Полный объем физической памяти/i,
@@ -5830,6 +6033,7 @@
         /^Gesamter virtueller Arbeitsspeicher$/i,
         /^Mémoire virtuelle totale$/i,
         /^Memoria virtual \(total\)/i,
+        /^Memoria virtual total$/i,
         /^Memória virtual total$/i,
         /^Всего виртуальной памяти/i,
         /^虚拟内存总量$/i,
@@ -6153,6 +6357,8 @@
     if (!item.trim() && imJa) item = imJa[2] != null ? imJa[2] : imJa[3] || "";
     const imTr = attrBlob.match(/(?:^|[\s,])Öğe\s*=\s*("([^"]*)"|'([^']*)')/iu);
     if (!item.trim() && imTr) item = imTr[2] != null ? imTr[2] : imTr[3] || "";
+    const imEs = attrBlob.match(/(?:^|[\s,])Elemento\s*=\s*("([^"]*)"|'([^']*)')/i);
+    if (!item.trim() && imEs) item = imEs[2] != null ? imEs[2] : imEs[3] || "";
     const vm = attrBlob.match(/\bValue\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (vm) value = vm[2] != null ? vm[2] : vm[3] || "";
     const vmRu = attrBlob.match(/(?:^|[\s,])Значение\s*=\s*("([^"]*)"|'([^']*)')/i);
@@ -6163,6 +6369,8 @@
     if (!value.trim() && vmJa) value = vmJa[2] != null ? vmJa[2] : vmJa[3] || "";
     const vmTr = attrBlob.match(/(?:^|[\s,])Değer\s*=\s*("([^"]*)"|'([^']*)')/iu);
     if (!value.trim() && vmTr) value = vmTr[2] != null ? vmTr[2] : vmTr[3] || "";
+    const vmEs = attrBlob.match(/(?:^|[\s,])Valor\s*=\s*("([^"]*)"|'([^']*)')/i);
+    if (!value.trim() && vmEs) value = vmEs[2] != null ? vmEs[2] : vmEs[3] || "";
     return { item: norm(item), value: norm(decodeXmlishText(value)) };
   }
 
@@ -6171,6 +6379,8 @@
     const normInner = (/** @type {string} */ s) =>
       decodeXmlishText(String(s || "").replace(/\s+/g, " ").trim());
     const pairs = [
+      /** Spanish MSInfo child rows ({@code <Elemento>}/{@code <Valor>}) when XML is repaired as loose text. */
+      [/<Elemento\b[^>]*>([\s\S]*?)<\/Elemento>/i, /<Valor\b[^>]*>([\s\S]*?)<\/Valor>/i],
       [/<Item\b[^>]*>([\s\S]*?)<\/Item>/i, /<Value\b[^>]*>([\s\S]*?)<\/Value>/i],
       [/<Элемент\b[^>]*>([\s\S]*?)<\/Элемент>/i, /<Значение\b[^>]*>([\s\S]*?)<\/Значение>/i],
       [/<Élément\b[^>]*>([\s\S]*?)<\/Élément>/i, /<Valeur\b[^>]*>([\s\S]*?)<\/Valeur>/i],
@@ -6714,6 +6924,19 @@
   }
 
   /**
+   * Spanish MSInfo strings are often ASCII-only (“Resumen del sistema”, “Nombre del SO”); still needs Translate.
+   * @param {string} s
+   */
+  function looksLikeSpanishWindowsLatinHint(s) {
+    const u = String(s || "");
+    return (
+      /\bResumen\s+del\s+sistema\b|\bNombre\s+del\s+SO\b|\bEntorno\s+de\s+software\b|\bInformes?\s+de\s+errores\s+de\s+Windows\b|\bcontenedor\s+de\s+errores\b|\bFabricante\s+del\s+sistema\b|\bFabricante\s+del\s+SO\b|\bDirectorio\s+de\s+Windows\b|\bId\.\s+del\s+producto\b|\bCompilación\s+del\s+SO\b|\bZona\s+horaria\b|\bTipo\s+de\s+sistema\b|\bMemoria\s+física\b|\bMemoria\s+fisica\b|\bMemoria\s+virtual\b|\bSímbolo\s+de\s+análisis\b|\bSimbolo\s+de\s+analisis\b|\bArchivos\s+adjuntos\b|\bFirma\s+del\s+problema\b|\bNombre\s+del\s+evento\b|\bEstado\s+del\s+informe\b|\bIdentificador\s+de\s+informe\b|\baplicación\s+con\s+errores\b|\baplicacion\s+con\s+errores\b|\bdejó\s+de\s+interactuar\b|\bdejo\s+de\s+interactuar\b|\bEquipo\s+basado\s+en\s+x\d+\b/i.test(
+        u
+      ) || /\bHora\b.*\bTipo\b.*\bDetalles\b/is.test(u)
+    );
+  }
+
+  /**
    * True when text looks non-English for common Windows display languages (Arabic, CJK, Cyrillic, Greek, Hangul, kana, Latin with European diacritics).
    * Used to show the section Translate control; phrase maps cover Russian + intl. pairs below as best-effort.
    * @param {string} s
@@ -6739,6 +6962,7 @@
     /** Turkish display exports: “NVIDIA uyumlu”, etc. (ASCII-only; needs Translate + phrase map). */
     if (/\buyumlu\b/i.test(t)) return true;
     if (looksLikeTurkishWindowsLatinHint(t)) return true;
+    if (looksLikeSpanishWindowsLatinHint(t)) return true;
     return false;
   }
 
@@ -6768,7 +6992,9 @@
       }
     }
     const blob = parts.join(" ");
-    return localeScriptLooksNonEnglishListed(blob) || /\buyumlu\b/i.test(blob);
+    return (
+      localeScriptLooksNonEnglishListed(blob) || /\buyumlu\b/i.test(blob) || looksLikeSpanishWindowsLatinHint(blob)
+    );
   }
 
   /**
@@ -7206,6 +7432,27 @@
     ["Indisponible", "Unavailable"],
     ["NVIDIA-compatible", "NVIDIA-compatible"],
     // --- Spanish (es) ---
+    ["Resumen del sistema", "System Summary"],
+    ["Nombre del SO", "OS Name"],
+    ["Versión del sistema operativo", "Operating System Version"],
+    ["Versión", "Version"],
+    ["Compilación del SO", "OS Build"],
+    ["Compilación de Windows", "Windows Build"],
+    ["compilación", "build"],
+    ["Compilación", "Build"],
+    ["Directorio de Windows", "Windows Directory"],
+    ["Fabricante del sistema", "System Manufacturer"],
+    ["Fabricante del SO", "OS Manufacturer"],
+    ["Nombre de host", "Host Name"],
+    ["Nombre del dispositivo", "Device Name"],
+    ["Id. del producto", "Product ID"],
+    ["Id. original del producto", "Original Product ID"],
+    ["Fecha de instalación original", "Original Install Date"],
+    ["Zona horaria", "Time Zone"],
+    ["Estado de arranque seguro", "Secure Boot State"],
+    ["Configuración regional", "Locale"],
+    ["Lista de idiomas", "Input languages"],
+    /** Do not map bare {@code Hora}/{@code Tipo}/{@code Detalles} — they corrupt Spanish time-zone names (“Hora estándar …”). */
     ["Entorno de software / Informes de errores de Windows", "Software Environment / Windows Error Reporting"],
     ["Informes de errores de Windows", "Windows Error Reporting"],
     ["Contenedor de errores", "Error container"],
@@ -7224,6 +7471,18 @@
     ["Identificador de informe:", "Report identifier:"],
     ["Estado del informe:", "Report state:"],
     ["Equipo basado en x64", "x64-based PC"],
+    ["PC basado en x64", "x64-based PC"],
+    ["PC basado en x86", "x86-based PC"],
+    ["PC basado en ARM64", "ARM64-based PC"],
+    ["procesadores lógicos", "logical processors"],
+    ["procesadores logicos", "logical processors"],
+    ["procesadores principales", "physical processors"],
+    ["Hora estándar romance", "Romance Standard Time"],
+    ["Hora estándar centroeuropea", "Central European Standard Time"],
+    ["Hora estándar del Pacífico", "Pacific Standard Time"],
+    ["Hora estándar oriental", "Eastern Standard Time"],
+    ["Rol de la plataforma", "Platform Role"],
+    ["Rol de plataforma", "Platform Role"],
     ["Memoria física instalada (RAM)", "Installed Physical Memory (RAM)"],
     ["Memoria física instalada", "Installed Physical Memory"],
     ["Memoria física total", "Total Physical Memory"],
@@ -7995,7 +8254,27 @@
       /** Turkish network / IRQ row titles when shown as raw keys. */
       .replace(/\bBellek Adresi\b/giu, "Memory address")
       .replace(/\bIRQ Kanalı\b/giu, "IRQ channel")
-      .replace(/\bDHCP Sunucusu\b/giu, "DHCP server");
+      .replace(/\bDHCP Sunucusu\b/giu, "DHCP server")
+      /** Spanish MSInfo (processor line, platform role value, system type). */
+      .replace(/\bprocesadores\s+lógicos\b/giu, "logical processors")
+      .replace(/\bprocesadores\s+logicos\b/giu, "logical processors")
+      .replace(/\bprocesadores\s+principales\b/giu, "physical processors")
+      .replace(/\bPC\s+basado\s+en\s+(x64|x86|arm64)\b/giu, (_, arch) => {
+        const a = String(arch).toLowerCase();
+        const label = a === "arm64" ? "ARM64" : a;
+        return `${label}-based PC`;
+      })
+      .replace(/\bEquipo\s+basado\s+en\s+(x64|x86|arm64)\b/giu, (_, arch) => {
+        const a = String(arch).toLowerCase();
+        const label = a === "arm64" ? "ARM64" : a;
+        return `${label}-based PC`;
+      })
+      .replace(/\bMóvil\b/gu, "Mobile")
+      .replace(/\bMovil\b/gu, "Mobile")
+      .replace(/\bEscritorio\b/giu, "Desktop")
+      .replace(/\bSobremesa\b/giu, "Desktop")
+      .replace(/\bPortátil\b/giu, "Laptop")
+      .replace(/\bPortatil\b/giu, "Laptop");
     return out;
   }
 
@@ -8550,7 +8829,11 @@
       <dt>Time Zone</dt><dd>${sumI18nSpan(sum.timeZone, esc)}</dd>
       <dt>Classification</dt><dd>${sumI18nSpan(sum.systemForm, esc)}</dd>
     </dl>`;
-    const overviewHtml = renderReportCategoryAccordion("System Overview", overviewBody, esc, { open: true, icon: "system" });
+    const overviewHtml = renderReportCategoryAccordion("System Overview", overviewBody, esc, {
+      open: true,
+      icon: "system",
+      alwaysOfferTranslate: true,
+    });
 
     const mem = sum.memory || {};
     const memoryBody = `<dl class="system-summary-dl">

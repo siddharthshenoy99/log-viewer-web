@@ -624,6 +624,9 @@
     if (!it) return false;
     return (
       /^driver\s*version$/i.test(it) ||
+      /^versi[oó]n\s+del\s+controlador$/i.test(it) ||
+      /^versi[oó]n\s+del\s+software\s+del\s+controlador$/i.test(it) ||
+      /^versi[oó]n\s+del\s+driver$/i.test(it) ||
       /^версия\s*драйвера$/i.test(it) ||
       /^sürücü\s+sürümü$/iu.test(it) ||
       /^sürücü\s+versiyonu$/iu.test(it) ||
@@ -642,6 +645,7 @@
     const it = String(item || "").trim();
     return (
       /^name$/i.test(it) ||
+      /^nombre$/i.test(it) ||
       /^nome$/iu.test(it) ||
       /^nome\s+do\s+adaptador$/iu.test(it) ||
       /^nome\s+do\s+dispositivo$/iu.test(it) ||
@@ -658,9 +662,21 @@
   /** @param {Record<string, string>} fields */
   function displayAdapterDisplayName(fields) {
     return (
-      displayFieldByLabels(fields, ["Name", "Nome", "Имя", "Наименование", "Ad", "Adı", "İsim", "名前", "名称"]) ||
+      displayFieldByLabels(fields, [
+        "Name",
+        "Nombre",
+        "Nome",
+        "Имя",
+        "Наименование",
+        "Ad",
+        "Adı",
+        "İsim",
+        "名前",
+        "名称",
+      ]) ||
       String(
         fields.Name ||
+          fields.Nombre ||
           fields.Nome ||
           fields.Имя ||
           fields["Наименование"] ||
@@ -680,6 +696,7 @@
     return (
       /^resolution$/i.test(it) ||
       /^current resolution$/i.test(it) ||
+      /^resoluci[oó]n(\s+actual)?$/i.test(it) ||
       /^разрешение$/i.test(it) ||
       /^çözünürlük$/iu.test(it) ||
       /^geçerli\s+çözünürlük$/iu.test(it) ||
@@ -796,6 +813,8 @@
       const res = (
         f.Resolution ||
         f["Current Resolution"] ||
+        f["Resolución"] ||
+        f["Resolución actual"] ||
         f["Разрешение"] ||
         f["Текущее разрешение"] ||
         f["解像度"] ||
@@ -838,6 +857,10 @@
     return (
       displayFieldByLabels(fields, [
         "Driver Date",
+        "Fecha del controlador",
+        "Fecha de controlador",
+        "Fecha del driver",
+        "Data del controlador",
         "Дата драйвера",
         "Sürücü Tarihi",
         "Sürücü tarihi",
@@ -856,6 +879,48 @@
         "Data do Driver",
       ]) || ""
     );
+  }
+
+  /**
+   * Some locales only list driver version + date inside the long {@code Controlador} / driver path row.
+   * @param {Record<string, string>} fields
+   * @param {string} vendorLabel
+   */
+  function scrapeGpuDriverVersionAndDateFromFields(fields, vendorLabel) {
+    const vals = [];
+    for (const [k, v] of Object.entries(fields)) {
+      if (v == null || !String(v).trim()) continue;
+      const kl = msinfoFieldKeyNormLower(k);
+      if (/controlador|driver|treiber/i.test(kl)) vals.push(String(v));
+    }
+    const blob = vals.join(" ");
+    let ver = "";
+    if (vendorLabel === "NVIDIA") {
+      const m = blob.match(/\b(3[12]\.0\.15\.\d{4,8})\b/);
+      if (m) ver = m[1];
+    }
+    if (!ver) {
+      const quads = blob.match(/\b\d+\.\d+\.\d+\.\d+\b/g) || [];
+      for (const q of quads) {
+        if (vendorLabel === "NVIDIA" && isNvidiaDriverVersionString(q)) {
+          ver = q;
+          break;
+        }
+        if (
+          vendorLabel === "AMD" &&
+          !isIntelDriverVersionString(q) &&
+          !isNvidiaDriverVersionString(q) &&
+          /\d+\.\d+\.\d+\.\d+/.test(q)
+        ) {
+          ver = q;
+          break;
+        }
+      }
+    }
+    let dateStr = "";
+    const dm = blob.match(/\b(\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})(?:\s+\d{1,2}:\d{2})?\b/);
+    if (dm) dateStr = dm[1].trim();
+    return { driverFull: ver, driverDate: dateStr };
   }
 
   /** MSInfo Components → Display — dedicated / adapter video memory row labels. */
@@ -883,6 +948,10 @@
         "Memória do adaptador",
         "Memória de vídeo dedicada",
         "Memória de video dedicada",
+        "Memoria dedicada",
+        "Memoria de adaptador dedicada",
+        "Memoria de vídeo dedicada",
+        "Memoria de video dedicada",
       ]) || ""
     );
   }
@@ -953,7 +1022,7 @@
   /** @param {string} path */
   function isMsInfoDisplayRelatedPath(path) {
     return (
-      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|Görüntü|Ekran|Grafik|Grafikler|Bileşenler.*Görüntü|Exibi[cç][aã]o|Exibicao|V[ií]deo|Placa\s+de\s+v[ií]deo|Componentes.*(?:Exibi|V[ií]deo|Monitor)|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
+      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|Görüntü|Ekran|Grafik|Grafikler|Bileşenler.*Görüntü|Exibi[cç][aã]o|Exibicao|V[ií]deo|Pantalla|Tarjeta\s+gr[aá]fica|Placa\s+de\s+v[ií]deo|Componentes.*(?:Exibi|V[ií]deo|Monitor|Pantalla)|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
         path
       ) &&
       !/USB.*Audio|Sound Driver|Audio Device|Звук|аудио|オーディオ|サウンド/i.test(path)
@@ -1061,6 +1130,9 @@
     let driverFull =
       displayFieldByLabels(fields, [
         "Driver Version",
+        "Versión del controlador",
+        "Versión del software del controlador",
+        "Versión del driver",
         "Versão do driver",
         "Versão do Driver",
         "Версия драйвера",
@@ -1089,6 +1161,9 @@
 
     const nmDriverVer = displayFieldByLabels(fields, [
       "Driver Version",
+      "Versión del controlador",
+      "Versión del software del controlador",
+      "Versión del driver",
       "Versão do driver",
       "Versão do Driver",
       "Версия драйвера",
@@ -1099,6 +1174,17 @@
       "ドライバー バージョン",
       "ドライバ バージョン",
     ]);
+    let driverDateStr = displayDriverDateMs(fields);
+    {
+      const mined = scrapeGpuDriverVersionAndDateFromFields(fields, vendorLabel);
+      if (!driverFull && mined.driverFull) {
+        driverFull = mined.driverFull;
+        if (vendorLabel === "NVIDIA" && driverFull && isNvidiaDriverVersionString(driverFull)) {
+          nvidiaDriverFormatted = nvidiaInternalToDisplayVersion(driverFull);
+        }
+      }
+      if (!driverDateStr && mined.driverDate) driverDateStr = mined.driverDate;
+    }
     let driverVersionDisplay = "";
     if (vendorLabel === "NVIDIA") {
       driverVersionDisplay = nvidiaDriverFormatted || nmDriverVer || driverFull || "";
@@ -1109,6 +1195,8 @@
     const resRaw = displayFieldByLabels(fields, [
       "Resolution",
       "Current Resolution",
+      "Resolución",
+      "Resolución actual",
       "Resolução",
       "Resolução atual",
       "Разрешение",
@@ -1136,7 +1224,7 @@
       drivesDisplay: vendorLabel !== "NVIDIA" || nvidiaDrivesDisplay,
       vendorLabel,
       driverVersionDisplay,
-      driverDate: displayDriverDateMs(fields),
+      driverDate: driverDateStr,
       deviceId: devId,
       pciLookupUrl: pciLookupUrlFromDeviceId(devId),
       adapterType:
@@ -1439,6 +1527,7 @@
   function classifyNetworkMedium(fields, path) {
     const name =
       fields.Name ||
+      fields.Nombre ||
       fields.Nome ||
       fields["Adı"] ||
       fields.Имя ||
@@ -1489,10 +1578,17 @@
     if (/\bethernet\b/i.test(hayAll) && !/wi-?fi|802\.11|wlan|wireless/i.test(hayName)) {
       return "Ethernet (wired)";
     }
-    if (/802\.3|ieee\s*802\.3/i.test(aType.toLowerCase()) && !/wi-?fi|802\.11|wlan|wireless/i.test(hayName)) {
+    if (
+      /802\.3|ieee\s*802\.3/i.test(aType.toLowerCase()) &&
+      !/wi-?fi|802\.11|wlan|wireless|rz616|mt792|mediatek|ax\d{3}|killer/i.test(hayName) &&
+      !/wi-?fi|802\.11|wlan|wireless|rz616|mt792|mediatek/i.test(hayAll)
+    ) {
       return "Ethernet (reported as 802.3)";
     }
-    if (/802\.3|ieee\s*802\.3/i.test(hayAll)) {
+    if (
+      /802\.3|ieee\s*802\.3/i.test(hayAll) &&
+      !/wi-?fi|802\.11|wlan|wireless|rz616|mt792|mediatek/i.test(hayAll)
+    ) {
       return "Unknown (802.3 in export — if you use Wi‑Fi, trust the adapter name)";
     }
     return "Other / unknown";
@@ -1502,6 +1598,7 @@
   function networkAdapterIdentityKey(fields) {
     const raw =
       fields.Name ||
+      fields.Nombre ||
       fields.Nome ||
       fields["Adı"] ||
       fields.Имя ||
@@ -1954,6 +2051,7 @@
       /\bRede\b|Adaptadores\s+de\s+rede|Componentes.*\bRede\b|Conex(ões|oes)\s+de\s+rede|rede\s+e\s+internet/i.test(
         p
       ) ||
+      /\bAdaptadores\s+de\s+red\b|\bConexiones\s+de\s+red\b|Componentes\s*\/\s*Red(?:\s*\/|\s*$)/i.test(p) ||
       /ağ\s*bağdaştırıcıları|ağ\s*bağlantıları|bağdaştırıcı|Bileşenler.*Ağ|Bileşenler.*ağ/i.test(p) ||
       /\bсеть\b|сетев|адаптер|tcp\s*\/\s*ip|беспровод|подключен|удаленн|компоненты.*сеть|сеть.*адапт/i.test(p) ||
       /\b(red|netwerk|netværk|nettverk|verkko|sieć|síť|rețea|ağ|δίκτυο|võrk|网络|網路|ネットワーク|네트워크|شبكة)\b/i.test(
@@ -2005,6 +2103,7 @@
       }
       return (
         Object.prototype.hasOwnProperty.call(rec, "Name") ||
+        Object.prototype.hasOwnProperty.call(rec, "Nombre") ||
         Object.prototype.hasOwnProperty.call(rec, "Имя") ||
         Object.prototype.hasOwnProperty.call(rec, "Ad") ||
         Object.prototype.hasOwnProperty.call(rec, "Adı")
@@ -2026,7 +2125,7 @@
 
   /** Bluetooth / PAN “network” entries are not internet paths; exclude by name/path too. */
   function isBluetoothOrPanAdapter(fields, path) {
-    const blob = `${path} ${fields.Name || ""} ${fields["Adı"] || ""} ${fields.Имя || ""} ${fields["名前"] || ""} ${fields["デバイス名"] || ""} ${fields.Ad || ""} ${fields["İsim"] || ""} ${fields.Nimi || ""} ${fields.Naam || ""} ${fields.Nazwa || ""} ${fields.Nome || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Тип адаптера"] || ""} ${fields["Bağdaştırıcı Türü"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
+    const blob = `${path} ${fields.Name || ""} ${fields.Nombre || ""} ${fields["Adı"] || ""} ${fields.Имя || ""} ${fields["名前"] || ""} ${fields["デバイス名"] || ""} ${fields.Ad || ""} ${fields["İsim"] || ""} ${fields.Nimi || ""} ${fields.Naam || ""} ${fields.Nazwa || ""} ${fields.Nome || ""} ${fields.Device || ""} ${fields.Description || ""} ${fields["Adapter Type"] || ""} ${fields["Тип адаптера"] || ""} ${fields["Bağdaştırıcı Türü"] || ""} ${fields["Connection Name"] || ""}`.toLowerCase();
     return /\bbluetooth\b|personal area network|bt\s*pan|usb bluetooth network/i.test(blob);
   }
 
@@ -2312,6 +2411,7 @@
       ],
       [
         "Name",
+        "Nombre",
         "Nome",
         "Adı",
         "Имя",
@@ -2325,7 +2425,15 @@
         "Ad",
         "İsim",
       ],
-      ["Product Type", "Тип продукта", "Тип продукции", "Ürün Türü", "Ürün türü", "Tipo de produto"],
+      [
+        "Product Type",
+        "Тип продукта",
+        "Тип продукции",
+        "Ürün Türü",
+        "Ürün türü",
+        "Tipo de produto",
+        "Tipo de producto",
+      ],
       ["Installed", "Instalado", "Установлен", "Установлено", "Установлена", "Yüklü"],
       [
         "PNP Device ID",
@@ -2339,6 +2447,7 @@
         "Tak ve Çalıştır Aygıt Kimliği",
         "Identificação de dispositivo PNP",
         "Identificação do dispositivo PNP",
+        "Id. de dispositivo PNP",
       ],
       ["Last Reset", "Última redefinição", "Последний сброс", "Son Sıfırlama"],
       ["Index", "Índice", "Индекс", "Dizin"],
@@ -2438,6 +2547,7 @@
 
       const name =
         fields.Name ||
+        fields.Nombre ||
         fields.Nome ||
         fields["Adı"] ||
         fields.Имя ||
@@ -2535,6 +2645,8 @@
     const blob = parts.join(" ");
     return (
       localeScriptLooksNonEnglishListed(blob) ||
+      looksLikeSpanishWindowsLatinHint(blob) ||
+      looksLikePortugueseWindowsLatinHint(blob) ||
       /\bEvet\b|\bHayır\b|\bKBayt\b|\bBayt\b/i.test(blob) ||
       /(^|[\s,;:])(Sim|Não|Nao)([\s,;:\)]|$)/u.test(blob) ||
       /\bcompat[ií]vel\b/u.test(blob)
@@ -3209,6 +3321,7 @@
     if (!f || typeof f !== "object") return "";
     const direct = displayFieldByLabels(f, [
       "Name",
+      "Nombre",
       "Item",
       "Program",
       "Display Name",
@@ -3580,7 +3693,7 @@
     };
 
     const startupRecordStartRe =
-      /^(名前|名称|表示名|スタートアップ項目|スタートアップ\s*項目|Startup\s*Item|Item|Program|プログラム)$/i;
+      /^(名前|名称|表示名|スタートアップ項目|スタートアップ\s*項目|Startup\s*Item|Item|Program|Nombre|Elemento|プログラム)$/i;
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!startupContext(p)) continue;
@@ -3858,6 +3971,7 @@
           f["Nome_de_exibição"] ||
           f["Nome_de_exibicao"] ||
           f["Nombre para mostrar"] ||
+          f.Nombre ||
           f["Görünen Ad"] ||
           f["Görünen ad"] ||
           f["Hizmet Adı"] ||
@@ -3918,6 +4032,7 @@
         /\bläuft\b/i.test(s) ||
         /\ben cours d['']exécution\b/i.test(s) ||
         /\bfuncionando\b/i.test(s) ||
+        /\ben ejecuci[oó]n\b/i.test(s) ||
         /\battivo\b/i.test(s) ||
         /\bactivo\b/i.test(s) ||
         /\bactief\b/i.test(s) ||
@@ -4859,7 +4974,7 @@
     const boardItemPrefixRe = /^(BaseBoard|Base\s*Board|Temel\s+Kart|Anakart)\b/i;
     /** pt-BR/es/de: “Fabricante da BaseBoard” / “Produto BaseBoard” live under System Summary without a {@code BaseBoard …} item prefix — include them for {@link pickBoard}. */
     const summaryBaseBoardItemRe =
-      /^(Fabricante\s+da\s+BaseBoard|Produto\s+BaseBoard|Vers[aã]o\s+da\s+BaseBoard|Fabricante\s+da\s+placa\s+m[aã]e|Produto\s+da\s+placa\s+m[aã]e)$/i;
+      /^(Fabricante\s+da\s+BaseBoard|Produto\s+BaseBoard|Vers[aã]o\s+da\s+BaseBoard|Fabricante\s+da\s+placa\s+m[aã]e|Produto\s+da\s+placa\s+m[aã]e|Fabricante\s+de\s+la\s+placa\s+base|Producto\s+de\s+placa\s+base|Versi[oó]n\s+de\s+la\s+placa\s+base)$/i;
     /** Normalize WMI-style {@code Fabricante_da_BaseBoard} tags and odd spacing so labels match {@link pickBoardML} entries. */
     const normBoardItem = (/** @type {string} */ s) =>
       String(s ?? "")
@@ -4948,6 +5063,7 @@
         "Temel Kart Ureticisi",
         "Anakart Üreticisi",
         "Anakart üreticisi",
+        "Fabricante de la placa base",
         "Fabricante da BaseBoard",
         "Fabricante_da_BaseBoard",
         "BaseBoard Manufacturer",
@@ -4972,6 +5088,7 @@
         "Anakart modeli",
         "Produto BaseBoard",
         "Produto_BaseBoard",
+        "Producto de placa base",
         "BaseBoard Product",
         "Base Board Product",
         "BaseBoard Model",
@@ -4993,6 +5110,7 @@
         "Temel Kart Surumu",
         "Versão da BaseBoard",
         "Versao da BaseBoard",
+        "Versión de la placa base",
         "BaseBoard Version",
         "Version",
         "Serial Number",
@@ -5009,9 +5127,23 @@
       const prodBb = pickSummaryValueByItemRe(/^Produto\s+BaseBoard$/i);
       if (mfrBb) motherboard.manufacturer = mfrBb;
       if (prodBb) motherboard.product = prodBb;
-      if (!motherboard.product && motherboard.manufacturer && !/^microsoft\b/i.test(motherboard.manufacturer)) {
-        const sysModel = pickSummaryValueByItemRe(/^Modelo\s+do\s+sistema$/i);
-        if (sysModel && String(sysModel).trim()) motherboard.product = String(sysModel).trim();
+      const shortBoardSku = (/** @type {string} */ p) => {
+        const t = String(p || "").trim();
+        return t && /^[0-9A-Z]{3,6}$/i.test(t) && !/\s/.test(t);
+      };
+      const sysModel =
+        pickSummaryValueByItemRe(/^Modelo\s+do\s+sistema$/i) ||
+        pickSummaryValueByItemRe(/^Modelo\s+del\s+sistema$/i);
+      if (sysModel && String(sysModel).trim()) {
+        const prod = (motherboard.product || "").trim();
+        if (!prod || shortBoardSku(prod)) motherboard.product = String(sysModel).trim();
+      }
+      const sysMfr =
+        pickSummaryValueByItemRe(/^Fabricante\s+del\s+sistema$/i) ||
+        pickSummaryValueByItemRe(/^Fabricante\s+del\s+SO$/i);
+      if (sysMfr && String(sysMfr).trim() && !/^microsoft\b/i.test(String(sysMfr).trim())) {
+        const mf = (motherboard.manufacturer || "").trim();
+        if (!mf || /^microsoft\b/i.test(mf)) motherboard.manufacturer = String(sysMfr).trim();
       }
     }
     if (!motherboard.manufacturer && !motherboard.product) {
@@ -5051,6 +5183,7 @@
       for (const r of rows) {
         const f = r.fields;
         const man =
+          f["Fabricante de la placa base"] ||
           f["Fabricante da BaseBoard"] ||
           f["Fabricante_da_BaseBoard"] ||
           f["Temel Kart Üreticisi"] ||
@@ -5062,6 +5195,7 @@
           f["Изготовитель основной платы"] ||
           f.Hersteller;
         const prod =
+          f["Producto de placa base"] ||
           f["Produto BaseBoard"] ||
           f["Produto_BaseBoard"] ||
           f["Temel Kart Ürünü"] ||
@@ -5078,6 +5212,7 @@
           f.Modell ||
           f.Modèle;
         const ver =
+          f["Versión de la placa base"] ||
           f["BaseBoard Version"] ||
           f["BaseBoard Serial Number"] ||
           f["Версия основной платы"] ||
@@ -5864,6 +5999,8 @@
         /^Version du BIOS\/Date$/i.test(it) ||
         /^Version du BIOS\s*\/\s*Date$/i.test(it) ||
         /^Versión de BIOS \/ fecha$/i.test(it) ||
+        /^Versión y fecha de BIOS$/i.test(it) ||
+        /^Versión y fecha de la BIOS$/i.test(it) ||
         /^Versão do BIOS \/ data$/i.test(it) ||
         /^Версия BIOS\/дата$/i.test(it) ||
         /^Версия\s+BIOS\s*\/\s*дата$/i.test(it) ||
@@ -6052,7 +6189,7 @@
     const problems = [];
     /** MSInfo “Problem Devices” lives under Components; Russian builds often use «Устройства с неполадками». */
     const problemPathRe =
-      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス|Sorunlu\s+Aygıtlar|Sorunlu\s+aygıtlar|Sorunlu\s+Cihazlar|Sorunlu\s+cihazlar/i;
+      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos\s+problem[aá]ticos|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス|Sorunlu\s+Aygıtlar|Sorunlu\s+aygıtlar|Sorunlu\s+Cihazlar|Sorunlu\s+cihazlar/i;
     const pathLooksLikeProblemDevices = (/** @type {string} */ p) => {
       const s = String(p || "");
       if (problemPathRe.test(s)) return true;
@@ -6088,6 +6225,7 @@
       const device =
         f.Device ||
         f.Name ||
+        f.Nombre ||
         f.Item ||
         f.Description ||
         f.Gerät ||
@@ -6098,6 +6236,7 @@
         rowValueByCompactKeys(f, [
           "device",
           "name",
+          "nombre",
           "item",
           "description",
           "устройство",
@@ -6161,6 +6300,7 @@
         f.Status ||
         f["Code de problème"] ||
         f["Código de problema"] ||
+        f["Código de error"] ||
         f.Fehler ||
         "";
       if (device || vendor || detail) problems.push({ device, vendor, detail });
@@ -6177,6 +6317,7 @@
         return (
           c === "device" ||
           c === "name" ||
+          c === "nombre" ||
           c === "item" ||
           c === "gerät" ||
           c === "dispositivo" ||
@@ -6191,6 +6332,7 @@
         );
       };
       const isPnpItem = (/** @type {string} */ it) => {
+        const raw = String(it || "").trim();
         const c = problemFieldKeyCompact(it);
         return (
           c === "pnpdeviceid" ||
@@ -6198,14 +6340,17 @@
           c === "кодустройстваpnp" ||
           c === "pnpデバイスid" ||
           c === "plugandplayデバイスid" ||
-          c === "takveçalıştıraygıtkimliği"
+          c === "takveçalıştıraygıtkimliği" ||
+          /identificador.*pnp|id\.\s*de\s*dispositivo\s*pnp|dispositivo\s*plug/i.test(raw)
         );
       };
       const isErrorDetailItem = (/** @type {string} */ it) => {
+        const raw = String(it || "").trim();
         const c = problemFieldKeyCompact(it);
         return (
           c === "problem" ||
           c === "problemcode" ||
+          c === "codigodeerror" ||
           c === "кодошибки" ||
           c === "error" ||
           c === "status" ||
@@ -6220,7 +6365,8 @@
           c === "sorunkodu" ||
           c === "hatakodu" ||
           c === "sorun" ||
-          /^sorun/.test(c)
+          /^sorun/.test(c) ||
+          /c[oó]digo\s+de\s+error/i.test(raw)
         );
       };
       for (const k of kvs) {
@@ -7219,12 +7365,12 @@
       resLine = String(gg.resolution);
     } else if (isNvidia && gg.drivesDisplay === false) {
       resLine =
-        "Not listed under NVIDIA in this export (common on hybrid graphics — see Intel for panel resolution).";
+        "Not listed under NVIDIA in this export (common on hybrid graphics — panel resolution is usually reported on the integrated GPU).";
     }
     const resolution = sumI18nSpan(resLine, esc, undefined, i18nOpts);
 
     const pciBtn = pciUrl
-      ? `<a class="gpu-pci-lookup" href="${esc(pciUrl)}" target="_blank" rel="noopener noreferrer" title="Open PCILookup.com with vendor and device ID filled in"><svg class="gpu-pci-lookup__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3" y="6" width="18" height="12" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 10h10M7 14h7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/><circle cx="17" cy="5" r="3.5" fill="none" stroke="currentColor" stroke-width="1.75"/><path d="M19.2 7.2l2.3 2.3" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/></svg><span class="visually-hidden">PCI lookup (prefilled)</span></a>`
+      ? `<a class="gpu-pci-lookup" href="${esc(pciUrl)}" target="_blank" rel="noopener noreferrer" title="Open PCILookup.com with vendor and device ID filled in"><svg class="gpu-pci-lookup__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none"><path d="M18 13v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M15 3h6v6M10 14 21 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="visually-hidden">PCI lookup (prefilled)</span></a>`
       : "";
 
     return `<article class="gpu-subcard" data-gpu-index="${index}">
@@ -7300,9 +7446,14 @@
   function looksLikeSpanishWindowsLatinHint(s) {
     const u = String(s || "");
     return (
-      /\bResumen\s+del\s+sistema\b|\bNombre\s+del\s+SO\b|\bEntorno\s+de\s+software\b|\bInformes?\s+de\s+errores\s+de\s+Windows\b|\bcontenedor\s+de\s+errores\b|\bFabricante\s+del\s+sistema\b|\bFabricante\s+del\s+SO\b|\bDirectorio\s+de\s+Windows\b|\bId\.\s+del\s+producto\b|\bCompilación\s+del\s+SO\b|\bZona\s+horaria\b|\bTipo\s+de\s+sistema\b|\bMemoria\s+física\b|\bMemoria\s+fisica\b|\bMemoria\s+virtual\b|\bSímbolo\s+de\s+análisis\b|\bSimbolo\s+de\s+analisis\b|\bArchivos\s+adjuntos\b|\bFirma\s+del\s+problema\b|\bNombre\s+del\s+evento\b|\bEstado\s+del\s+informe\b|\bIdentificador\s+de\s+informe\b|\baplicación\s+con\s+errores\b|\baplicacion\s+con\s+errores\b|\bdejó\s+de\s+interactuar\b|\bdejo\s+de\s+interactuar\b|\bEquipo\s+basado\s+en\s+x\d+\b/i.test(
+      /\bResumen\s+del\s+sistema\b|\bNombre\s+del\s+SO\b|\bEntorno\s+de\s+software\b|\bInformes?\s+de\s+errores\s+de\s+Windows\b|\bInforme\s+de\s+errores\s+de\s+Windows\b|\bcontenedor\s+de\s+errores\b|\bDep[oó]sito\s+con\s+errores\b|\bIdentificador\s+de\s+archivo\b|\bFabricante\s+del\s+sistema\b|\bFabricante\s+del\s+SO\b|\bDirectorio\s+de\s+Windows\b|\bId\.\s+del\s+producto\b|\bCompilación\s+del\s+SO\b|\bZona\s+horaria\b|\bTipo\s+de\s+sistema\b|\bMemoria\s+física\b|\bMemoria\s+fisica\b|\bMemoria\s+virtual\b|\bSímbolo\s+de\s+análisis\b|\bSimbolo\s+de\s+analisis\b|\bArchivos\s+adjuntos\b|\bFirma\s+del\s+problema\b|\bNombre\s+del\s+evento\b|\bEstado\s+del\s+informe\b|\bIdentificador\s+de\s+informe\b|\baplicación\s+con\s+errores\b|\baplicacion\s+con\s+errores\b|\bdejó\s+de\s+interactuar\b|\bdejo\s+de\s+interactuar\b|\bEquipo\s+basado\s+en\s+x\d+\b/i.test(
         u
-      ) ||       /\bHora\b.*\bTipo\b.*\bDetalles\b/is.test(u)
+      ) ||
+      /\bHora\b.*\bTipo\b.*\bDetalles\b/is.test(u) ||
+      /** GPU / display (ASCII; same strings as {@link translateMsinfoI18nTokensToEnglish} Spanish pass). */
+      /\bcompatible\s+con\b/i.test(u) ||
+      /\bno\s+disponible\b/i.test(u) ||
+      /\bhercios\b/i.test(u)
     );
   }
 
@@ -7352,41 +7503,11 @@
     if (looksLikeTurkishWindowsLatinHint(t)) return true;
     if (looksLikeSpanishWindowsLatinHint(t)) return true;
     if (looksLikePortugueseWindowsLatinHint(t)) return true;
+    /** Spanish GPU / display strings often ASCII-only (“compatible con”, “hercios”). */
+    if (/\bcompatible\s+con\b/i.test(t)) return true;
+    if (/\bno\s+disponible\b/i.test(t)) return true;
+    if (/\bhercios\b/i.test(t)) return true;
     return false;
-  }
-
-  /**
-   * Offer section-level Translate on Graphics (GPU) when values look localized.
-   * @param {unknown} graphics
-   */
-  function graphicsNeedsTranslateHint(graphics) {
-    if (!graphics || typeof graphics !== "object") return false;
-    const g = /** @type {Record<string, unknown>} */ (graphics);
-    const parts = [];
-    for (const a of Array.isArray(g.adapters) ? g.adapters : []) {
-      if (!a || typeof a !== "object") continue;
-      const rec = /** @type {Record<string, unknown>} */ (a);
-      for (const k of ["name", "driverVersionDisplay", "driverFull", "adapterType", "driverDate", "adapterRam", "resolution"]) {
-        const v = rec[k];
-        if (v != null && String(v).trim()) parts.push(String(v));
-      }
-    }
-    for (const slot of ["intel", "nvidia"]) {
-      const a = g[slot];
-      if (!a || typeof a !== "object") continue;
-      const rec = /** @type {Record<string, unknown>} */ (a);
-      for (const k of ["name", "driverVersionDisplay", "adapterType", "driverDate", "adapterRam", "resolution"]) {
-        const v = rec[k];
-        if (v != null && String(v).trim()) parts.push(String(v));
-      }
-    }
-    const blob = parts.join(" ");
-    return (
-      localeScriptLooksNonEnglishListed(blob) ||
-      /\buyumlu\b/i.test(blob) ||
-      looksLikeSpanishWindowsLatinHint(blob) ||
-      looksLikePortugueseWindowsLatinHint(blob)
-    );
   }
 
   /**
@@ -7846,13 +7967,39 @@
     ["Lista de idiomas", "Input languages"],
     /** Do not map bare {@code Hora}/{@code Tipo}/{@code Detalles} — they corrupt Spanish time-zone names (“Hora estándar …”). */
     ["Entorno de software / Informes de errores de Windows", "Software Environment / Windows Error Reporting"],
+    ["Entorno de software / Informe de errores de Windows", "Software Environment / Windows Error Reporting"],
     ["Informes de errores de Windows", "Windows Error Reporting"],
+    ["Informe de errores de Windows", "Windows Error Reporting"],
+    ["Depósito con errores", "Error bucket"],
+    ["Identificador de archivo .cab", "CAB file identifier"],
+    ["Subred IP", "IP Subnet"],
+    ["Puerta de enlace IP predeterminada", "Default IP Gateway"],
+    ["Expiración de la concesión DHCP", "DHCP Lease Expires"],
+    ["Concesión DHCP obtenida", "DHCP Lease Obtained"],
+    ["Restablecido por última vez", "Last Reset"],
+    ["Nombre de servicio", "Service Name"],
+    ["Id. de dispositivo PNP", "PNP Device ID"],
+    ["Dirección MAC", "MAC Address"],
+    ["Dirección de memoria", "Memory Address"],
+    ["Controlador", "Driver"],
+    ["Dirección IP", "IP Address"],
     ["Contenedor de errores", "Error container"],
     ["Nombre del evento:", "Event name:"],
     ["Nombre del evento", "Event name"],
+    /** Common es-ES WER wording uses {@code de} (“Nombre de evento”) — distinct from {@code del} above. */
+    ["Es posible que estos archivos estén disponibles aquí:", "These files may be available here:"],
+    ["Verificando nuevamente si hay una solución:", "Searching for solutions:"],
+    ["Nueva búsqueda de una solución:", "Searching for solutions:"],
+    ["Búsqueda nueva de una solución:", "Searching for solutions:"],
+    ["Depósito con algoritmo hash:", "Hashed container:"],
+    ["Nombre de evento:", "Event name:"],
+    ["Nombre de evento", "Event name"],
+    ["Id. de informe:", "Report identifier:"],
     ["Respuesta: No hay datos", "Response: No data"],
     ["Respuesta:", "Response:"],
     ["No hay datos", "No data"],
+    /** es-ES WER uses “GUID” label; {@link LOCALE_PAIRS_MSINFO_INTL} already has {@code Identificador de archivo .cab}. */
+    ["GUID de archivo .cab:", "CAB file GUID:"],
     ["Id. de CAB:", "CAB ID:"],
     ["Firma del problema:", "Problem signature:"],
     ["Archivos adjuntos:", "Attached files:"],
@@ -8857,6 +9004,10 @@
       .replace(/\bArea\s+de\s+Trabalho\b/giu, "Desktop")
       /** Portuguese MSInfo GPU / adapter strings (“… compatível com NVIDIA”). */
       .replace(/\bcompat[ií]vel\s+com\b/giu, "compatible with")
+      /** Spanish MSInfo GPU / display (“compatible con …”, “No disponible”, refresh rate “hercios”). */
+      .replace(/\bcompatible\s+con\b/giu, "compatible with")
+      .replace(/\bNo\s+disponible\b/giu, "Not available")
+      .replace(/\s+hercios\b/giu, " Hz")
       /** pt-BR WER: alternate wording, line breaks, or OCR (“Yesmbolo”) vs exact {@link MSINFO_I18N_EN_TOKEN_PAIRS} keys. */
       .replace(/\bYesmbolo\s+da\s+análise\s*:/giu, "Analysis symbol:")
       .replace(/ID\s+do\s+Relatório\s*:/giu, "Report ID:")
@@ -8872,7 +9023,20 @@
       .replace(/\bEm\s+Execu[cç][aã]o\b/giu, "Running")
       .replace(/\bParado\b/gu, "Stopped")
       .replace(/\bDesabilitado\b/gu, "Disabled")
-      .replace(/\bAutom[aá]tico\b/gu, "Automatic");
+      .replace(/\bAutom[aá]tico\b/gu, "Automatic")
+      /** Spanish WER (Problem Reports) — labels vary by build; regex covers spacing / short forms. */
+      .replace(/\bNombre\s+de\s+evento\s*:/giu, "Event name:")
+      .replace(/\bId\.\s*de\s+informe\s*:/giu, "Report identifier:")
+      .replace(/\bDep[oó]sito\s+con\s+algoritmo\s+hash\s*:/giu, "Hashed container:")
+      .replace(
+        /\bEs\s+posible\s+que\s+estos\s+archivos\s+est[eé]n\s+disponibles\s+aqu[ií]\s*:/giu,
+        "These files may be available here:"
+      )
+      .replace(/\bNueva\s+b[uú]squeda\s+de\s+una\s+soluci[oó]n\s*:/giu, "Searching for solutions:")
+      .replace(/\bVerificando\s+nuevamente\s+si\s+hay\s+una\s+soluci[oó]n\s*:/giu, "Searching for solutions:")
+      .replace(/\bRespuesta\s*:\s*No\s+disponible\b/giu, "Response: Unavailable")
+      /** Spanish WER — ASCII-only line; distinct from “Identificador de archivo .cab”. */
+      .replace(/\bGUID\s+de\s+archivo\s*\.cab\s*:/giu, "CAB file GUID:");
     return out;
   }
 
@@ -9139,8 +9303,9 @@
    * Motherboard + BIOS + vendor update actions (one System Information accordion).
    * @param {ReturnType<typeof extractSystemSummary>} sum
    * @param {(s: string) => string} esc
+   * @param {{ forceI18nSpan?: boolean }} [i18nOpts]
    */
-  function renderMotherboardBiosBody(sum, esc) {
+  function renderMotherboardBiosBody(sum, esc, i18nOpts) {
     const mb = sum.motherboard || {};
     const bm = sum.biosMeta || { ageDays: null, parsed: false };
     const links = motherboardSupportLinks(mb.manufacturer || "", mb.product || "");
@@ -9176,7 +9341,7 @@
         parsedDate.toLocaleDateString(undefined, { dateStyle: "medium" })
       )} · <span class="mbbios-last__sub">about ${bm.ageDays.toLocaleString()} days ago</span></p>`;
     } else if (sum.biosDate) {
-      lastUpdatedBlock = `<p class="mbbios-last"><strong>Date from export</strong> (not parsed to a single calendar day): ${sumI18nSpan(String(sum.biosDate), esc)}</p>`;
+      lastUpdatedBlock = `<p class="mbbios-last"><strong>Date from export</strong> (not parsed to a single calendar day): ${sumI18nSpan(String(sum.biosDate), esc, undefined, i18nOpts)}</p>`;
     } else {
       lastUpdatedBlock = `<p class="mbbios-last mbbios-last--muted">No separate BIOS release date in this export — check the vendor site for current firmware.</p>`;
     }
@@ -9185,16 +9350,16 @@
       <div class="mbbios-info">
         <h4 class="mbbios-info__title"><span class="mbbios-info__glyph" aria-hidden="true">&#128203;</span> Motherboard information</h4>
         <dl class="mbbios-dl">
-          <dt>Manufacturer</dt><dd>${sumI18nSpan(mb.manufacturer || "", esc)}</dd>
-          <dt>Model</dt><dd>${sumI18nSpan(mb.product || "", esc)}</dd>
-          ${mb.version ? `<dt>Version / serial</dt><dd>${sumI18nSpan(mb.version, esc)}</dd>` : ""}
-          <dt>Current BIOS</dt><dd>${sumI18nSpan(biosFull, esc)}</dd>
+          <dt>Manufacturer</dt><dd>${sumI18nSpan(mb.manufacturer || "", esc, undefined, i18nOpts)}</dd>
+          <dt>Model</dt><dd>${sumI18nSpan(mb.product || "", esc, undefined, i18nOpts)}</dd>
+          ${mb.version ? `<dt>Version / serial</dt><dd>${sumI18nSpan(mb.version, esc, undefined, i18nOpts)}</dd>` : ""}
+          <dt>Current BIOS</dt><dd>${sumI18nSpan(biosFull, esc, undefined, i18nOpts)}</dd>
         </dl>
       </div>
       <div class="mbbios-cards">
         <div class="mbbios-card mbbios-card--current">
           <span class="mbbios-card__kicker">Current BIOS</span>
-          <p class="mbbios-card__value">${sumI18nSpan(biosFull, esc)}</p>
+          <p class="mbbios-card__value">${sumI18nSpan(biosFull, esc, undefined, i18nOpts)}</p>
           <span class="mbbios-card__foot">Installed version</span>
         </div>
         <div class="mbbios-card mbbios-card--check">
@@ -9208,9 +9373,11 @@
       </div>
       <div class="mbbios-update">
         <h4 class="mbbios-update__title"><span class="mbbios-update__glyph" aria-hidden="true">&#9432;</span> BIOS update check</h4>
-        <p class="mbbios-update__copy">Check the <strong>${sumI18nSpan(vendorName, esc)}</strong> support site for the latest BIOS updates for your <strong>${sumI18nSpan(
+        <p class="mbbios-update__copy">Check the <strong>${sumI18nSpan(vendorName, esc, undefined, i18nOpts)}</strong> support site for the latest BIOS updates for your <strong>${sumI18nSpan(
       modelForBlurb,
-      esc
+      esc,
+      undefined,
+      i18nOpts
     )}</strong>.</p>
         ${lastUpdatedBlock}
         <div class="rec-actions mbbios-actions">
@@ -9404,23 +9571,23 @@
       return;
     }
 
-    const mbBiosBody = renderMotherboardBiosBody(sum, esc);
-    const mbBiosHtml = renderReportCategoryAccordion("Motherboard & BIOS", mbBiosBody, esc, { icon: "mb" });
+    const mbBiosBody = renderMotherboardBiosBody(sum, esc, { forceI18nSpan: true });
+    const mbBiosHtml = renderReportCategoryAccordion("Motherboard & BIOS", mbBiosBody, esc, {
+      icon: "mb",
+      alwaysOfferTranslate: true,
+    });
 
     const gpuCount = Array.isArray(sum.graphics?.adapters)
       ? sum.graphics.adapters.filter((a) => a && typeof a === "object" && hasGpuCardContent(/** @type {Record<string, unknown>} */ (a))).length
       : 0;
-    const gpuNeedsI18n = graphicsNeedsTranslateHint(sum.graphics);
-    const gpuDashboardEmbed = renderGpuDashboard(
-      sum.graphics,
-      esc,
-      true,
-      gpuNeedsI18n ? { forceI18nSpan: true } : undefined
-    );
+    /** Always offer Translate when any GPU card is shown — Spanish/Portuguese strings are often ASCII-only ({@code compatible con}, {@code No disponible}) and skip heuristic detection. */
+    const gpuI18nOpts = gpuCount > 0 ? { forceI18nSpan: true } : undefined;
+    const gpuDashboardEmbed = renderGpuDashboard(sum.graphics, esc, true, gpuI18nOpts);
     const problemDevicesHtml = renderProblemDevicesPanel(sum.problems, esc);
 
     const netNeedsI18n = networkSectionNeedsTranslateHint(sum.networkAdapters);
-    const netI18nOpts = netNeedsI18n ? { forceI18nSpan: true } : undefined;
+    const netI18nOpts =
+      sum.networkAdapters && sum.networkAdapters.length ? { forceI18nSpan: true } : undefined;
     let netBody = "";
     if (sum.networkAdapters && sum.networkAdapters.length) {
       netBody = `<p class="summary-lede">Shows adapters with a usable IPv4 and/or global IPv6, and either DNS resolvers in the file or a routable default gateway / DHCP server (MSInfo often omits DNS when DHCP provides it). Bluetooth and similar are omitted.</p><ul class="network-adapters">${sum.networkAdapters
@@ -9540,12 +9707,7 @@
     });
 
     const wer = sum.windowsErrorReports || [];
-    const werBlob = wer.map((e) => `${e.type} ${e.time} ${e.sourceTitle} ${e.details}`).join(" ");
-    const werNeedsI18n =
-      wer.length > 0 &&
-      (localeScriptLooksNonEnglishListed(werBlob) ||
-        looksLikePortugueseWindowsLatinHint(werBlob) ||
-        looksLikeSpanishWindowsLatinHint(werBlob));
+    const werNeedsI18n = wer.length > 0;
     const werBody = renderWindowsErrorReportsBody(
       wer,
       esc,
@@ -9577,13 +9739,13 @@
       count: gpuCount || null,
       icon: "gpu",
       open: true,
-      alwaysOfferTranslate: gpuNeedsI18n,
+      alwaysOfferTranslate: gpuCount > 0,
     });
     const netCount = Array.isArray(sum.networkAdapters) ? sum.networkAdapters.length : 0;
     const networkHtml = renderReportCategoryAccordion("Network (Internet)", netBody, esc, {
       count: netCount || null,
       icon: "network",
-      alwaysOfferTranslate: netNeedsI18n,
+      alwaysOfferTranslate: !!(sum.networkAdapters && sum.networkAdapters.length),
     });
 
     el.innerHTML = `${xmlRepairBanner}${recoveryBanner}

@@ -697,34 +697,36 @@
     </dialog>
 
     <footer class="site-footer">
-      <div class="site-footer__bar">
-        <span class="site-footer__version" id="app-version" aria-live="polite"></span>
-        <button type="button" class="site-footer__about" id="about-dialog-open">
-          About · scope, limits &amp; shortcuts
-        </button>
-      </div>
-      <p>
-        <span class="footer-local-lead">
-          <strong>Local-first</strong>
-          <span class="tagline-arrow" aria-hidden="true">
-            <svg class="tagline-arrow__svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M5 12h14M13 6l6 6-6 6"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
+      <div class="site-footer__inner">
+        <div class="site-footer__bar">
+          <span class="site-footer__version" id="app-version" aria-live="polite"></span>
+          <button type="button" class="site-footer__about" id="about-dialog-open">
+            About · scope, limits &amp; shortcuts
+          </button>
+        </div>
+        <p>
+          <span class="footer-local-lead">
+            <strong>Local-first</strong>
+            <span class="tagline-arrow" aria-hidden="true">
+              <svg class="tagline-arrow__svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M5 12h14M13 6l6 6-6 6"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
           </span>
-        </span>
-        analysis does not upload your logs; only files in this folder are loaded (<code>index.html</code>,
-        <code>styles.css</code>, <code>app.js</code>, <code>nvidia-logo.png</code>). Damaged <code>.nfo</code> files are
-        repaired in memory when possible (see the recovery note in the summary). If you received a ZIP, use
-        <strong>Extract All…</strong> first; opening or running files from inside the ZIP can fail (Windows uses a temp
-        folder and may not place every file there). No CDN or npm. Optional <code>serve.ps1</code> only if a browser blocks
-        local scripts (PowerShell built in).
-      </p>
+          analysis does not upload your logs; only files in this folder are loaded (<code>index.html</code>,
+          <code>styles.css</code>, <code>app.js</code>, <code>nvidia-logo.png</code>). Damaged <code>.nfo</code> files are
+          repaired in memory when possible (see the recovery note in the summary). If you received a ZIP, use
+          <strong>Extract All…</strong> first; opening or running files from inside the ZIP can fail (Windows uses a temp
+          folder and may not place every file there). No CDN or npm. Optional <code>serve.ps1</code> only if a browser blocks
+          local scripts (PowerShell built in).
+        </p>
+      </div>
     </footer>
 
     <button

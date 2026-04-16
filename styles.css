@@ -5050,12 +5050,13 @@ html[data-theme="light"] .dropzone {
 }
 
 html[data-theme="light"] .site-footer {
-  color: #64748b;
+  color: #475569;
   border-top-color: #e2e8f0;
   background: linear-gradient(0deg, rgba(248, 250, 252, 0.92) 0%, transparent 78%);
 }
 
-html[data-theme="light"] .site-footer__inner {
+/* Light footer accents follow the active tool tab (hash :target on panels). */
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__inner {
   border-color: #e2e8f0;
   background: #ffffff;
   box-shadow: var(--lm-shadow-md);
@@ -5063,47 +5064,179 @@ html[data-theme="light"] .site-footer__inner {
   -webkit-backdrop-filter: none;
 }
 
-html[data-theme="light"] .site-footer__inner::before {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__inner::before {
   background: linear-gradient(180deg, #8b5cf6 0%, #5b21b6 48%, #6d28d9 100%);
 }
 
-html[data-theme="light"] .site-footer__version {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__version {
   color: #5b21b6;
   border-color: #e9d5ff;
   background: linear-gradient(180deg, #faf5ff 0%, #f3e8ff 100%);
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] .site-footer__about {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about {
   color: #334155;
   border-color: #e2e8f0;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] .site-footer__about:hover {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about:hover {
   color: #5b21b6;
   border-color: #c4b5fd;
   background: linear-gradient(180deg, #faf5ff 0%, #f5f3ff 100%);
   box-shadow: var(--lm-shadow-md);
 }
 
-html[data-theme="light"] .site-footer__about:focus-visible {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about:focus-visible {
   border-color: #a78bfa;
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.22);
 }
 
-html[data-theme="light"] .scroll-to-top {
-  background: #ffffff;
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer code {
+  color: #4338ca;
+  background: #f1f5f9;
   border-color: #e2e8f0;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer .tagline-arrow__svg {
+  color: #7c3aed;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__inner {
+  border-color: #fecdd3;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-md);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__inner::before {
+  background: linear-gradient(180deg, #fb7185 0%, #e11d48 48%, #be123c 100%);
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__version {
+  color: #9f1239;
+  border-color: #fecdd3;
+  background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about {
+  color: #334155;
+  border-color: #fecdd3;
+  background: linear-gradient(180deg, #ffffff 0%, #fffbfb 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about:hover {
+  color: #9f1239;
+  border-color: #fda4af;
+  background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about:focus-visible {
+  border-color: #fb7185;
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.28);
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer code {
+  color: #be123c;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer .tagline-arrow__svg {
+  color: #e11d48;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__inner {
+  border-color: #a7f3d0;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-md);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__inner::before {
+  background: linear-gradient(180deg, #34d399 0%, #10b981 50%, #047857 100%);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__version {
+  color: #047857;
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about {
+  color: #334155;
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about:hover {
+  color: #047857;
+  border-color: #6ee7b7;
+  background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about:focus-visible {
+  border-color: #34d399;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.28);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer code {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer .tagline-arrow__svg {
+  color: #059669;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .scroll-to-top {
+  background: #ffffff;
+  border-color: #e9d5ff;
   color: #5b21b6;
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] .skip-link {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .scroll-to-top {
   background: #ffffff;
-  border-color: #e2e8f0;
+  border-color: #fecdd3;
+  color: #e11d48;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .scroll-to-top {
+  background: #ffffff;
+  border-color: #a7f3d0;
+  color: #059669;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .skip-link {
+  background: #ffffff;
+  border-color: #e9d5ff;
   color: #5b21b6;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .skip-link {
+  background: #ffffff;
+  border-color: #fecdd3;
+  color: #e11d48;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .skip-link {
+  background: #ffffff;
+  border-color: #a7f3d0;
+  color: #059669;
 }
 
 html[data-theme="light"] .summary-card {
@@ -5115,26 +5248,253 @@ html[data-theme="light"] .tagline-arrow__svg {
   filter: none;
 }
 
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog .tagline-arrow__svg {
+  color: #7c3aed;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog .tagline-arrow__svg {
+  color: #e11d48;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog .tagline-arrow__svg {
+  color: #059669;
+}
+
+html[data-theme="light"] .about-dialog {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.95) inset,
+    var(--lm-shadow-lg),
+    0 28px 72px rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] .about-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.42);
+}
+
 html[data-theme="light"] .about-dialog__inner {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.12);
+  border-radius: inherit;
+  box-shadow: none;
 }
 
-html[data-theme="light"] .about-dialog__head {
-  border-bottom-color: #e2e8f0;
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__head {
+  border-bottom-color: #e9d5ff;
+  background: linear-gradient(180deg, #faf5ff 0%, #ffffff 55%);
+  padding: 1.15rem 1.25rem 1rem;
 }
 
-html[data-theme="light"] .about-dialog__head h2 {
-  background: linear-gradient(90deg, #4c1d95, #6d28d9);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__head h2 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: #4c1d95;
+  font-weight: 700;
   filter: none;
 }
 
-html[data-theme="light"] .about-dialog__section h3 {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__head {
+  border-bottom-color: #fecdd3;
+  background: linear-gradient(180deg, #fff1f2 0%, #ffffff 55%);
+  padding: 1.15rem 1.25rem 1rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__head h2 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: #9f1239;
+  font-weight: 700;
+  filter: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__head {
+  border-bottom-color: #a7f3d0;
+  background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 55%);
+  padding: 1.15rem 1.25rem 1rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__head h2 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: #047857;
+  font-weight: 700;
+  filter: none;
+}
+
+html[data-theme="light"] .about-dialog__version-line {
+  color: #475569;
+  font-weight: 500;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__version {
   color: #5b21b6;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__version {
+  color: #e11d48;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__version {
+  color: #059669;
+}
+
+html[data-theme="light"] .about-dialog__close {
+  color: #64748b;
+}
+
+html[data-theme="light"] .about-dialog__close:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__close:focus-visible {
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.35);
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__close:focus-visible {
+  box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.35);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__close:focus-visible {
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.38);
+}
+
+html[data-theme="light"] .about-dialog__body {
+  padding: 1.05rem 1.25rem 1.15rem;
+  font-size: 0.875rem;
+  line-height: 1.62;
+  color: #334155;
+}
+
+html[data-theme="light"] .about-dialog__section {
+  margin-bottom: 0;
+}
+
+html[data-theme="light"] .about-dialog__section:not(:last-child) {
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__section h3 {
+  color: #5b21b6;
+  font-size: 0.74rem;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.5rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__section h3 {
+  color: #e11d48;
+  font-size: 0.74rem;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.5rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__section h3 {
+  color: #059669;
+  font-size: 0.74rem;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.5rem;
+}
+
+html[data-theme="light"] .about-dialog__section p,
+html[data-theme="light"] .about-dialog__section li {
+  color: #334155;
+}
+
+html[data-theme="light"] .about-dialog__section li strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__body code {
+  color: #4338ca;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__body kbd {
+  color: #4338ca;
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 1px 0 #ffffff inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__body code {
+  color: #be123c;
+  background: #fff1f2;
+  border-color: #fecdd3;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__body kbd {
+  color: #be123c;
+  background: #fffbfb;
+  border-color: #fecdd3;
+  box-shadow: 0 1px 0 #ffffff inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__body code {
+  color: #047857;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__body kbd {
+  color: #047857;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  box-shadow: 0 1px 0 #ffffff inset;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__foot {
+  border-top-color: #e9d5ff;
+  background: linear-gradient(180deg, #fafafa 0%, #ffffff 100%);
+  padding: 0.85rem 1.25rem 1.05rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__foot {
+  border-top-color: #fecdd3;
+  background: linear-gradient(180deg, #fffbfb 0%, #ffffff 100%);
+  padding: 0.85rem 1.25rem 1.05rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__foot {
+  border-top-color: #a7f3d0;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  padding: 0.85rem 1.25rem 1.05rem;
+}
+
+html[data-theme="light"] .about-dialog__foot .btn--secondary {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .about-dialog__foot .btn--secondary:hover {
+  background: #faf5ff;
+  border-color: #c4b5fd;
+  color: #5b21b6;
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__foot .btn--secondary:hover {
+  background: #fff1f2;
+  border-color: #fda4af;
+  color: #9f1239;
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__foot .btn--secondary:hover {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #047857;
+  box-shadow: var(--lm-shadow-md);
 }
 
 html[data-theme="light"] .wer-dashboard {

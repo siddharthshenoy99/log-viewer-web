@@ -5176,6 +5176,10 @@ html[data-theme="light"] .workspace:has(#tool-panel-bsod:target) .tool-tab--bsod
   color: #be123c;
 }
 
+html[data-theme="light"] .workspace:has(#tool-panel-bsod:target) .tool-tab--bsod .tool-tab__shortcut {
+  color: #fb7185;
+}
+
 html[data-theme="light"] .workspace:has(#tool-panel-gpu:target) .tool-tab--gpu {
   position: relative;
   z-index: 2;
@@ -5188,6 +5192,10 @@ html[data-theme="light"] .workspace:has(#tool-panel-gpu:target) .tool-tab--gpu {
 
 html[data-theme="light"] .workspace:has(#tool-panel-gpu:target) .tool-tab--gpu .tool-tab__desc {
   color: #059669;
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-gpu:target) .tool-tab--gpu .tool-tab__shortcut {
+  color: #6ee7b7;
 }
 
 html[data-theme="light"] .tool-tab-panels {

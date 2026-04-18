@@ -593,14 +593,19 @@
             <legend>Metrics <span class="metric-fieldset__hint">(one chart each, up to 12)</span></legend>
             <div class="metric-checkboxes" aria-label="Metrics to chart"></div>
           </fieldset>
-          <label class="chart-toggle-label">
-            <input type="checkbox" class="toggle-peaks" checked />
-            Peaks &amp; valleys on charts
-          </label>
-          <label class="chart-toggle-label">
-            <input type="checkbox" class="toggle-insights" checked />
-            Correlation matrix &amp; narrative notes
-          </label>
+          <div class="analyzer-controls__aside" aria-label="Chart options and log timeline">
+            <div class="analyzer-controls__toggles">
+              <label class="chart-toggle-label">
+                <input type="checkbox" class="toggle-peaks" checked />
+                Peaks &amp; valleys on charts
+              </label>
+              <label class="chart-toggle-label">
+                <input type="checkbox" class="toggle-insights" checked />
+                Correlation matrix &amp; narrative notes
+              </label>
+            </div>
+            <div class="analyzer-time-range" hidden aria-live="polite"></div>
+          </div>
         </div>
         <div class="analyzer-alerts" hidden aria-live="polite"></div>
         <div class="analyzer-chart-wrap" hidden>

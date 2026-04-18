@@ -10826,8 +10826,19 @@
   /** Max polyline points per chart series (canvas path cost grows quickly after this). */
   const GPU_SENSOR_CHART_MAX_POINTS = 14000;
 
+  /** First CSV cell is typically GPU-Z "Date" / time column. */
+  function parseSensorTimestampMs(cell) {
+    const s = String(cell || "").replace(/^"|"$/g, "").trim();
+    if (!s) return null;
+    const iso = s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, "$1T");
+    const d = Date.parse(iso);
+    if (!Number.isNaN(d)) return d;
+    const d2 = Date.parse(s);
+    return Number.isNaN(d2) ? null : d2;
+  }
+
   /**
-   * Walk text: first non-empty = header line string; count data lines (for stride).
+   * Walk text: first non-empty = header; count data lines; capture first/last data line (full-file bounds, not subsampled).
    * @param {string} text
    */
   function gpuSensorWalkHeaderAndCount(text) {
@@ -10836,6 +10847,10 @@
     /** @type {string | null} */
     let headerRaw = null;
     let dataLineCount = 0;
+    /** @type {string | null} */
+    let firstDataLine = null;
+    /** @type {string | null} */
+    let lastDataLine = null;
     while (pos < len) {
       const nl = text.indexOf("\n", pos);
       const end = nl === -1 ? len : nl;
@@ -10849,9 +10864,11 @@
         continue;
       }
       dataLineCount++;
+      if (firstDataLine === null) firstDataLine = trimmed;
+      lastDataLine = trimmed;
     }
     if (!headerRaw || dataLineCount === 0) return null;
-    return { headerLine: headerRaw, dataLineCount };
+    return { headerLine: headerRaw, dataLineCount, firstDataLine, lastDataLine };
   }
 
   /**
@@ -10889,12 +10906,12 @@
 
   /**
    * @param {string} text
-   * @returns {{ headers: string[], rows: string[][], rowCount: number, numericCols: { index: number, name: string, unit: string, pts: { r: number, v: number, t: number | null }[], min: number, max: number }[], truncated?: boolean, originalDataRows?: number, rowStride?: number } | null}
+   * @returns {{ headers: string[], rows: string[][], rowCount: number, numericCols: { index: number, name: string, unit: string, pts: { r: number, v: number, t: number | null }[], min: number, max: number }[], truncated?: boolean, originalDataRows?: number, rowStride?: number, timeRange?: { startRaw: string, endRaw: string, startMs: number | null, endMs: number | null, timeColumnLabel: string } } | null}
    */
   function parseSensorCsv(text) {
     const walk = gpuSensorWalkHeaderAndCount(text);
     if (!walk) return null;
-    const { headerLine, dataLineCount } = walk;
+    const { headerLine, dataLineCount, firstDataLine, lastDataLine } = walk;
     const headers = splitCsvLine(normalizeSensorHeaderLabel(headerLine)).map((h) => normalizeSensorHeaderLabel(h));
     if (headers.length < 2) return null;
 
@@ -10909,12 +10926,8 @@
 
     /** @param {string} cell */
     function parseTime(cell) {
-      const s = cell.replace(/^"|"$/g, "").trim();
-      const iso = s.replace(/^(\d{4}-\d{2}-\d{2})\s+/, "$1T");
-      const d = Date.parse(iso);
-      if (!Number.isNaN(d)) return d;
-      const d2 = Date.parse(s);
-      return Number.isNaN(d2) ? null : d2;
+      const ms = parseSensorTimestampMs(cell);
+      return ms;
     }
 
     for (let c = 0; c < colCount; c++) {
@@ -10948,11 +10961,33 @@
     }
     if (!numericCols.length) return null;
     const truncated = stride > 1;
+    /** @type {{ startRaw: string, endRaw: string, startMs: number | null, endMs: number | null, timeColumnLabel: string }} */
+    let timeRange = {
+      startRaw: "",
+      endRaw: "",
+      startMs: null,
+      endMs: null,
+      timeColumnLabel: headers[0] || "Time",
+    };
+    if (firstDataLine != null && lastDataLine != null) {
+      const sc = splitCsvLine(firstDataLine);
+      const ec = splitCsvLine(lastDataLine);
+      const startRaw = (sc[0] || "").replace(/^"|"$/g, "").trim();
+      const endRaw = (ec[0] || "").replace(/^"|"$/g, "").trim();
+      timeRange = {
+        startRaw,
+        endRaw,
+        startMs: parseSensorTimestampMs(sc[0] || ""),
+        endMs: parseSensorTimestampMs(ec[0] || ""),
+        timeColumnLabel: headers[0] || "Time",
+      };
+    }
     return {
       headers,
       rows,
       rowCount,
       numericCols,
+      timeRange,
       ...(truncated ? { truncated: true, originalDataRows: dataLineCount, rowStride: stride } : {}),
     };
   }
@@ -12048,6 +12083,7 @@
     const insightsEl = panel.querySelector(".analyzer-insights");
     const statsEl = panel.querySelector(".analyzer-stats");
     const alertsEl = panel.querySelector(".analyzer-alerts");
+    const timeRangeEl = panel.querySelector(".analyzer-time-range");
     const btnClearAll = panel.querySelector(".btn-clear-all");
     const btnExportCsv = panel.querySelector(".btn-gpu-export-csv");
     const btnExportRaw = panel.querySelector(".btn-gpu-export-raw");
@@ -12342,6 +12378,62 @@
       });
     }
 
+    /** @param {number | null} ms @param {string} raw */
+    function formatSensorCaptureInstant(ms, raw) {
+      if (ms != null && Number.isFinite(ms)) {
+        try {
+          return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+        } catch {
+          /* fall through */
+        }
+      }
+      return raw && raw.trim().length ? raw.trim() : "—";
+    }
+
+    function renderAnalyzerTimeRange() {
+      if (!timeRangeEl) return;
+      if (!logs.length) {
+        timeRangeEl.hidden = true;
+        timeRangeEl.innerHTML = "";
+        return;
+      }
+      /** @type {string[]} */
+      const blocks = [];
+      for (const log of logs) {
+        const tr = log.parsed?.timeRange;
+        if (!tr) continue;
+        const startDisp = formatSensorCaptureInstant(tr.startMs, tr.startRaw);
+        const endDisp = formatSensorCaptureInstant(tr.endMs, tr.endRaw);
+        const colHint = esc(tr.timeColumnLabel || "Time");
+        const startSafe = esc(startDisp);
+        const endSafe = esc(endDisp);
+        const startInner =
+          tr.startMs != null && Number.isFinite(tr.startMs)
+            ? `<time datetime="${esc(new Date(tr.startMs).toISOString())}">${startSafe}</time>`
+            : `<span>${startSafe}</span>`;
+        const endInner =
+          tr.endMs != null && Number.isFinite(tr.endMs)
+            ? `<time datetime="${esc(new Date(tr.endMs).toISOString())}">${endSafe}</time>`
+            : `<span>${endSafe}</span>`;
+        blocks.push(`<div class="analyzer-time-range__file">
+          ${logs.length > 1 ? `<div class="analyzer-time-range__filename">${esc(log.name)}</div>` : ""}
+          <p class="analyzer-time-range__column"><span class="analyzer-time-range__muted">${colHint}</span></p>
+          <dl class="analyzer-time-range__dl">
+            <div class="analyzer-time-range__row"><dt>Start</dt><dd>${startInner}</dd></div>
+            <div class="analyzer-time-range__row"><dt>End</dt><dd>${endInner}</dd></div>
+          </dl>
+        </div>`);
+      }
+      if (!blocks.length) {
+        timeRangeEl.hidden = true;
+        timeRangeEl.innerHTML = "";
+        return;
+      }
+      const title = logs.length > 1 ? "Time range per log" : "Time range";
+      timeRangeEl.hidden = false;
+      timeRangeEl.innerHTML = `<h4 class="analyzer-time-range__title">${title}</h4>${blocks.join("")}`;
+    }
+
     function syncUi() {
       const n = logs.length;
       const subsampled = logs.some((l) => l.parsed && "truncated" in l.parsed && l.parsed.truncated);
@@ -12361,6 +12453,7 @@
         savedMetricPick = null;
         if (metricCheckboxesHost) metricCheckboxesHost.innerHTML = "";
       }
+      renderAnalyzerTimeRange();
       redraw();
     }
 

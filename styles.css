@@ -3749,13 +3749,106 @@ details.report-category__details:not([open]) .report-category__chevron {
 }
 
 .analyzer-controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 300px);
+  align-items: start;
   gap: 0.75rem 1.25rem;
   padding: 0.65rem var(--panel-pad-x);
   border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
+}
+
+@media (max-width: 760px) {
+  .analyzer-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analyzer-controls__aside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  align-self: stretch;
+}
+
+.analyzer-controls__toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: flex-start;
+}
+
+.analyzer-time-range {
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 185, 0, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+.analyzer-time-range__title {
+  margin: 0 0 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gpu-accent);
+}
+
+.analyzer-time-range__filename {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #c8e8b8;
+  margin-bottom: 0.35rem;
+  word-break: break-word;
+}
+
+.analyzer-time-range__column {
+  margin: 0 0 0.35rem;
+  font-size: 0.68rem;
+}
+
+.analyzer-time-range__muted {
+  color: var(--muted);
+}
+
+.analyzer-time-range__dl {
+  margin: 0;
+}
+
+.analyzer-time-range__file + .analyzer-time-range__file {
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(118, 185, 0, 0.18);
+}
+
+.analyzer-time-range__row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.65rem;
+  align-items: baseline;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+}
+
+.analyzer-time-range__row:first-of-type {
+  margin-top: 0;
+}
+
+.analyzer-time-range__row dt {
+  margin: 0;
+  font-weight: 600;
+  color: #9ab8a4;
+}
+
+.analyzer-time-range__row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  color: #e8f5e4;
+}
+
+.analyzer-time-range time {
+  color: inherit;
 }
 
 .metric-fieldset {
@@ -3764,8 +3857,8 @@ details.report-category__details:not([open]) .report-category__chevron {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.2);
-  min-width: min(100%, 480px);
-  flex: 1 1 300px;
+  min-width: 0;
+  width: 100%;
 }
 
 .metric-fieldset legend {
@@ -6236,6 +6329,37 @@ html[data-theme="light"] .panel--gpu .analyzer-controls {
   padding: 0.85rem var(--panel-pad-x);
   border-bottom: 1px solid #e5e7eb;
   background: #fafafa;
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-time-range {
+  border: 1px solid #a7f3d0;
+  background: #ecfdf5;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-time-range__title {
+  color: #047857;
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-time-range__filename {
+  color: #065f46;
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-time-range__row dt {
+  color: #6b7280;
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-time-range__row dd,
+html[data-theme="light"] .panel--gpu .analyzer-time-range__row dd time {
+  color: #111827;
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-time-range__muted {
+  color: #6b7280;
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-time-range__file + .analyzer-time-range__file {
+  border-top-color: rgba(16, 185, 129, 0.28);
 }
 
 html[data-theme="light"] .panel--gpu .metric-fieldset {

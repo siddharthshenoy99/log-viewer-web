@@ -10790,14 +10790,6 @@
     return t.trim();
   }
 
-  /** @param {string} text */
-  function normalizeGpuSensorExportText(text) {
-    return text
-      .split(/\r?\n/)
-      .map((line) => normalizeSensorHeaderLabel(line))
-      .join("\n");
-  }
-
   /** @param {string} cell */
   function parseNumericCell(cell) {
     const t = cell.trim().replace(/%/g, "").replace(/\s/g, "").replace(/,/g, ".");
@@ -10829,18 +10821,88 @@
     return h.trim().toLowerCase().replace(/\s+/g, " ");
   }
 
+  /** Max data rows kept after uniform subsampling (GPU-Z logs can exceed millions of lines). */
+  const GPU_SENSOR_PARSE_MAX_ROWS = 100000;
+  /** Max polyline points per chart series (canvas path cost grows quickly after this). */
+  const GPU_SENSOR_CHART_MAX_POINTS = 14000;
+
+  /**
+   * Walk text: first non-empty = header line string; count data lines (for stride).
+   * @param {string} text
+   */
+  function gpuSensorWalkHeaderAndCount(text) {
+    const len = text.length;
+    let pos = 0;
+    /** @type {string | null} */
+    let headerRaw = null;
+    let dataLineCount = 0;
+    while (pos < len) {
+      const nl = text.indexOf("\n", pos);
+      const end = nl === -1 ? len : nl;
+      let line = text.slice(pos, end);
+      pos = nl === -1 ? len : nl + 1;
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (headerRaw === null) {
+        headerRaw = trimmed;
+        continue;
+      }
+      dataLineCount++;
+    }
+    if (!headerRaw || dataLineCount === 0) return null;
+    return { headerLine: headerRaw, dataLineCount };
+  }
+
+  /**
+   * Collect CSV rows using uniform stride (only non-empty data lines after header).
+   * @param {string} text
+   * @param {number} stride >= 1
+   */
+  function gpuSensorCollectRows(text, stride) {
+    const len = text.length;
+    let pos = 0;
+    /** @type {string | null} */
+    let headerRaw = null;
+    let di = 0;
+    /** @type {string[][]} */
+    const rows = [];
+    while (pos < len) {
+      const nl = text.indexOf("\n", pos);
+      const end = nl === -1 ? len : nl;
+      let line = text.slice(pos, end);
+      pos = nl === -1 ? len : nl + 1;
+      if (line.endsWith("\r")) line = line.slice(0, -1);
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      if (headerRaw === null) {
+        headerRaw = trimmed;
+        continue;
+      }
+      if (di % stride === 0) {
+        rows.push(splitCsvLine(trimmed));
+      }
+      di++;
+    }
+    return rows;
+  }
+
   /**
    * @param {string} text
-   * @returns {{ headers: string[], rows: string[][], rowCount: number, numericCols: { index: number, name: string, unit: string, pts: { r: number, v: number, t: number | null }[], min: number, max: number }[] } | null}
+   * @returns {{ headers: string[], rows: string[][], rowCount: number, numericCols: { index: number, name: string, unit: string, pts: { r: number, v: number, t: number | null }[], min: number, max: number }[], truncated?: boolean, originalDataRows?: number, rowStride?: number } | null}
    */
   function parseSensorCsv(text) {
-    const normalized = normalizeGpuSensorExportText(text);
-    const lines = normalized.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
-    if (lines.length < 2) return null;
-    const headers = splitCsvLine(lines[0]).map((h) => normalizeSensorHeaderLabel(h));
+    const walk = gpuSensorWalkHeaderAndCount(text);
+    if (!walk) return null;
+    const { headerLine, dataLineCount } = walk;
+    const headers = splitCsvLine(normalizeSensorHeaderLabel(headerLine)).map((h) => normalizeSensorHeaderLabel(h));
     if (headers.length < 2) return null;
-    const rows = lines.slice(1).map(splitCsvLine);
+
+    const stride = Math.max(1, Math.ceil(dataLineCount / GPU_SENSOR_PARSE_MAX_ROWS));
+    const rows = gpuSensorCollectRows(text, stride);
     const rowCount = rows.length;
+    if (rowCount < 1) return null;
+
     const colCount = headers.length;
     /** @type {{ index: number, name: string, unit: string, pts: { r: number, v: number, t: number | null }[], min: number, max: number }[]} */
     const numericCols = [];
@@ -10867,9 +10929,13 @@
       }
       const ratio = rowCount ? pts.length / rowCount : 0;
       if (pts.length >= 2 && ratio >= 0.5) {
-        const vs = pts.map((p) => p.v);
-        const min = Math.min(...vs);
-        const max = Math.max(...vs);
+        let min = Infinity;
+        let max = -Infinity;
+        for (let i = 0; i < pts.length; i++) {
+          const v = pts[i].v;
+          if (v < min) min = v;
+          if (v > max) max = v;
+        }
         numericCols.push({
           index: c,
           name: headers[c] || `Column ${c + 1}`,
@@ -10881,7 +10947,14 @@
       }
     }
     if (!numericCols.length) return null;
-    return { headers, rows, rowCount, numericCols };
+    const truncated = stride > 1;
+    return {
+      headers,
+      rows,
+      rowCount,
+      numericCols,
+      ...(truncated ? { truncated: true, originalDataRows: dataLineCount, rowStride: stride } : {}),
+    };
   }
 
   /** @param {string[]} headers @param {string} metric */
@@ -10892,6 +10965,22 @@
     i = headers.findIndex((h) => normalizeHeader(h).includes(m));
     if (i >= 0) return i;
     return headers.findIndex((h) => m.includes(normalizeHeader(h)));
+  }
+
+  /**
+   * @param {{ x: number, y: number }[]} pts
+   * @param {number} maxN
+   */
+  function subsampleChartPts(pts, maxN) {
+    if (pts.length <= maxN) return pts;
+    const stride = Math.ceil(pts.length / maxN);
+    /** @type {{ x: number, y: number }[]} */
+    const out = [];
+    for (let i = 0; i < pts.length; i += stride) out.push(pts[i]);
+    const last = pts[pts.length - 1];
+    const tail = out[out.length - 1];
+    if (!tail || tail.x !== last.x || tail.y !== last.y) out.push(last);
+    return out;
   }
 
   /**
@@ -10993,7 +11082,8 @@
       ctx.lineWidth = seriesLineW;
       ctx.beginPath();
       let first = true;
-      for (const p of s.pts) {
+      const strokePts = subsampleChartPts(s.pts, GPU_SENSOR_CHART_MAX_POINTS);
+      for (const p of strokePts) {
         const px = xAt(p.x);
         const py = yAt(p.y);
         if (first) {
@@ -12061,13 +12151,20 @@
           if (pts[i].y < pts[minI].y) minI = i;
           if (pts[i].y > pts[maxI].y) maxI = i;
         }
+        let minY = pts[0].y;
+        let maxY = pts[0].y;
+        for (let i = 1; i < pts.length; i++) {
+          const y = pts[i].y;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
         out.push({
           label: log.name,
           color: CHART_COLORS[li % CHART_COLORS.length],
           unit: col.unit,
           pts,
-          minY: Math.min(...pts.map((p) => p.y)),
-          maxY: Math.max(...pts.map((p) => p.y)),
+          minY,
+          maxY,
           minPt: pts[minI],
           maxPt: pts[maxI],
         });
@@ -12247,8 +12344,11 @@
 
     function syncUi() {
       const n = logs.length;
+      const subsampled = logs.some((l) => l.parsed && "truncated" in l.parsed && l.parsed.truncated);
       meta.textContent = n
-        ? `${n} log${n === 1 ? "" : "s"} · charts, CSV export, raw bundle, correlation & soft checks`
+        ? `${n} log${n === 1 ? "" : "s"} · charts, CSV export, raw bundle, correlation & soft checks${
+            subsampled ? " · large file subsampled for analysis (uniform stride)" : ""
+          }`
         : "";
       setAnalyzerVisible(n > 0);
       renderChips();

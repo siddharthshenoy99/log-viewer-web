@@ -12,7 +12,8 @@
   --muted: #9aac9f;
   --system-accent: #8fd630;
   --gpu-accent: var(--nv-green);
-  --evtx-accent: #38bdf8;
+  /* Event Viewer panel: match black + NVIDIA green in dark mode; light theme overrides below. */
+  --evtx-accent: var(--nv-green);
   --radius: 12px;
   /* Use wide viewports; cap so line length stays readable on ultrawide */
   --layout-max: min(96vw, 1560px);
@@ -459,18 +460,18 @@ code {
 
 .workspace:has(#tool-panel-evtx:target) .tool-tab--evtx {
   opacity: 1;
-  color: #e8f6ff;
+  color: #eef6e8;
   background: rgba(0, 0, 0, 0.38);
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 0 0 18px rgba(56, 189, 248, 0.12);
+  border-color: rgba(118, 185, 0, 0.45);
+  box-shadow: 0 0 18px rgba(118, 185, 0, 0.12);
 }
 
 .workspace:has(#tool-panel-evtx:target) .tool-tab--evtx .tool-tab__desc {
-  color: rgba(186, 230, 253, 0.92);
+  color: rgba(190, 210, 175, 0.92);
 }
 
 .workspace:has(#tool-panel-evtx:target) .tool-tab--evtx .tool-tab__shortcut {
-  color: rgba(147, 197, 253, 0.55);
+  color: rgba(165, 200, 150, 0.52);
 }
 
 .tool-tab-panels {
@@ -838,10 +839,10 @@ details.sys-section:not([open]) .sys-section__chevron {
 }
 
 .panel--evtx {
-  border-color: rgba(56, 189, 248, 0.42);
+  border-color: rgba(118, 185, 0, 0.4);
   box-shadow:
-    0 0 0 1px rgba(56, 189, 248, 0.18) inset,
-    0 0 32px rgba(56, 189, 248, 0.08);
+    0 0 0 1px var(--nv-green-soft) inset,
+    0 0 32px rgba(118, 185, 0, 0.08);
 }
 
 .panel--bsod {
@@ -906,9 +907,9 @@ details.sys-section:not([open]) .sys-section__chevron {
 }
 
 .panel--evtx .panel__icon-wrap {
-  color: var(--evtx-accent);
-  border-color: rgba(56, 189, 248, 0.42);
-  box-shadow: 0 0 22px rgba(56, 189, 248, 0.14);
+  color: var(--gpu-accent);
+  border-color: rgba(118, 185, 0, 0.42);
+  box-shadow: 0 0 22px rgba(118, 185, 0, 0.14);
 }
 
 .panel--bsod .panel__icon-wrap {
@@ -1006,23 +1007,10 @@ details.sys-section:not([open]) .sys-section__chevron {
   box-shadow: 0 0 24px rgba(118, 185, 0, 0.2);
 }
 
-.panel--evtx .dropzone {
-  border-color: rgba(56, 189, 248, 0.35);
-}
-
-.panel--evtx .dropzone:hover,
-.panel--evtx .dropzone:focus {
-  border-color: var(--evtx-accent);
-  background: rgba(56, 189, 248, 0.08);
-  box-shadow:
-    0 0 24px rgba(56, 189, 248, 0.16),
-    0 1px 0 rgba(255, 255, 255, 0.04) inset;
-}
-
 .panel--evtx .dropzone.is-dragover {
-  border-color: var(--evtx-accent);
-  background: rgba(56, 189, 248, 0.12);
-  box-shadow: 0 0 24px rgba(56, 189, 248, 0.22);
+  border-color: var(--nv-green);
+  background: rgba(118, 185, 0, 0.12);
+  box-shadow: 0 0 24px rgba(118, 185, 0, 0.2);
 }
 
 .evtx-body {
@@ -1052,10 +1040,10 @@ details.sys-section:not([open]) .sys-section__chevron {
   margin: 0;
   padding: 0.65rem 0.85rem;
   border-radius: 10px;
-  border: 1px solid rgba(56, 189, 248, 0.22);
+  border: 1px solid rgba(118, 185, 0, 0.28);
   background: rgba(0, 0, 0, 0.35);
   font-size: 0.84rem;
-  color: #d9f4ff;
+  color: #d4edc4;
   line-height: 1.55;
 }
 
@@ -1084,7 +1072,7 @@ details.sys-section:not([open]) .sys-section__chevron {
 }
 
 .evtx-card {
-  border: 1px solid rgba(56, 189, 248, 0.22);
+  border: 1px solid rgba(118, 185, 0, 0.26);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.35);
   padding: 0.65rem 0.75rem;
@@ -1102,7 +1090,7 @@ details.sys-section:not([open]) .sys-section__chevron {
   margin: 0;
   font-size: 0.8rem;
   font-weight: 650;
-  color: #bae6fd;
+  color: #c5e6a8;
   line-height: 1.38;
 }
 
@@ -1114,8 +1102,8 @@ details.sys-section:not([open]) .sys-section__chevron {
   text-transform: uppercase;
   padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  background: rgba(56, 189, 248, 0.22);
-  color: #7dd3fc;
+  background: rgba(118, 185, 0, 0.22);
+  color: #b8e0a8;
 }
 
 .evtx-card__count--none {
@@ -1127,11 +1115,11 @@ details.sys-section:not([open]) .sys-section__chevron {
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.55;
-  color: #c9ecfc;
+  color: #c8ddd0;
 }
 
 .evtx-table-details {
-  border: 1px solid rgba(56, 189, 248, 0.22);
+  border: 1px solid rgba(118, 185, 0, 0.26);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.28);
   padding: 0.55rem 0.7rem;
@@ -1158,14 +1146,14 @@ details.sys-section:not([open]) .sys-section__chevron {
 
 .evtx-table th,
 .evtx-table td {
-  border-bottom: 1px solid rgba(56, 189, 248, 0.14);
+  border-bottom: 1px solid rgba(118, 185, 0, 0.15);
   padding: 0.42rem 0.48rem;
   text-align: left;
   vertical-align: top;
 }
 
 .evtx-table th {
-  color: #93c5fd;
+  color: rgba(143, 214, 48, 0.92);
   font-weight: 650;
 }
 

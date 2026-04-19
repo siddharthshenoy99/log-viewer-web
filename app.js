@@ -5597,6 +5597,8 @@
           /^System Type$/i,
           /^Systemtyp$/i,
           /^System\s+typ$/iu,
+          /** Swedish MSInfo / WMI (“Computer type” row). */
+          /^Datortyp$/iu,
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
@@ -5621,6 +5623,7 @@
           /^System Type$/i,
           /^Systemtyp$/i,
           /^System\s+typ$/iu,
+          /^Datortyp$/iu,
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
@@ -5639,6 +5642,7 @@
           /^System Type$/i,
           /^Systemtyp$/i,
           /^System\s+typ$/iu,
+          /^Datortyp$/iu,
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
@@ -7591,7 +7595,7 @@
   function looksLikeSwedishWindowsLatinHint(s) {
     const u = String(s || "");
     return (
-      /\bSystemöversikt\b|\bProgrammiljö\b|\bPlattformsroll\b|\bOperativsystemets\s+namn\b|\bDrivrutinsversion\b|\blogiska\s+processorer\b|\bkärnor\b|\bnormaltid\b|\bVästeuropa\b|\bStationär\s+dator\b|\bBildskärm\b|\bGrafikkort\b|\bMaskinvaruresurser\b|\bTyp\s+av\s+dator\b|\bx64-baserad\s+dator\b/i.test(
+      /\bSystemöversikt\b|\bProgrammiljö\b|\bPlattformsroll\b|\bOperativsystemets\s+namn\b|\bDrivrutinsversion\b|\bDatortyp\b|\blogiska\s+processorer\b|\bkärnor\b|\bnormaltid\b|\bVästeuropa\b|\bStationär\s+dator\b|\bBildskärm\b|\bGrafikkort\b|\bMaskinvaruresurser\b|\bTyp\s+av\s+dator\b|\bx64-baserad\s+dator\b/i.test(
         u
       ) || /\bObjekt\b.*\bVärde\b/is.test(u)
     );
@@ -7975,6 +7979,7 @@
     ["Plattformsroll", "Platform Role"],
     ["Processorn", "Processor"],
     ["Systemtyp", "System Type"],
+    ["Datortyp", "System Type"],
     ["Ursprungligt installationsdatum", "Original Install Date"],
     ["BIOS-version/datum", "BIOS Version/Date"],
     ["Plug and Play-enhets-ID", "PNP Device ID"],

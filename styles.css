@@ -2271,6 +2271,7 @@ details.sys-section:not([open]) .sys-section__chevron {
   line-height: 1.4;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  text-align: left;
   border-radius: 8px;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -3829,24 +3830,26 @@ details.report-category__details:not([open]) .report-category__chevron {
 
 .network-detail {
   display: grid;
-  grid-template-columns: minmax(9.5rem, 40%) 1fr;
-  gap: 0.3rem 0.65rem;
+  grid-template-columns: minmax(10rem, min(42%, 22rem)) 1fr;
+  gap: 0.35rem 0.75rem;
   font-size: 0.78rem;
   margin-top: 0.3rem;
   align-items: start;
+  justify-items: start;
   max-width: 100%;
 }
 
 .network-detail__k {
   color: var(--muted);
-  text-align: right;
-  padding-right: 0.25rem;
+  text-align: left;
+  padding-right: 0.35rem;
   font-weight: 500;
 }
 
 .network-detail__v {
   font-family: var(--font-mono);
   min-width: 0;
+  text-align: left;
 }
 
 .summary-empty {

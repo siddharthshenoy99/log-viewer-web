@@ -429,7 +429,7 @@
     const msinfoDataChildIsItemLike = (/** @type {string} */ localName) => {
       const n = normXmlTag(localName);
       if (
-        /^(item|name|key|eintrag|property|элемент|elemento|élément|položka|pozycja|öğe|عنصر|στοιχείο|elementti|項目|名称|항목)$/u.test(
+        /^(item|name|key|eintrag|property|objekt|элемент|elemento|élément|položka|pozycja|öğe|عنصر|στοιχείο|elementti|項目|名称|항목)$/u.test(
           n
         )
       )
@@ -439,7 +439,7 @@
     const msinfoDataChildIsValueLike = (/** @type {string} */ localName) => {
       const n = normXmlTag(localName);
       if (
-        /^(value|val|wert|data|inhalt|значение|valor|valeur|waarde|hodnota|wartość|arvo|érték|valoare|değer|قيمة|τιμή|值|数值|値|값|väärtus)$/u.test(
+        /^(value|val|wert|data|inhalt|värde|значение|valor|valeur|waarde|hodnota|wartość|arvo|érték|valoare|değer|قيمة|τιμή|值|数值|値|값|väärtus)$/u.test(
           n
         )
       )
@@ -471,6 +471,8 @@
             child.getAttribute("item") ||
             child.getAttribute("Key") ||
             child.getAttribute("key") ||
+            child.getAttribute("Objekt") ||
+            child.getAttribute("objekt") ||
             child.getAttribute("項目") ||
             child.getAttribute("名称") ||
             child.getAttribute("항목") ||
@@ -483,6 +485,8 @@
             child.getAttribute("value") ||
             child.getAttribute("Val") ||
             child.getAttribute("val") ||
+            child.getAttribute("Värde") ||
+            child.getAttribute("värde") ||
             child.getAttribute("値") ||
             child.getAttribute("值") ||
             child.getAttribute("数值") ||
@@ -503,12 +507,22 @@
             }
             if (
               !String(attrItemLoose || "").trim() &&
-              (/^(item|key)$/i.test(key) || lk === "öğe" || /^элемент$/i.test(key) || key === "項目" || key === "名称")
+              (/^(item|key|objekt)$/i.test(key) ||
+                lk === "öğe" ||
+                lk === "objekt" ||
+                /^элемент$/i.test(key) ||
+                key === "項目" ||
+                key === "名称")
             )
               attrItemLoose = a.value;
             if (
               !String(attrValLoose || "").trim() &&
-              (/^(value|val)$/i.test(key) || lk === "değer" || /^значение$/i.test(key) || key === "値" || key === "值")
+              (/^(value|val|värde)$/i.test(key) ||
+                lk === "değer" ||
+                lk === "värde" ||
+                /^значение$/i.test(key) ||
+                key === "値" ||
+                key === "值")
             )
               attrValLoose = a.value;
           }
@@ -624,6 +638,8 @@
     if (!it) return false;
     return (
       /^driver\s*version$/i.test(it) ||
+      /^drivrutinsversion$/iu.test(it) ||
+      /^drivrutin\s+version$/iu.test(it) ||
       /^versi[oó]n\s+del\s+controlador$/i.test(it) ||
       /^versi[oó]n\s+del\s+software\s+del\s+controlador$/i.test(it) ||
       /^versi[oó]n\s+del\s+driver$/i.test(it) ||
@@ -645,6 +661,7 @@
     const it = String(item || "").trim();
     return (
       /^name$/i.test(it) ||
+      /^namn$/iu.test(it) ||
       /^nombre$/i.test(it) ||
       /^nome$/iu.test(it) ||
       /^nome\s+do\s+adaptador$/iu.test(it) ||
@@ -664,6 +681,7 @@
     return (
       displayFieldByLabels(fields, [
         "Name",
+        "Namn",
         "Nombre",
         "Nome",
         "Имя",
@@ -676,6 +694,7 @@
       ]) ||
       String(
         fields.Name ||
+          fields.Namn ||
           fields.Nombre ||
           fields.Nome ||
           fields.Имя ||
@@ -696,6 +715,8 @@
     return (
       /^resolution$/i.test(it) ||
       /^current resolution$/i.test(it) ||
+      /^uppl[öo]sning$/iu.test(it) ||
+      /^nuvarande\s+uppl[öo]sning$/iu.test(it) ||
       /^resoluci[oó]n(\s+actual)?$/i.test(it) ||
       /^разрешение$/i.test(it) ||
       /^çözünürlük$/iu.test(it) ||
@@ -777,6 +798,8 @@
         f["Driver Version"] ||
         f.DriverVersion ||
         f["Driver version"] ||
+        f["Drivrutinsversion"] ||
+        f["drivrutinsversion"] ||
         f["Версия драйвера"] ||
         f["версия драйвера"] ||
         f["ドライバーのバージョン"] ||
@@ -813,6 +836,8 @@
       const res = (
         f.Resolution ||
         f["Current Resolution"] ||
+        f["Upplösning"] ||
+        f["Nuvarande upplösning"] ||
         f["Resolución"] ||
         f["Resolución actual"] ||
         f["Разрешение"] ||
@@ -998,6 +1023,9 @@
       "ID PnP do dispositivo",
       "Identificação do dispositivo Plug and Play",
       "Identificação Plug and Play do dispositivo",
+      "Plug and Play-enhets-ID",
+      "Plug and Play enhets-ID",
+      "PnP-enhetsidentifierare",
     ]);
     if (fromLabels) return String(fromLabels).trim();
     if (!fields || typeof fields !== "object") return "";
@@ -1022,7 +1050,7 @@
   /** @param {string} path */
   function isMsInfoDisplayRelatedPath(path) {
     return (
-      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|Görüntü|Ekran|Grafik|Grafikler|Bileşenler.*Görüntü|Exibi[cç][aã]o|Exibicao|V[ií]deo|Pantalla|Tarjeta\s+gr[aá]fica|Placa\s+de\s+v[ií]deo|Componentes.*(?:Exibi|V[ií]deo|Monitor|Pantalla)|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
+      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|Görüntü|Ekran|Grafik|Grafikler|Bileşenler.*Görüntü|Bildskärm|Grafikkort|Skärm|Komponenter.*(?:Bildskärm|Grafik|Grafikkort)|Exibi[cç][aã]o|Exibicao|V[ií]deo|Pantalla|Tarjeta\s+gr[aá]fica|Placa\s+de\s+v[ií]deo|Componentes.*(?:Exibi|V[ií]deo|Monitor|Pantalla)|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
         path
       ) &&
       !/USB.*Audio|Sound Driver|Audio Device|Звук|аудио|オーディオ|サウンド/i.test(path)
@@ -4710,7 +4738,7 @@
     summaryPath:
       /System Summary|Systemübersicht|Résumé du système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
     softwareEnvPath:
-      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービス|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
+      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Programmiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービ스|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
     memoryRowPath:
       /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama/i,
     /** @param {RegExp | RegExp[]} labelRe */
@@ -4928,6 +4956,7 @@
     const rows = kvs.filter((k) => msinfoSummaryPathMatches(k.path));
     const itemMatchers = [
       /^Processor$/i,
+      /^Processorn$/iu,
       /^Processeur$/i,
       /^Prozessor$/i,
       /^Procesador$/i,
@@ -5075,6 +5104,8 @@
         "Производитель",
         "制造商",
         "Üretici",
+        "Tillverkare för basplatta",
+        "Basplattans tillverkare",
       ]),
       product: pickBoardML([
         "Temel Kart Ürünü",
@@ -5103,6 +5134,8 @@
         "Продукт",
         "型号",
         "Ürün",
+        "Produkt för basplatta",
+        "Basplattans produkt",
       ]),
       version: pickBoardML([
         "Temel Kart Sürümü",
@@ -5120,6 +5153,8 @@
         "Версия",
         "版本",
         "Seri Numarası",
+        "Version för basplatta",
+        "Basplattans version",
       ]),
     };
     {
@@ -5353,6 +5388,7 @@
       kvFromSummaryI18n(
         [
           /^OS Name$/i,
+          /^Operativsystemets namn$/iu,
           /^Betriebssystemname$/i,
           /^Nom du système d'exploitation$/i,
           /^Nombre del sistema operativo$/i,
@@ -5387,6 +5423,7 @@
       fieldFromRowsI18n(
         [
           /^OS Name$/i,
+          /^Operativsystemets namn$/iu,
           /^Betriebssystemname$/i,
           /^Nom du système d'exploitation$/i,
           /^Nombre del sistema operativo$/i,
@@ -5403,6 +5440,9 @@
       kvFromSummaryI18n(
         [
           /^Version$/i,
+          /** Swedish row next to OS name under Systemöversikt. */
+          /^Operativsystemversion$/iu,
+          /^Windows-version$/iu,
           /** Spanish single-column “Version” row (often includes build text). */
           /^Versión$/i,
           /^Versão$/i,
@@ -5489,6 +5529,8 @@
             /^OS Derlemesi$/u,
             /^Derleme$/u,
             /^Windows Derlemesi$/u,
+            /^Versionsnummer för Windows$/iu,
+            /^Windows-version$/iu,
             /^Compilación del SO$/i,
             /^Compilación de Windows$/i,
             /^Compilación$/i,
@@ -5502,6 +5544,7 @@
           [
             /^Derleme$/u,
             /^İşletim Sistemi Derlemesi$/u,
+            /^Versionsnummer för Windows$/iu,
             /^Compilación del SO$/i,
             /^Compilación de Windows$/i,
             /^Compilação do SO$/i,
@@ -5586,6 +5629,7 @@
       kvFromSummaryI18n(
         [
           /^Processor$/i,
+          /^Processorn$/iu,
           /^Processeur$/i,
           /^Prozessor$/i,
           /^Procesador$/i,
@@ -5601,6 +5645,7 @@
       fieldFromRowsSummaryPathOnly(
         [
           /^Processor$/i,
+          /^Processorn$/iu,
           /^Processeur$/i,
           /^Prozessor$/i,
           /^Процессор$/i,
@@ -5613,6 +5658,7 @@
       fieldFromRowsI18n(
         [
           /^Processor$/i,
+          /^Processorn$/iu,
           /^Processeur$/i,
           /^Prozessor$/i,
           /^Процессор$/i,
@@ -5626,6 +5672,7 @@
       kvFromSummaryI18n(
         [
           /^Time Zone$/i,
+          /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
           /^Zona horaria$/i,
@@ -5642,6 +5689,7 @@
       kvValI18n(
         [
           /^Time Zone$/i,
+          /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
           /^Zona horaria$/i,
@@ -5657,6 +5705,7 @@
       fieldFromRowsSummaryPathOnly(
         [
           /^Time Zone$/i,
+          /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
           /^Zona horaria$/i,
@@ -5672,6 +5721,7 @@
       fieldFromRowsI18n(
         [
           /^Time Zone$/i,
+          /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
           /^Zona horaria$/i,
@@ -5689,6 +5739,7 @@
         [
           /Original Install Date/i,
           /Install Date/i,
+          /Ursprungligt installationsdatum/i,
           /Ursprüngliches Installationsdatum/i,
           /^Installationsdatum$/i,
           /Date d'installation d'origine/i,
@@ -5708,6 +5759,7 @@
         [
           /Original Install Date/i,
           /^Install Date$/i,
+          /Ursprungligt installationsdatum/i,
           /Ursprüngliches Installationsdatum/i,
           /^Installationsdatum$/i,
           /Date d'installation/i,
@@ -5723,6 +5775,7 @@
       fieldFromRowsI18n(
         [
           /Original Install Date/i,
+          /Ursprungligt installationsdatum/i,
           /Ursprüngliches Installationsdatum/i,
           /Date d'installation d'origine/i,
           /Fecha de instalación original/i,
@@ -5768,6 +5821,7 @@
       kvFromSummaryI18n(
         [
           /^Platform Role$/i,
+          /^Plattformsroll$/iu,
           /^Systemrolle$/i,
           /^Plattformrolle$/i,
           /^Rôle de la plateforme$/i,
@@ -5787,6 +5841,7 @@
       kvValI18n(
         [
           /^Platform Role$/i,
+          /^Plattformsroll$/iu,
           /^Systemrolle$/i,
           /^Plattformrolle$/i,
           /^Rôle de la plateforme$/i,
@@ -5806,6 +5861,7 @@
       fieldFromRowsSummaryPathOnly(
         [
           /^Platform Role$/i,
+          /^Plattformsroll$/iu,
           /^Systemrolle$/i,
           /^Rôle de la plateforme$/i,
           /^Rol de la plataforma$/i,
@@ -5824,6 +5880,7 @@
       fieldFromRowsI18n(
         [
           /^Platform Role$/i,
+          /^Plattformsroll$/iu,
           /^Systemrolle$/i,
           /^Rôle de la plateforme$/i,
           /^Rol de la plataforma$/i,
@@ -6007,7 +6064,9 @@
         /^Версия\s*BIOS$/i.test(it) ||
         /^BIOS版本\/日期$/i.test(it) ||
         /^BIOS\s+Sürümü\s*\/\s*Tarihi$/iu.test(it) ||
-        /^BIOS\s+Sürümü\/Tarihi$/iu.test(it)
+        /^BIOS\s+Sürümü\/Tarihi$/iu.test(it) ||
+        /^BIOS-version\s*\/\s*datum$/iu.test(it) ||
+        /^BIOS-version\/datum$/iu.test(it)
       );
     });
     if (biosKv) {
@@ -6034,6 +6093,7 @@
         (k) =>
           /\/BIOS$/i.test(k.path) ||
           /Components.*BIOS/i.test(k.path) ||
+          /Komponenter.*BIOS/i.test(k.path) ||
           /Компоненты.*BIOS/i.test(k.path) ||
           /Bileşenler.*BIOS/i.test(k.path)
       );
@@ -6426,12 +6486,14 @@
           /ページング\s*ファイルの場所/i,
           /ページ\s*ファイル\s*の\s*場所/i,
           /Sayfalama\s+Dosyası(?:\s+Konumları?|\s+Konumu)/iu,
+          /Plats för växlingsfil/i,
+          /Pagineringssökväg/i,
         ]) || "";
       if (v) return v;
       for (const k of kvs) {
         const it = (k.item || "").trim();
         if (
-          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum/i.test(
+          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|växlingsfil|pagineringssökväg/i.test(
             it
           ) &&
           k.value.trim()
@@ -6449,6 +6511,7 @@
             /^arquivo de paginação$/i.test(it) ||
             /^файл подкачки$/i.test(it) ||
             /^sayfalama\s+dosyası$/iu.test(it) ||
+            /^växlingsfil$/iu.test(it) ||
             /^ページ\s*ファイル$/i.test(it) ||
             /^ページング\s*ファイル$/i.test(it)) &&
           looksLikePageFilePath(k.value)
@@ -6468,7 +6531,7 @@
         for (const [key, val] of Object.entries(r.fields)) {
           const kt = key.trim();
           if (
-            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum/i.test(
+            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|växlingsfil|pagineringssökväg/i.test(
               kt
             ) &&
             String(val).trim()
@@ -6482,6 +6545,7 @@
               /^archivo de paginación$/i.test(kt) ||
               /^файл подкачки$/i.test(kt) ||
               /^sayfalama\s+dosyası$/iu.test(kt) ||
+              /^växlingsfil$/iu.test(kt) ||
               /^ページ\s*ファイル$/i.test(kt) ||
               /^ページング\s*ファイル$/i.test(kt)) &&
             looksLikePageFilePath(String(val))
@@ -6498,6 +6562,8 @@
         /Installed Physical Memory \(RAM\)/i,
         /^Installed Physical Memory$/i,
         /^Installed RAM$/i,
+        /^Installerat fysiskt minne \(RAM\)$/iu,
+        /^Installerat fysiskt minne$/iu,
         /^Installierter physischer Arbeitsspeicher/i,
         /Physischer Arbeitsspeicher.*RAM/i,
         /^Mémoire physique installée/i,
@@ -6516,6 +6582,7 @@
       ]),
       totalPhysical: pickSummaryMemory([
         /^Total Physical Memory$/i,
+        /^Totalt fysiskt minne$/iu,
         /^Gesamter physischer Arbeitsspeicher$/i,
         /^Mémoire physique totale$/i,
         /^Memoria física \(total\)/i,
@@ -6531,6 +6598,7 @@
       ]),
       availablePhysical: pickSummaryMemory([
         /^Available Physical Memory$/i,
+        /^Tillgängligt fysiskt minne$/iu,
         /^Verfügbarer physischer Arbeitsspeicher$/i,
         /^Mémoire physique disponible$/i,
         /^Memoria física disponible$/i,
@@ -6544,6 +6612,7 @@
       ]),
       totalVirtual: pickSummaryMemory([
         /^Total Virtual Memory$/i,
+        /^Totalt virtuellt minne$/iu,
         /^Gesamter virtueller Arbeitsspeicher$/i,
         /^Mémoire virtuelle totale$/i,
         /^Memoria virtual \(total\)/i,
@@ -6558,6 +6627,7 @@
       ]),
       availableVirtual: pickSummaryMemory([
         /^Available Virtual Memory$/i,
+        /^Tillgängligt virtuellt minne$/iu,
         /^Verfügbarer virtueller Arbeitsspeicher$/i,
         /^Mémoire virtuelle disponible$/i,
         /^Memoria virtual disponible$/i,
@@ -6583,6 +6653,8 @@
         /^ページング\s*ファイルのサイズ/i,
         /^ページ\s*ファイル\s*空間/i,
         /^Sayfalama\s+Dosyası\s+Alanı$/iu,
+        /^Storlek för växlingsfil$/iu,
+        /^Växlingsfilsstorlek$/iu,
       ]),
       pageFileLocation: pickPageFileLocation(),
     };
@@ -6873,6 +6945,8 @@
     if (!item.trim() && imTr) item = imTr[2] != null ? imTr[2] : imTr[3] || "";
     const imEs = attrBlob.match(/(?:^|[\s,])Elemento\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (!item.trim() && imEs) item = imEs[2] != null ? imEs[2] : imEs[3] || "";
+    const imSv = attrBlob.match(/(?:^|[\s,])Objekt\s*=\s*("([^"]*)"|'([^']*)')/iu);
+    if (!item.trim() && imSv) item = imSv[2] != null ? imSv[2] : imSv[3] || "";
     const vm = attrBlob.match(/\bValue\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (vm) value = vm[2] != null ? vm[2] : vm[3] || "";
     const vmRu = attrBlob.match(/(?:^|[\s,])Значение\s*=\s*("([^"]*)"|'([^']*)')/i);
@@ -6885,6 +6959,8 @@
     if (!value.trim() && vmTr) value = vmTr[2] != null ? vmTr[2] : vmTr[3] || "";
     const vmEs = attrBlob.match(/(?:^|[\s,])Valor\s*=\s*("([^"]*)"|'([^']*)')/i);
     if (!value.trim() && vmEs) value = vmEs[2] != null ? vmEs[2] : vmEs[3] || "";
+    const vmSv = attrBlob.match(/(?:^|[\s,])Värde\s*=\s*("([^"]*)"|'([^']*)')/iu);
+    if (!value.trim() && vmSv) value = vmSv[2] != null ? vmSv[2] : vmSv[3] || "";
     return { item: norm(item), value: norm(decodeXmlishText(value)) };
   }
 
@@ -6896,6 +6972,8 @@
       /** Spanish MSInfo child rows ({@code <Elemento>}/{@code <Valor>}) when XML is repaired as loose text. */
       [/<Elemento\b[^>]*>([\s\S]*?)<\/Elemento>/i, /<Valor\b[^>]*>([\s\S]*?)<\/Valor>/i],
       [/<Item\b[^>]*>([\s\S]*?)<\/Item>/i, /<Value\b[^>]*>([\s\S]*?)<\/Value>/i],
+      /** Swedish ({@code <Objekt>}/{@code <Värde>}). */
+      [/<Objekt\b[^>]*>([\s\S]*?)<\/Objekt>/iu, /<Värde\b[^>]*>([\s\S]*?)<\/Värde>/iu],
       [/<Элемент\b[^>]*>([\s\S]*?)<\/Элемент>/i, /<Значение\b[^>]*>([\s\S]*?)<\/Значение>/i],
       [/<Élément\b[^>]*>([\s\S]*?)<\/Élément>/i, /<Valeur\b[^>]*>([\s\S]*?)<\/Valeur>/i],
       [/<項目\b[^>]*>([\s\S]*?)<\/項目>/, /<値\b[^>]*>([\s\S]*?)<\/値>/],
@@ -7827,6 +7905,34 @@
     ["Toplam boyut", "Total Size"],
     ["Boş alan", "Free Space"],
     ["Kullanılamıyor", "Unavailable"],
+    // --- Swedish (sv) ---
+    ["Programmiljö", "Software Environment"],
+    ["Systemöversikt", "System Summary"],
+    ["Maskinvaruresurser", "Hardware Resources"],
+    ["Komponenter", "Components"],
+    ["Bildskärm", "Display"],
+    ["Grafikkort", "Display"],
+    ["Operativsystemets namn", "OS Name"],
+    ["Operativsystemversion", "OS Version"],
+    ["Drivrutinsversion", "Driver Version"],
+    ["Installerat fysiskt minne (RAM)", "Installed Physical Memory (RAM)"],
+    ["Installerat fysiskt minne", "Installed Physical Memory"],
+    ["Totalt fysiskt minne", "Total Physical Memory"],
+    ["Tillgängligt fysiskt minne", "Available Physical Memory"],
+    ["Totalt virtuellt minne", "Total Virtual Memory"],
+    ["Tillgängligt virtuellt minne", "Available Virtual Memory"],
+    ["Växlingsfil", "Page File"],
+    ["Pagineringssökväg", "Page File Location(s)"],
+    ["Namn", "Name"],
+    ["Upplösning", "Resolution"],
+    ["Nuvarande upplösning", "Current Resolution"],
+    ["Tidszon", "Time Zone"],
+    ["Plattformsroll", "Platform Role"],
+    ["Processorn", "Processor"],
+    ["Systemtyp", "System Type"],
+    ["Ursprungligt installationsdatum", "Original Install Date"],
+    ["BIOS-version/datum", "BIOS Version/Date"],
+    ["Plug and Play-enhets-ID", "PNP Device ID"],
     // --- German (de) ---
     ["Softwareumgebung / Windows-Fehlerberichte", "Software Environment / Windows Error Reporting"],
     ["Windows-Fehlerberichte", "Windows Error Reporting"],

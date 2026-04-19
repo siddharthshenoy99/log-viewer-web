@@ -4868,12 +4868,13 @@
         msinfoSummaryPathMatches(k.path) &&
         (/^Тип$/i.test((k.item || "").trim()) ||
           /^Tür$/u.test((k.item || "").trim()) ||
-          /^Tipo$/iu.test((k.item || "").trim()))
+          /^Tipo$/iu.test((k.item || "").trim()) ||
+          /^Typ$/i.test((k.item || "").trim()))
     );
     if (!cand.length) return "";
     const vOf = (/** @type {{ value?: string }} */ k) => String(k.value || "").trim();
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
@@ -4899,14 +4900,20 @@
     for (const r of rows) {
       if (!msinfoSummaryPathMatches(r.path)) continue;
       for (const [k, v] of Object.entries(r.fields)) {
-        if (!/^Тип$/i.test(k.trim()) && !/^Tür$/u.test(k.trim()) && !/^Tipo$/iu.test(k.trim())) continue;
+        if (
+          !/^Тип$/i.test(k.trim()) &&
+          !/^Tür$/u.test(k.trim()) &&
+          !/^Tipo$/iu.test(k.trim()) &&
+          !/^Typ$/i.test(k.trim())
+        )
+          continue;
         const t = String(v || "").trim();
         if (t) vals.push(t);
       }
     }
     if (!vals.length) return "";
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
@@ -5561,6 +5568,9 @@
         [
           /^System Type$/i,
           /^Systemtyp$/i,
+          /^Typ av dator$/iu,
+          /^Systemets typ$/iu,
+          /^Dators typ$/iu,
           /^Type du système$/i,
           /^Tipo de sistema$/i,
           /^Tipo de Sistema$/i,
@@ -5581,6 +5591,9 @@
         [
           /^System Type$/i,
           /^Systemtyp$/i,
+          /^Typ av dator$/iu,
+          /^Systemets typ$/iu,
+          /^Dators typ$/iu,
           /^Tipo de sistema$/i,
           /^Tipo do sistema$/i,
           /^Тип системы$/i,
@@ -5595,6 +5608,9 @@
         [
           /^System Type$/i,
           /^Systemtyp$/i,
+          /^Typ av dator$/iu,
+          /^Systemets typ$/iu,
+          /^Dators typ$/iu,
           /^Type du système$/i,
           /^Tipo de sistema$/i,
           /^Tipo do sistema$/i,
@@ -5612,6 +5628,9 @@
         [
           /^System Type$/i,
           /^Systemtyp$/i,
+          /^Typ av dator$/iu,
+          /^Systemets typ$/iu,
+          /^Dators typ$/iu,
           /^Type du système$/i,
           /^Tipo de sistema$/i,
           /^Tipo do sistema$/i,
@@ -5954,16 +5973,16 @@
     const prNorm = String(platformRole || "").toLocaleLowerCase("tr-TR");
     const pr = prNorm;
     if (
-      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu|escritorio|sobremesa|equipo\s+de\s+escritorio|área\s+de\s+trabalho|area\s+de\s+trabalho/i.test(
+      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu|escritorio|sobremesa|equipo\s+de\s+escritorio|área\s+de\s+trabalho|area\s+de\s+trabalho|stationär\s+dator|stationar\s+dator|skrivbordsdator/i.test(
         pr
       ) &&
-      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|computador\s+móvel|computador\s+movel/i.test(
+      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|computador\s+móvel|computador\s+movel|surfplatta/i.test(
         pr
       )
     ) {
       systemForm = "Desktop / workstation-class";
     } else if (
-      /\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|equipo\s+móvil|equipo\s+movil/i.test(
+      /\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|equipo\s+móvil|equipo\s+movil|bärbar\s+dator|surfplatta/i.test(
         pr
       )
     ) {
@@ -5994,7 +6013,7 @@
       systemForm = "Laptop / mobile-class";
     } else if (
       systemTypeRaw &&
-      /escritorio|sobremesa|estación\s+de\s+trabajo|workstation|tower|todo\s+en\s+uno|todo-en-uno|equipo\s+de\s+escritorio|pc\s+baseado\s+em\s+x64|pc\s+baseado\s+em\s+x86|computador\s+baseado\s+em\s+x64|área\s+de\s+trabalho|area\s+de\s+trabalho/i.test(
+      /escritorio|sobremesa|estación\s+de\s+trabajo|workstation|tower|todo\s+en\s+uno|todo-en-uno|equipo\s+de\s+escritorio|pc\s+baseado\s+em\s+x64|pc\s+baseado\s+em\s+x86|computador\s+baseado\s+em\s+x64|área\s+de\s+trabalho|area\s+de\s+trabalho|x64-baserad|x86-baserad|arm64-baserad|baserad\s+dator|stationär|skrivbords/i.test(
         String(systemTypeRaw).toLocaleLowerCase("tr-TR")
       )
     ) {
@@ -7554,6 +7573,19 @@
   }
 
   /**
+   * Swedish (sv) MSInfo / Windows UI — “8 kärnor, 16 logiska processorer” and time zone text are often mostly ASCII.
+   * @param {string} s
+   */
+  function looksLikeSwedishWindowsLatinHint(s) {
+    const u = String(s || "");
+    return (
+      /\bSystemöversikt\b|\bProgrammiljö\b|\bPlattformsroll\b|\bOperativsystemets\s+namn\b|\bDrivrutinsversion\b|\blogiska\s+processorer\b|\bkärnor\b|\bnormaltid\b|\bVästeuropa\b|\bStationär\s+dator\b|\bBildskärm\b|\bGrafikkort\b|\bMaskinvaruresurser\b|\bTyp\s+av\s+dator\b|\bx64-baserad\s+dator\b/i.test(
+        u
+      ) || /\bObjekt\b.*\bVärde\b/is.test(u)
+    );
+  }
+
+  /**
    * True when text looks non-English for common Windows display languages (Arabic, CJK, Cyrillic, Greek, Hangul, kana, Latin with European diacritics).
    * Used to show the section Translate control; phrase maps cover Russian + intl. pairs below as best-effort.
    * @param {string} s
@@ -7581,6 +7613,7 @@
     if (looksLikeTurkishWindowsLatinHint(t)) return true;
     if (looksLikeSpanishWindowsLatinHint(t)) return true;
     if (looksLikePortugueseWindowsLatinHint(t)) return true;
+    if (looksLikeSwedishWindowsLatinHint(t)) return true;
     /** Spanish GPU / display strings often ASCII-only (“compatible con”, “hercios”). */
     if (/\bcompatible\s+con\b/i.test(t)) return true;
     if (/\bno\s+disponible\b/i.test(t)) return true;
@@ -7933,6 +7966,15 @@
     ["Ursprungligt installationsdatum", "Original Install Date"],
     ["BIOS-version/datum", "BIOS Version/Date"],
     ["Plug and Play-enhets-ID", "PNP Device ID"],
+    ["Västeuropa, normaltid", "W. Europe Standard Time"],
+    ["Stationär dator", "Desktop"],
+    ["Bärbar dator", "Laptop"],
+    ["x64-baserad dator", "x64-based PC"],
+    ["x86-baserad dator", "x86-based PC"],
+    ["ARM64-baserad dator", "ARM64-based PC"],
+    ["8 kärnor, 16 logiska processorer", "8 cores, 16 logical processors"],
+    ["logiska processorer", "logical processors"],
+    ["kärnor", "cores"],
     // --- German (de) ---
     ["Softwareumgebung / Windows-Fehlerberichte", "Software Environment / Windows Error Reporting"],
     ["Windows-Fehlerberichte", "Windows Error Reporting"],
@@ -9142,7 +9184,21 @@
       .replace(/\bVerificando\s+nuevamente\s+si\s+hay\s+una\s+soluci[oó]n\s*:/giu, "Searching for solutions:")
       .replace(/\bRespuesta\s*:\s*No\s+disponible\b/giu, "Response: Unavailable")
       /** Spanish WER — ASCII-only line; distinct from “Identificador de archivo .cab”. */
-      .replace(/\bGUID\s+de\s+archivo\s*\.cab\s*:/giu, "CAB file GUID:");
+      .replace(/\bGUID\s+de\s+archivo\s*\.cab\s*:/giu, "CAB file GUID:")
+      /** Swedish MSInfo (summary: processor line, platform role, time zone, system type). */
+      .replace(/\b(\d+)\s*kärnor,\s*(\d+)\s+logiska\s+processorer\b/giu, "$1 cores, $2 logical processors")
+      .replace(/\b(\d+)\s*kärnor\b/giu, "$1 cores")
+      .replace(/\b(\d+)\s+logiska\s+processorer\b/giu, "$1 logical processors")
+      .replace(/\blogiska\s+processorer\b/giu, "logical processors")
+      .replace(/\bkärnor\b/giu, "cores")
+      .replace(/\bStationär\s+dator\b/giu, "Desktop")
+      .replace(/\bBärbar\s+dator\b/giu, "Laptop")
+      .replace(/\bSurfplatta\b/giu, "Slate")
+      .replace(/\bVästeuropa,\s*normaltid\b/giu, "W. Europe Standard Time")
+      .replace(/\bCentraleuropeisk,\s*normaltid\b/giu, "Central Europe Standard Time")
+      .replace(/\bx64-baserad\s+dator\b/giu, "x64-based PC")
+      .replace(/\bx86-baserad\s+dator\b/giu, "x86-based PC")
+      .replace(/\bARM64-baserad\s+dator\b/giu, "ARM64-based PC");
     return out;
   }
 

@@ -12,6 +12,7 @@
   --muted: #9aac9f;
   --system-accent: #8fd630;
   --gpu-accent: var(--nv-green);
+  --evtx-accent: #38bdf8;
   --radius: 12px;
   /* Use wide viewports; cap so line length stays readable on ultrawide */
   --layout-max: min(96vw, 1560px);
@@ -456,6 +457,22 @@ code {
   color: rgba(165, 200, 150, 0.52);
 }
 
+.workspace:has(#tool-panel-evtx:target) .tool-tab--evtx {
+  opacity: 1;
+  color: #e8f6ff;
+  background: rgba(0, 0, 0, 0.38);
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.12);
+}
+
+.workspace:has(#tool-panel-evtx:target) .tool-tab--evtx .tool-tab__desc {
+  color: rgba(186, 230, 253, 0.92);
+}
+
+.workspace:has(#tool-panel-evtx:target) .tool-tab--evtx .tool-tab__shortcut {
+  color: rgba(147, 197, 253, 0.55);
+}
+
 .tool-tab-panels {
   border: 1px solid var(--border);
   border-radius: 0 0 var(--radius) var(--radius);
@@ -820,6 +837,13 @@ details.sys-section:not([open]) .sys-section__chevron {
     0 0 32px rgba(118, 185, 0, 0.08);
 }
 
+.panel--evtx {
+  border-color: rgba(56, 189, 248, 0.42);
+  box-shadow:
+    0 0 0 1px rgba(56, 189, 248, 0.18) inset,
+    0 0 32px rgba(56, 189, 248, 0.08);
+}
+
 .panel--bsod {
   border-color: rgba(143, 214, 48, 0.35);
   box-shadow:
@@ -829,7 +853,8 @@ details.sys-section:not([open]) .sys-section__chevron {
 
 .workspace .tool-panel.panel--system,
 .workspace .tool-panel.panel--bsod,
-.workspace .tool-panel.panel--gpu {
+.workspace .tool-panel.panel--gpu,
+.workspace .tool-panel.panel--evtx {
   box-shadow: none;
 }
 
@@ -880,6 +905,12 @@ details.sys-section:not([open]) .sys-section__chevron {
   box-shadow: 0 0 22px rgba(118, 185, 0, 0.14);
 }
 
+.panel--evtx .panel__icon-wrap {
+  color: var(--evtx-accent);
+  border-color: rgba(56, 189, 248, 0.42);
+  box-shadow: 0 0 22px rgba(56, 189, 248, 0.14);
+}
+
 .panel--bsod .panel__icon-wrap {
   color: var(--system-accent);
   border-color: rgba(143, 214, 48, 0.38);
@@ -910,6 +941,10 @@ details.sys-section:not([open]) .sys-section__chevron {
 
 .panel--bsod .panel__head h2 {
   color: var(--system-accent);
+}
+
+.panel--evtx .panel__head h2 {
+  color: var(--evtx-accent);
 }
 
 /* Inline callout in panel hint: same green / weight / tracking as BSOD panel h2, font size from .panel__hint. */
@@ -969,6 +1004,174 @@ details.sys-section:not([open]) .sys-section__chevron {
   border-color: var(--nv-green);
   background: rgba(118, 185, 0, 0.12);
   box-shadow: 0 0 24px rgba(118, 185, 0, 0.2);
+}
+
+.panel--evtx .dropzone {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.panel--evtx .dropzone:hover,
+.panel--evtx .dropzone:focus {
+  border-color: var(--evtx-accent);
+  background: rgba(56, 189, 248, 0.08);
+  box-shadow:
+    0 0 24px rgba(56, 189, 248, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+.panel--evtx .dropzone.is-dragover {
+  border-color: var(--evtx-accent);
+  background: rgba(56, 189, 248, 0.12);
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.22);
+}
+
+.evtx-body {
+  padding: 0 var(--panel-pad-x) 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.evtx-toolbar {
+  margin: 0.5rem var(--panel-pad-x) 0;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.evtx-toolbar .file-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.evtx-parse-note:empty {
+  display: none;
+}
+
+.evtx-summary-inner {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  background: rgba(0, 0, 0, 0.35);
+  font-size: 0.84rem;
+  color: #d9f4ff;
+  line-height: 1.55;
+}
+
+.evtx-watch-section {
+  margin-top: 0.25rem;
+}
+
+.evtx-section-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.94rem;
+  font-weight: 650;
+  color: var(--evtx-accent);
+}
+
+.evtx-section-lead {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.evtx-watch-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 0.65rem;
+}
+
+.evtx-card {
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.65rem 0.75rem;
+}
+
+.evtx-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.55rem;
+  margin-bottom: 0.45rem;
+}
+
+.evtx-card__title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: #bae6fd;
+  line-height: 1.38;
+}
+
+.evtx-card__count {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.22);
+  color: #7dd3fc;
+}
+
+.evtx-card__count--none {
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--muted);
+}
+
+.evtx-card__body {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: #c9ecfc;
+}
+
+.evtx-table-details {
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 0.55rem 0.7rem;
+}
+
+.evtx-table-summary {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 0.84rem;
+  color: var(--evtx-accent);
+  list-style-position: outside;
+}
+
+.evtx-table-wrap {
+  overflow-x: auto;
+  margin-top: 0.55rem;
+}
+
+.evtx-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.evtx-table th,
+.evtx-table td {
+  border-bottom: 1px solid rgba(56, 189, 248, 0.14);
+  padding: 0.42rem 0.48rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.evtx-table th {
+  color: #93c5fd;
+  font-weight: 650;
+}
+
+.evtx-empty-row {
+  color: var(--muted);
+  font-style: italic;
 }
 
 .panel--bsod .dropzone.is-dragover {
@@ -4920,6 +5123,7 @@ html[data-theme="light"] {
   --muted: #64748b;
   --system-accent: #5b21b6;
   --gpu-accent: #059669;
+  --evtx-accent: #0284c7;
   --lm-violet-deep: #4c1d95;
   --lm-violet: #5b21b6;
   --lm-violet-mid: #6d28d9;
@@ -5291,6 +5495,24 @@ html[data-theme="light"] .workspace:has(#tool-panel-gpu:target) .tool-tab--gpu .
   color: #6ee7b7;
 }
 
+html[data-theme="light"] .workspace:has(#tool-panel-evtx:target) .tool-tab--evtx {
+  position: relative;
+  z-index: 2;
+  color: #0369a1;
+  background: #ffffff;
+  border-color: #e2e8f0;
+  border-bottom-color: #ffffff;
+  box-shadow: 0 -3px 0 #0284c7 inset, var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-evtx:target) .tool-tab--evtx .tool-tab__desc {
+  color: #0e7490;
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-evtx:target) .tool-tab--evtx .tool-tab__shortcut {
+  color: #38bdf8;
+}
+
 html[data-theme="light"] .tool-tab-panels {
   position: relative;
   z-index: 1;
@@ -5460,6 +5682,54 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer .tagline-
   color: #059669;
 }
 
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__inner {
+  border-color: #bae6fd;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-md);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__inner::before {
+  background: linear-gradient(180deg, #38bdf8 0%, #0284c7 45%, #0369a1 100%);
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__version {
+  color: #0369a1;
+  border-color: #bae6fd;
+  background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about {
+  color: #334155;
+  border-color: #bae6fd;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about:hover {
+  color: #0369a1;
+  border-color: #7dd3fc;
+  background: linear-gradient(180deg, #f0f9ff 0%, #e0f2fe 100%);
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about:focus-visible {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.28);
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer code {
+  color: #0369a1;
+  background: #f0f9ff;
+  border-color: #bae6fd;
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer .tagline-arrow__svg {
+  color: #0284c7;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .scroll-to-top {
   background: #ffffff;
   border-color: #e9d5ff;
@@ -5481,6 +5751,13 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .scroll-to-top {
   box-shadow: var(--lm-shadow-sm);
 }
 
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .scroll-to-top {
+  background: #ffffff;
+  border-color: #bae6fd;
+  color: #0284c7;
+  box-shadow: var(--lm-shadow-sm);
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .skip-link {
   background: #ffffff;
   border-color: #e9d5ff;
@@ -5497,6 +5774,12 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .skip-link {
   background: #ffffff;
   border-color: #a7f3d0;
   color: #059669;
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .skip-link {
+  background: #ffffff;
+  border-color: #bae6fd;
+  color: #0284c7;
 }
 
 html[data-theme="light"] .summary-card {
@@ -5518,6 +5801,10 @@ html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog .taglin
 
 html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog .tagline-arrow__svg {
   color: #059669;
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .about-dialog .tagline-arrow__svg {
+  color: #0284c7;
 }
 
 html[data-theme="light"] .about-dialog {
@@ -6323,6 +6610,116 @@ html[data-theme="light"] .panel--gpu .dropzone.is-dragover {
   border-color: #10b981;
   background: #d1fae5;
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+/* ----- Event Viewer (light) — sky / cyan header, readable cards ----- */
+html[data-theme="light"] .panel--evtx {
+  border-color: #e5e7eb;
+  background: #ffffff;
+}
+
+html[data-theme="light"] .panel--evtx .panel__head {
+  padding: 1rem var(--panel-pad-x) 1.05rem;
+  border-bottom: 1px solid #0f172a;
+  background: linear-gradient(180deg, #0c4a6e 0%, #082f49 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="light"] .panel--evtx .panel__head h2 {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+html[data-theme="light"] .panel--evtx .panel__hint {
+  color: #cbd5e1;
+}
+
+html[data-theme="light"] .panel--evtx .panel__hint code {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #bae6fd;
+}
+
+html[data-theme="light"] .panel--evtx .panel__icon-wrap {
+  color: #ecfeff;
+  background: linear-gradient(145deg, #0284c7 0%, #0369a1 100%);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
+}
+
+html[data-theme="light"] .panel--evtx .evtx-toolbar {
+  border-bottom: 1px solid #e5e7eb;
+  background: #f8fafc;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-toolbar .file-meta {
+  color: #64748b;
+}
+
+html[data-theme="light"] .panel--evtx .dropzone {
+  border: 2px dashed #94a3b8;
+  background: #ffffff;
+}
+
+html[data-theme="light"] .panel--evtx .dropzone:hover,
+html[data-theme="light"] .panel--evtx .dropzone:focus {
+  border-color: #0284c7;
+  background: #f0f9ff;
+  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.12);
+}
+
+html[data-theme="light"] .panel--evtx .dropzone.is-dragover {
+  border-color: #0284c7;
+  background: #e0f2fe;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2);
+}
+
+html[data-theme="light"] .panel--evtx .evtx-summary-inner {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #0f172a;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-section-title {
+  color: #0369a1;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-card {
+  border-color: #bae6fd;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] .panel--evtx .evtx-card__title {
+  color: #0369a1;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-card__body {
+  color: #334155;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-card__count {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-card__count--none {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-table-details {
+  border-color: #bae6fd;
+  background: #f8fafc;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-table th {
+  color: #0369a1;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-table td {
+  color: #1e293b;
+  border-bottom-color: #e2e8f0;
 }
 
 html[data-theme="light"] .panel--gpu .analyzer-controls {

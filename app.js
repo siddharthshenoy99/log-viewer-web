@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.2.0";
+  const APP_VERSION = "1.3.0";
 
   const CHART_COLORS = [
     "#76b900",
@@ -12540,12 +12540,425 @@
     });
   }
 
+  /** EVTX/XML — watched Event IDs for GPU / stability triage (education only). */
+  const EVTX_WATCHED_IDS = /** @type {Set<number>} */ (
+    new Set([4101, 10110, 10111, 41, 18, 14])
+  );
+
+  /** Narrative blurbs keyed by ID (shown for every key ID; counts come from the file). */
+  const EVTX_KEY_EVENT_BLURBS = [
+    {
+      ids: [4101],
+      title: "Event ID 4101 (Display)",
+      body:
+        '“Display driver nvlddmkm stopped responding and has successfully recovered.” This is the most common sign of a GPU driver crash, often indicating unstable overclocking, overheating, or driver corruption.',
+    },
+    {
+      ids: [10110, 10111],
+      title: "Event ID 10110 / 10111 (Driver Frameworks)",
+      body:
+        "Indicates that a device (the GPU) has experienced a failure and was disconnected, often followed by a reconnection. This frequently points to a physical hardware failure or severe driver failure.",
+    },
+    {
+      ids: [41],
+      title: "Event ID 41 (Kernel-Power)",
+      body:
+        "Indicates the system rebooted without cleanly shutting down. If this happens while gaming, it often means the GPU drew too much power or caused a critical system failure.",
+    },
+    {
+      ids: [18],
+      title: "Event ID 18 (WHEA-Logger)",
+      body:
+        "Indicates a Hardware Error, often pointing to PCIe bus issues, improper seating of the card, or a failing GPU.",
+    },
+    {
+      ids: [14],
+      title: "Event ID 14 (nvlddmkm)",
+      body:
+        "Usually appears after a crash, indicating a failure to initialize the GPU or a failure of the hardware to respond.",
+    },
+  ];
+
+  /**
+   * @param {ArrayBuffer | Uint8Array} buffer
+   * @returns {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]}
+   */
+  function parseWindowsEventXmlExport(text) {
+    /** @type {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} */
+    const events = [];
+    const re = /<Event\b[^>]*>([\s\S]*?)<\/Event>/gi;
+    let m;
+    while ((m = re.exec(text))) {
+      const block = m[0];
+      const idM = /<EventID[^>]*>(\d+)<\/EventID>/i.exec(block);
+      let provider = "";
+      const provOpen = /<Provider\b[^>]*>/i.exec(block);
+      if (provOpen) {
+        const tag = provOpen[0];
+        const p1 = /\bName\s*=\s*"([^"]*)"/i.exec(tag);
+        const p2 = p1 ? null : /\bName\s*=\s*'([^']*)'/i.exec(tag);
+        if (p1) provider = p1[1] || "";
+        else if (p2) provider = p2[1] || "";
+      }
+      let timeIso = "";
+      const tcOpen = /<TimeCreated\b[^>]*>/i.exec(block);
+      if (tcOpen) {
+        const tag = tcOpen[0];
+        const t1 = /\bSystemTime\s*=\s*"([^"]*)"/i.exec(tag);
+        const t2 = t1 ? null : /\bSystemTime\s*=\s*'([^']*)'/i.exec(tag);
+        if (t1) timeIso = t1[1] || "";
+        else if (t2) timeIso = t2[1] || "";
+      }
+      const channelM = /<Channel[^>]*>([^<]*)<\/Channel>/i.exec(block);
+      let message = "";
+      const msgBlock = /<RenderingInfo[^>]*>[\s\S]*?<Message[^>]*>([\s\S]*?)<\/Message>/i.exec(block);
+      if (msgBlock) message = stripHtmlToText(msgBlock[1]).slice(0, 900);
+      if (!message) {
+        const dataParts = [];
+        const dr = /<Data\b[^>]*>([^<]*)<\/Data>/gi;
+        let dm;
+        while ((dm = dr.exec(block))) if (dm[1].trim()) dataParts.push(dm[1].trim());
+        message = dataParts.slice(0, 6).join(" · ");
+      }
+      const eventId = idM ? Number.parseInt(idM[1], 10) : null;
+      if (eventId == null || Number.isNaN(eventId)) continue;
+      const channel = channelM ? channelM[1].trim() : "";
+      events.push({
+        eventId,
+        provider,
+        channel,
+        timeIso,
+        message,
+        confidence: "high",
+      });
+    }
+    return events;
+  }
+
+  /** @param {string} html */
+  function stripHtmlToText(html) {
+    return String(html || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  /** @param {Uint8Array} u8 @param {number} pos */
+  function readU32le(u8, pos) {
+    return u8[pos] | (u8[pos + 1] << 8) | (u8[pos + 2] << 16) | (u8[pos + 3] << 24);
+  }
+
+  /** @param {Uint8Array} u8 @param {number} pos */
+  function readU64le(u8, pos) {
+    const lo = BigInt(readU32le(u8, pos));
+    const hi = BigInt(readU32le(u8, pos + 4));
+    return lo | (hi << 32n);
+  }
+
+  /** @param {bigint} ft */
+  function filetimeToIsoString(ft) {
+    try {
+      const ms = Number(ft / 10000n - 11644473600000n);
+      if (!Number.isFinite(ms)) return "";
+      return new Date(ms).toISOString();
+    } catch {
+      return "";
+    }
+  }
+
+  /**
+   * Best-effort metadata from EVTX BinXml payload (often contains embedded XML fragments).
+   * @param {Uint8Array} payload
+   */
+  function extractWindowsEventFromBinPayload(payload) {
+    let confidence = "low";
+    /** @type {number | null} */
+    let eventId = null;
+    let provider = "";
+    let channel = "";
+    let message = "";
+
+    /** @param {string} s */
+    const scan = (s) => {
+      let idm = /<EventID[^>]*>(\d+)<\/EventID>/i.exec(s);
+      if (idm) {
+        eventId = Number.parseInt(idm[1], 10);
+        confidence = "high";
+      }
+      const pm = /<Provider[^>]*\bName\s*=\s*"([^"]*)"|<Provider[^>]*\bName\s*=\s*'([^']*)'/i.exec(s);
+      if (pm && !provider) provider = (pm[1] || pm[2] || "").trim();
+      const cm = /<Channel[^>]*>([^<]*)<\/Channel>/i.exec(s);
+      if (cm && !channel) channel = cm[1].trim();
+      const mm = /<Message[^>]*>([\s\S]{0,1200}?)<\/Message>/i.exec(s);
+      if (mm && !message) message = stripHtmlToText(mm[1]).slice(0, 700);
+      if (/nvlddmkm.*(recover|responding|stopped)/i.test(s) && !message)
+        message = "Driver / nvlddmkm text pattern in record (see full log in Event Viewer).";
+    };
+
+    scan(new TextDecoder("utf-8", { fatal: false }).decode(payload));
+    if (eventId == null) scan(new TextDecoder("utf-16le", { fatal: false }).decode(payload));
+
+    return { eventId, provider, channel, message, confidence };
+  }
+
+  /**
+   * Scan binary EVTX for Windows Event Log records (magic 0x2a2a2a2a).
+   * @param {ArrayBuffer} buffer
+   */
+  function parseEvtxBinaryRecords(buffer) {
+    const u8 = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
+    /** @type {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} */
+    const events = [];
+    let off = 0;
+    while (off + 48 <= u8.length) {
+      if (readU32le(u8, off) !== 0x2a2a2a2a) {
+        off++;
+        continue;
+      }
+      const sz = readU32le(u8, off + 4);
+      if (sz < 48 || sz > 0x100000 || off + sz > u8.length) {
+        off++;
+        continue;
+      }
+      const tail = readU32le(u8, off + sz - 4);
+      if (sz !== tail) {
+        off++;
+        continue;
+      }
+      const ft = readU64le(u8, off + 0x10);
+      const timeIso = filetimeToIsoString(ft);
+      const payload = u8.subarray(off + 0x18, off + sz - 4);
+      const meta = extractWindowsEventFromBinPayload(payload);
+      if (meta.eventId != null || meta.message || meta.provider) {
+        events.push({
+          eventId: meta.eventId,
+          provider: meta.provider,
+          channel: meta.channel,
+          timeIso,
+          message: meta.message,
+          confidence: meta.confidence,
+        });
+      }
+      off += sz;
+    }
+    return events;
+  }
+
+  /** @param {string} name */
+  function isLikelyEvtxXmlName(name) {
+    const n = String(name || "").toLowerCase();
+    return n.endsWith(".xml") || n.endsWith(".evtx.xml");
+  }
+
+  /**
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function filterWatchedEvtxEvents(events) {
+    return events.filter((e) => e.eventId != null && EVTX_WATCHED_IDS.has(e.eventId));
+  }
+
+  /**
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function countWatchedById(events) {
+    /** @type {Record<number, number>} */
+    const counts = {};
+    for (const e of events) {
+      if (e.eventId == null || !EVTX_WATCHED_IDS.has(e.eventId)) continue;
+      counts[e.eventId] = (counts[e.eventId] || 0) + 1;
+    }
+    return counts;
+  }
+
+  /** @param {string} iso */
+  function formatEvtxDisplayTime(iso) {
+    if (!iso || !iso.trim()) return "—";
+    const t = Date.parse(iso);
+    if (!Number.isNaN(t)) {
+      try {
+        return new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+      } catch {
+        /* fall through */
+      }
+    }
+    return iso.trim();
+  }
+
+  function setupEvtxPanel(panel) {
+    const dropzone = panel.querySelector(".dropzone--evtx");
+    const input = panel.querySelector(".file-input--evtx");
+    const toolbar = panel.querySelector(".evtx-toolbar");
+    const metaEl = panel.querySelector(".evtx-file-meta");
+    const btnClear = panel.querySelector(".btn-evtx-clear");
+    const body = panel.querySelector(".evtx-body");
+    const parseNoteEl = panel.querySelector(".evtx-parse-note");
+    const summaryEl = panel.querySelector(".evtx-summary");
+    const cardsEl = panel.querySelector(".evtx-watch-cards");
+    const tbody = panel.querySelector(".evtx-table-body");
+
+    function clearAll() {
+      if (toolbar) toolbar.hidden = true;
+      if (body) body.hidden = true;
+      if (metaEl) metaEl.textContent = "";
+      if (parseNoteEl) parseNoteEl.textContent = "";
+      if (summaryEl) summaryEl.innerHTML = "";
+      if (cardsEl) cardsEl.innerHTML = "";
+      if (tbody) tbody.innerHTML = "";
+      if (input) input.value = "";
+    }
+
+    /** @param {ReturnType<typeof parseWindowsEventXmlExport>} all */
+    function renderEvtxResults(name, all, parseNote, source) {
+      if (!summaryEl || !cardsEl || !tbody || !parseNoteEl) return;
+      const watched = filterWatchedEvtxEvents(all);
+      const counts = countWatchedById(all);
+      const totalScanned = all.length;
+      parseNoteEl.textContent = parseNote || "";
+      const medium = all.filter((e) => e.confidence === "low").length;
+
+      summaryEl.innerHTML = `<div class="evtx-summary-inner">
+        <p><strong>${esc(name)}</strong> · source: <strong>${esc(source)}</strong> · records scanned: <strong>${totalScanned}</strong>
+        · matching key IDs: <strong>${watched.length}</strong>${medium ? ` · ${medium} EVTX row(s) had low-confidence text decode` : ""}</p>
+      </div>`;
+
+      /** @type {string[]} */
+      const cardParts = [];
+      for (const blurb of EVTX_KEY_EVENT_BLURBS) {
+        let n = 0;
+        for (const id of blurb.ids) n += counts[id] || 0;
+        const badge =
+          n > 0 ? `<span class="evtx-card__count">${n} in file</span>` : `<span class="evtx-card__count evtx-card__count--none">Not seen</span>`;
+        cardParts.push(`<article class="evtx-card">
+          <header class="evtx-card__head"><h4 class="evtx-card__title">${esc(blurb.title)}</h4>${badge}</header>
+          <p class="evtx-card__body">${esc(blurb.body)}</p>
+        </article>`);
+      }
+      cardsEl.innerHTML = cardParts.join("");
+
+      const sorted = watched.slice().sort((a, b) => {
+        const ta = Date.parse(a.timeIso || "") || 0;
+        const tb = Date.parse(b.timeIso || "") || 0;
+        return tb - ta;
+      });
+      const rows = sorted.map((e) => {
+        const confText =
+          e.confidence === "high" ? "" : ` (${e.confidence} confidence decode)`;
+        const msg = e.message ? esc(e.message.slice(0, 220)) + (e.message.length > 220 ? "…" : "") : "—";
+        return `<tr>
+          <td>${esc(formatEvtxDisplayTime(e.timeIso))}</td>
+          <td>${e.eventId != null ? esc(String(e.eventId)) : "—"}</td>
+          <td>${esc(e.provider || "—")}</td>
+          <td>${esc(e.channel || "—")}</td>
+          <td>${msg}${esc(confText)}</td>
+        </tr>`;
+      });
+      tbody.innerHTML =
+        rows.length > 0
+          ? rows.join("")
+          : `<tr><td colspan="5" class="evtx-empty-row">No matching key Event IDs in this export. The log may not include these providers, or you can try an Event Viewer XML export for richer text.</td></tr>`;
+
+      if (toolbar) toolbar.hidden = false;
+      if (body) body.hidden = false;
+    }
+
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onerror = () => {
+        if (parseNoteEl) {
+          parseNoteEl.textContent =
+            "Could not read this file in the browser. Check permissions, or try an XML export from Event Viewer.";
+        }
+        if (toolbar) toolbar.hidden = false;
+        if (body) body.hidden = false;
+      };
+      reader.onload = () => {
+        const buf = reader.result;
+        if (!(buf instanceof ArrayBuffer)) return;
+        const name = file.name || "event-log";
+        let parseNote = "";
+        /** @type {ReturnType<typeof parseWindowsEventXmlExport>} */
+        let events;
+
+        if (isLikelyEvtxXmlName(name)) {
+          const { text } = decodeBuffer(buf, "gpu", "auto");
+          events = parseWindowsEventXmlExport(text);
+          if (!events.length)
+            parseNote =
+              "No <Event> blocks parsed — confirm this is an Event Viewer XML export (not plain text).";
+          renderEvtxResults(name, events, parseNote, "xml");
+          if (metaEl) metaEl.textContent = `${name} · XML`;
+          return;
+        }
+
+        const decodedProbe = decodeBuffer(buf, "gpu", "auto");
+        const head = decodedProbe.text.slice(0, 600).trimStart();
+        if (/^<\?xml/i.test(head) || /<Events\b/i.test(head) || /<Event\b/i.test(head)) {
+          events = parseWindowsEventXmlExport(decodedProbe.text);
+          if (!events.length)
+            parseNote =
+              "XML-like head found but no <Event> blocks parsed — file may be truncated or not an Event Viewer export.";
+          renderEvtxResults(name, events, parseNote, "xml");
+          if (metaEl) metaEl.textContent = `${name} · XML (detected)`;
+          return;
+        }
+
+        events = parseEvtxBinaryRecords(buf);
+        if (!events.length) {
+          parseNote =
+            "No EVTX records could be decoded from this binary — open the log in Event Viewer and use Save All Events As… → XML, then load the .xml here.";
+        } else {
+          const missed = events.filter((e) => e.eventId == null).length;
+          if (missed > events.length * 0.4)
+            parseNote =
+              "Many EVTX rows lacked a readable Event ID in the payload — XML export usually lists IDs and messages more reliably.";
+        }
+        renderEvtxResults(name, events, parseNote, "evtx");
+        if (metaEl) metaEl.textContent = `${name} · EVTX (binary)`;
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) => {
+      dropzone?.addEventListener(ev, preventDefaults);
+    });
+    dropzone?.addEventListener("dragenter", () => dropzone.classList.add("is-dragover"));
+    dropzone?.addEventListener("dragleave", () => dropzone.classList.remove("is-dragover"));
+    dropzone?.addEventListener("dragover", () => dropzone.classList.add("is-dragover"));
+    dropzone?.addEventListener("drop", (e) => {
+      dropzone.classList.remove("is-dragover");
+      const dt = e.dataTransfer;
+      const f = dt?.files?.[0];
+      if (f) loadFile(f);
+    });
+    input?.addEventListener("change", () => {
+      const f = input.files?.[0];
+      if (f) loadFile(f);
+      input.value = "";
+    });
+    dropzone?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        input?.click();
+      }
+    });
+    btnClear?.addEventListener("click", () => clearAll());
+  }
+
   /** Tabs use URL hash + CSS :target (links in HTML). This syncs legacy hashes, ARIA, and GPU chart resize. */
   function setupWorkspaceTabs() {
     const root = document.getElementById("workspace");
     if (!root) return;
-    const TAB_HREFS = ["#tool-panel-system", "#tool-panel-bsod", "#tool-panel-gpu"];
-    const LEGACY = { "#system": "#tool-panel-system", "#bsod": "#tool-panel-bsod", "#gpu": "#tool-panel-gpu" };
+    const TAB_HREFS = ["#tool-panel-system", "#tool-panel-bsod", "#tool-panel-gpu", "#tool-panel-evtx"];
+    const LEGACY = {
+      "#system": "#tool-panel-system",
+      "#bsod": "#tool-panel-bsod",
+      "#gpu": "#tool-panel-gpu",
+      "#evtx": "#tool-panel-evtx",
+    };
 
     /** @returns {string} */
     function canonicalPanelHash() {
@@ -12618,10 +13031,11 @@
     }
     preserveScrollForTabClicks();
 
-    /** <kbd>Shift</kbd>+1 / 2 / 3 — switch tools (uses <code>code</code> so <kbd>!</kbd>/<kbd>@</kbd>/<kbd>#</kbd> layouts still map to digits; skipped in fields and while About dialog is open). */
+    /** <kbd>Shift</kbd>+1 … 4 — switch tools (uses <code>code</code> so symbol layouts still map to digits; skipped in fields and while About dialog is open). */
     document.addEventListener("keydown", (e) => {
       if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
-      const digit = e.code === "Digit1" ? 1 : e.code === "Digit2" ? 2 : e.code === "Digit3" ? 3 : 0;
+      const digit =
+        e.code === "Digit1" ? 1 : e.code === "Digit2" ? 2 : e.code === "Digit3" ? 3 : e.code === "Digit4" ? 4 : 0;
       if (!digit) return;
       const t = /** @type {HTMLElement | null} */ (e.target);
       if (t?.closest("input, textarea, select, [contenteditable=true]")) return;
@@ -12754,6 +13168,13 @@
       setupGpuAnalyzer(p);
     } catch (err) {
       console.error("GPU panel init failed:", err);
+    }
+  });
+  document.querySelectorAll(".panel--evtx").forEach((p) => {
+    try {
+      setupEvtxPanel(p);
+    } catch (err) {
+      console.error("Event Viewer panel init failed:", err);
     }
   });
   setupWorkspaceTabs();

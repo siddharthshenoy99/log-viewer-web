@@ -31,7 +31,7 @@
       database, or remote API. Analysis runs in the browser from local files only.
       Required: index.html, styles.css, app.js, nvidia-logo.png (same folder). Optional: favicon.svg (tab icon).
       Optional: Open-Report-Viewer.bat, serve.ps1, PORTABLE-HANDOFF.txt (handoff notes).
-      app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu.
+      app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu | #tool-panel-evtx.
       Network: nothing is fetched for parsing; https:// and ms-settings: links run only when the user clicks them (docs, vendor sites, Windows Settings).
     -->
     <title>NVIDIA Report Viewer</title>
@@ -161,9 +161,14 @@
         (function () {
           try {
             var h = (location.hash || "").toLowerCase();
-            var map = { "#system": "#tool-panel-system", "#bsod": "#tool-panel-bsod", "#gpu": "#tool-panel-gpu" };
+            var map = {
+              "#system": "#tool-panel-system",
+              "#bsod": "#tool-panel-bsod",
+              "#gpu": "#tool-panel-gpu",
+              "#evtx": "#tool-panel-evtx",
+            };
             if (map[h]) history.replaceState(null, "", map[h]);
-            else if (h && !/^#tool-panel-(system|bsod|gpu)$/.test(h))
+            else if (h && !/^#tool-panel-(system|bsod|gpu|evtx)$/.test(h))
               history.replaceState(null, "", location.pathname + location.search);
           } catch (e) {}
         })();
@@ -210,6 +215,20 @@
           <span class="tool-tab__title">GPU-Z logs</span>
           <span class="tool-tab__desc">Charts &amp; exports · multi-file</span>
           <span class="tool-tab__shortcut" aria-hidden="true">Shift+3</span>
+        </a>
+        <a
+          class="tool-tab tool-tab--evtx"
+          id="tab-evtx"
+          role="tab"
+          href="#tool-panel-evtx"
+          aria-controls="tool-panel-evtx"
+          aria-selected="false"
+          tabindex="-1"
+          title="Shortcut: Shift+4 (outside text fields)"
+        >
+          <span class="tool-tab__title">Event Viewer</span>
+          <span class="tool-tab__desc">EVTX / XML · GPU-related IDs</span>
+          <span class="tool-tab__shortcut" aria-hidden="true">Shift+4</span>
         </a>
       </nav>
 
@@ -614,6 +633,100 @@
           <p class="chart-axis-note"></p>
         </div>
         <div class="analyzer-stats" hidden></div>
+      </section>
+
+      <section
+        class="panel panel--evtx tool-panel"
+        id="tool-panel-evtx"
+        role="tabpanel"
+        aria-labelledby="tab-evtx"
+        data-panel="evtx"
+      >
+        <div class="panel__head">
+          <div class="panel__head-inner">
+            <div class="panel__icon-wrap" aria-hidden="true">
+              <svg class="panel-icon panel-icon--evtx" viewBox="0 0 40 40" focusable="false">
+                <rect
+                  x="6"
+                  y="5"
+                  width="28"
+                  height="30"
+                  rx="3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  opacity="0.92"
+                />
+                <path
+                  d="M10 11h10M10 15h18M10 19h14M10 23h16M10 27h12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  opacity="0.85"
+                />
+                <circle cx="30" cy="9" r="3.5" fill="currentColor" opacity="0.18" />
+                <path d="M28 9h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+              </svg>
+            </div>
+            <div class="panel__head-text">
+              <h2>Event Viewer hints</h2>
+              <p class="panel__hint">
+                Load an exported Windows log: binary <code>.evtx</code> (parsed in-browser) or
+                <code>.xml</code> from “Save All Events As…”. This tab highlights GPU- and stability-related Event IDs and
+                explains what they often mean — heuristics only, not a diagnosis.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="evtx-toolbar toolbar" hidden>
+          <span class="file-meta evtx-file-meta"></span>
+          <button type="button" class="btn btn--ghost btn-evtx-clear">Clear</button>
+        </div>
+        <div
+          class="dropzone dropzone--evtx"
+          tabindex="0"
+          role="button"
+          aria-label="Drop Event Viewer export here"
+        >
+          <div class="dropzone__inner">
+            <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
+            <p><strong>Drop <code>.evtx</code> or <code>.xml</code></strong> or click to browse</p>
+            <p class="dropzone__sub">
+              XML exports give the richest text. EVTX is scanned locally for records (may miss rare encodings); for a
+              stubborn file, use Event Viewer → <strong>Save All Events As…</strong> → XML.
+            </p>
+          </div>
+          <input type="file" class="file-input file-input--evtx" accept=".evtx,.xml,text/xml,application/xml,text/*" />
+        </div>
+        <div class="evtx-body" hidden>
+          <p class="evtx-parse-note insight-disclaimer" aria-live="polite"></p>
+          <div class="evtx-summary" aria-live="polite"></div>
+          <div class="evtx-watch-section">
+            <h3 class="evtx-section-title">Key Event IDs (this file)</h3>
+            <p class="evtx-section-lead">
+              These IDs are commonly reviewed for GPU and system stability. Counts reflect matches in your export.
+            </p>
+            <div class="evtx-watch-cards"></div>
+          </div>
+          <details class="evtx-table-details" open>
+            <summary class="evtx-table-summary">Matching events (table)</summary>
+            <div class="evtx-table-wrap">
+              <table class="evtx-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Time</th>
+                    <th scope="col">ID</th>
+                    <th scope="col">Provider</th>
+                    <th scope="col">Channel</th>
+                    <th scope="col">Notes</th>
+                  </tr>
+                </thead>
+                <tbody class="evtx-table-body"></tbody>
+              </table>
+            </div>
+          </details>
+        </div>
       </section>
       </div>
     </main>

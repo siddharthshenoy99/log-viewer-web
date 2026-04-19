@@ -4873,20 +4873,27 @@
     );
     if (!cand.length) return "";
     const vOf = (/** @type {{ value?: string }} */ k) => String(k.value || "").trim();
+    /** WER / event vocabulary can appear under a misleading short “Typ” row in mixed exports. */
+    const looksLikeInvalidSystemTypeValue = (t) =>
+      /^application\s+error$/i.test(String(t || "").trim()) ||
+      /^application\s+hang$/i.test(String(t || "").trim()) ||
+      /\bWindows\s+Error\s+Reporting\b/i.test(String(t || "")) ||
+      /\bfault\s+bucket\b/i.test(String(t || ""));
     const looksLikePcKind = (t) =>
       /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
       /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller|sürücü|çekirdek/i.test(t);
-    const best = [...cand].sort((a, b) => {
-      const va = vOf(a);
-      const vb = vOf(b);
-      const sa = looksLikePcKind(va) ? 2 : looksLikeDriverKind(va) ? 0 : 1;
-      const sb = looksLikePcKind(vb) ? 2 : looksLikeDriverKind(vb) ? 0 : 1;
-      return sb - sa;
-    })[0];
+    const scoreTypValue = (/** @type {string} */ t) => {
+      if (looksLikeInvalidSystemTypeValue(t)) return -5;
+      if (looksLikePcKind(t)) return 2;
+      if (looksLikeDriverKind(t)) return 0;
+      return 1;
+    };
+    const best = [...cand].sort((a, b) => scoreTypValue(vOf(b)) - scoreTypValue(vOf(a)))[0];
     const pick = vOf(best);
+    if (looksLikeInvalidSystemTypeValue(pick)) return "";
     if (pick && looksLikeDriverKind(pick) && !looksLikePcKind(pick)) return "";
     return pick;
   }
@@ -4912,18 +4919,25 @@
       }
     }
     if (!vals.length) return "";
+    const looksLikeInvalidSystemTypeValue = (t) =>
+      /^application\s+error$/i.test(String(t || "").trim()) ||
+      /^application\s+hang$/i.test(String(t || "").trim()) ||
+      /\bWindows\s+Error\s+Reporting\b/i.test(String(t || ""));
     const looksLikePcKind = (t) =>
       /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
       /драйвер|driver|kernel|ядер|ядра|ядро|kbd|filter|устройств|controller|sürücü|çekirdek/i.test(t);
+    const scoreTypValue = (/** @type {string} */ t) => {
+      if (looksLikeInvalidSystemTypeValue(t)) return -5;
+      if (looksLikePcKind(t)) return 2;
+      if (looksLikeDriverKind(t)) return 0;
+      return 1;
+    };
     const pick =
-      [...vals].sort((a, b) => {
-        const sa = looksLikePcKind(a) ? 2 : looksLikeDriverKind(a) ? 0 : 1;
-        const sb = looksLikePcKind(b) ? 2 : looksLikeDriverKind(b) ? 0 : 1;
-        return sb - sa;
-      })[0] || vals[0];
+      [...vals].sort((a, b) => scoreTypValue(b) - scoreTypValue(a))[0] || vals[0];
+    if (looksLikeInvalidSystemTypeValue(pick)) return "";
     if (pick && looksLikeDriverKind(pick) && !looksLikePcKind(pick)) return "";
     return pick;
   }
@@ -4935,6 +4949,20 @@
   function kvValI18n(itemRes, kvs) {
     for (const re of MSINFO_I18N.itemPatterns(itemRes)) {
       const x = kvs.find((k) => re.test((k.item || "").trim()));
+      const v = (x?.value || "").trim();
+      if (v) return v;
+    }
+    return "";
+  }
+
+  /**
+   * Like {@link kvValI18n} but only rows whose path is the localized System Summary (avoids WER / software tables that reuse “System Type” labels).
+   * @param {RegExp | RegExp[]} itemRes
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   */
+  function kvValSummaryI18n(itemRes, kvs) {
+    for (const re of MSINFO_I18N.itemPatterns(itemRes)) {
+      const x = kvs.find((k) => msinfoSummaryPathMatches(k.path) && re.test((k.item || "").trim()));
       const v = (x?.value || "").trim();
       if (v) return v;
     }
@@ -5568,6 +5596,7 @@
         [
           /^System Type$/i,
           /^Systemtyp$/i,
+          /^System\s+typ$/iu,
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
@@ -5587,10 +5616,11 @@
         kvs
       ) ||
       pickSystemTypeFromBareTypKvs(kvs) ||
-      kvValI18n(
+      kvValSummaryI18n(
         [
           /^System Type$/i,
           /^Systemtyp$/i,
+          /^System\s+typ$/iu,
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
@@ -5608,6 +5638,7 @@
         [
           /^System Type$/i,
           /^Systemtyp$/i,
+          /^System\s+typ$/iu,
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
@@ -5623,26 +5654,7 @@
         ],
         rows
       ) ||
-      pickSystemTypeFromBareTypRows(rows) ||
-      fieldFromRowsI18n(
-        [
-          /^System Type$/i,
-          /^Systemtyp$/i,
-          /^Typ av dator$/iu,
-          /^Systemets typ$/iu,
-          /^Dators typ$/iu,
-          /^Type du système$/i,
-          /^Tipo de sistema$/i,
-          /^Tipo do sistema$/i,
-          /^Тип системы$/i,
-          /^Тип компьютера$/i,
-          /^Тип ПК$/i,
-          /^Вид системы$/i,
-          /^系统类型$/i,
-          /^Sistem Türü$/u,
-        ],
-        rows
-      );
+      pickSystemTypeFromBareTypRows(rows);
     const processor =
       pickProcessorSummaryFromKvs(kvs) ||
       kvFromSummaryI18n(

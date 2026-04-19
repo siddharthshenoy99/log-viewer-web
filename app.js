@@ -8893,6 +8893,15 @@
     ["Inaktiverad", "Disabled"],
     ["Automatisk", "Automatic"],
     ["Manuell", "Manual"],
+    ["Automatisk (fördröjd start)", "Automatic (Delayed Start)"],
+    ["Automatisk (fordrojd start)", "Automatic (Delayed Start)"],
+    ["Manuell (utlösarstart)", "Manual (Trigger Start)"],
+    ["Manuell (utlosarstart)", "Manual (Trigger Start)"],
+    ["Starttyp", "Startup type"],
+    ["Tillstånd", "State"],
+    ["Visningsnamn", "Display name"],
+    ["Tjänstnamn", "Service name"],
+    ["Tjanstnamn", "Service name"],
     ["Ja", "Yes"],
     ["Nej", "No"],
     // --- Norwegian Bokmål (nb) ---
@@ -9356,10 +9365,103 @@
    * @type {readonly (readonly [string, string])[]}
    */
   const LOCALE_PAIRS_MSINFO_SV_SERVICES = [
+    ["Intelligent bakgrundsoverföringstjänst (BITS)", "Background Intelligent Transfer Service"],
+    ["Intelligent bakgrundsoverföringstjänst", "Background Intelligent Transfer Service"],
+    ["Infrastrukturtjänst för bakgrundsuppgifter", "Background Tasks Infrastructure Service"],
+    ["Anslutna enheter plattformstjänst", "Connected Devices Platform Service"],
+    ["Microsoft Defender Antivirus-tjänst", "Microsoft Defender Antivirus Service"],
+    ["Microsoft Defender Antivirus-tjanst", "Microsoft Defender Antivirus Service"],
+    ["Hantering av kapabilitetstillgång", "Capability Access Manager Service"],
+    ["Funktionsidentifieringsresurspublicering", "Function Discovery Resource Publication"],
+    ["Distribuerad länkspårning klient", "Distributed Link Tracking Client"],
+    ["Distribuerad lanksparning klient", "Distributed Link Tracking Client"],
+    ["Distribuerad transaktionskoordinator", "Distributed Transaction Coordinator"],
+    ["Nätverksanslutningsmäklare", "Network Connection Broker"],
+    ["Natverksanslutningsmaklare", "Network Connection Broker"],
+    ["Nätverkslistetjänst", "Network List Service"],
+    ["Natverkslistetjanst", "Network List Service"],
+    ["Nätverkslagringsgränssnittstjänst", "Network Store Interface Service"],
+    ["Natverkslagringsgranssnittstjanst", "Network Store Interface Service"],
+    ["Lokal sessionshanterare", "Local Session Manager"],
+    ["DCOM-serverprocessstart", "DCOM Server Process Launcher"],
+    ["Diagnostikpolicytjänst", "Diagnostic Policy Service"],
+    ["Diagnostikpolicytjanst", "Diagnostic Policy Service"],
+    ["Diagnostiksystemvärd", "Diagnostic System Host"],
+    ["Diagnostiksystemvard", "Diagnostic System Host"],
+    ["Programgatewaytjänst", "Application Layer Gateway Service"],
+    ["Programgatewaytjanst", "Application Layer Gateway Service"],
+    ["Programinformation", "Application Information"],
+    ["Programidentitet", "Application Identity"],
+    ["Programhantering", "Application Management"],
+    ["Appberedskap", "App Readiness"],
+    ["AppX-distributionstjänst (AppXSVC)", "AppX Deployment Service (AppXSVC)"],
+    ["AppX-distributionstjanst (AppXSVC)", "AppX Deployment Service (AppXSVC)"],
+    ["AppX-distributionstjänst", "AppX Deployment Service"],
+    ["Basfiltreringsmotor", "Base Filtering Engine"],
+    ["Bluetooth-stödtjänst", "Bluetooth Support Service"],
+    ["Bluetooth-stodtjanst", "Bluetooth Support Service"],
+    ["IPsec-policyagent", "IPsec Policy Agent"],
+    ["IP-hjälp", "IP Helper"],
+    ["IP-hjalp", "IP Helper"],
+    ["Kryptografiska tjänster", "Cryptographic Services"],
+    ["Kryptografiska tjanster", "Cryptographic Services"],
+    ["Fjärrregister", "Remote Registry"],
+    ["Säkerhetshanteraren för lokala konton", "Security Accounts Manager"],
+    ["Sakerhetshanteraren for lokala konton", "Security Accounts Manager"],
+    ["Säkerhetscenter", "Security Center"],
+    ["Sakerhetscenter", "Security Center"],
+    ["Gruppolicyklient", "Group Policy Client"],
+    ["Användarprofiltjänst", "User Profile Service"],
+    ["Anvandarprofiltjanst", "User Profile Service"],
+    ["Utskriftskö", "Print Spooler"],
+    ["Utskriftsko", "Print Spooler"],
+    ["Schemaläggaren", "Task Scheduler"],
+    ["Schemalaggaren", "Task Scheduler"],
+    ["Händelselogg för Windows", "Windows Event Log"],
+    ["Handelselogg for Windows", "Windows Event Log"],
+    ["Windows-brandväggen", "Windows Firewall"],
+    ["Windows-brandvaggen", "Windows Firewall"],
+    ["Windows-tid", "Windows Time"],
+    ["Windows-anslutningshanteraren", "Windows Connection Manager"],
+    ["Fjärrproceduranrop (RPC)", "Remote Procedure Call (RPC)"],
+    ["Fjärrproceduranrop", "Remote Procedure Call"],
+    ["RPC-slutpunktsmappare", "RPC Endpoint Mapper"],
+    ["SSDP-upptäckt", "SSDP Discovery"],
+    ["SSDP-upptackt", "SSDP Discovery"],
+    ["Teman", "Themes"],
+    ["Arbetsstation", "Workstation"],
+    ["WLAN-autokonfiguration", "WLAN AutoConfig"],
+    ["Trådad autokonfiguration", "Wired AutoConfig"],
+    ["Tradad autokonfiguration", "Wired AutoConfig"],
+    ["Enhetskonfigurationshanteraren", "Device Setup Manager"],
+    ["Enhetsassocieringstjänst", "Device Association Service"],
+    ["Enhetsassocieringstjanst", "Device Association Service"],
+    ["Programvaruskydd", "Software Protection"],
+    ["BitLocker-enhetskryptering", "BitLocker Drive Encryption Service"],
+    ["Datadelningstjänst", "Data Sharing Service"],
+    ["Datadelningstjanst", "Data Sharing Service"],
+    ["Lagringstjänst", "Storage Service"],
+    ["Lagringstjanst", "Storage Service"],
     ["Tjänst för aggregerad dataplattform", "Aggregate Data Platform Service"],
+    ["Tjanst for aggregerad dataplattform", "Aggregate Data Platform Service"],
     ["Ljudgatewaytjänst för Bluetooth", "Bluetooth Audio Gateway Service"],
+    ["Ljudgatewaytjanst for Bluetooth", "Bluetooth Audio Gateway Service"],
     ["Proxytjänst för virtuellt ljud i Windows", "Windows Virtual Audio Device Proxy Service"],
+    ["Proxytjanst for virtuellt ljud i Windows", "Windows Virtual Audio Device Proxy Service"],
     ["Tid från mobilnät", "Cellular Time"],
+    ["Tid fran mobilnat", "Cellular Time"],
+    ["DNS-klient", "DNS Client"],
+    ["DHCP-klient", "DHCP Client"],
+    ["Klient för Microsoft App-V", "Microsoft App-V Client"],
+    ["Klient for Microsoft App-V", "Microsoft App-V Client"],
+    ["AVCTP-tjänst", "AVCTP service"],
+    ["AVCTP-tjanst", "AVCTP service"],
+    ["Hjälp och support", "Help and Support"],
+    ["Hjalp och support", "Help and Support"],
+    ["Datorwebbläsare", "Computer Browser"],
+    ["Gästtjänst", "Guest Service"],
+    ["Gasttjanst", "Guest Service"],
+    ["Platsmeddelanden", "Location Notification"],
   ];
 
   const LOCALE_PAIRS_MSINFO_PT_SERVICES = [
@@ -9452,6 +9554,21 @@
   );
 
   /**
+   * One pass of the sorted {@link MSINFO_I18N_EN_TOKEN_PAIRS} table (longer keys first).
+   * @param {string} str
+   */
+  function applyMsinfoI18nTokenPairTable(str) {
+    let o = String(str ?? "");
+    for (const pair of MSINFO_I18N_EN_TOKEN_PAIRS) {
+      const from = pair[0];
+      const to = pair[1];
+      if (!from || o.indexOf(from) === -1) continue;
+      o = o.split(from).join(to);
+    }
+    return o;
+  }
+
+  /**
    * Decode numeric HTML character references (e.g. &#x969c;) so CJK in some MSInfo/WER exports is visible
    * to locale detection and phrase replacement (otherwise the string can look ASCII-only).
    * @param {string} s
@@ -9505,12 +9622,7 @@
     let out = normalizeMsinfoLineBreakEntities(String(s ?? ""));
     /** JP volume lines use 「ドライブ C:」; do not let the standalone 「ドライブ」→「Driver」 pair corrupt those. */
     out = out.replace(/ドライブ\s*([A-Z])[：:]/gi, "Drive $1:");
-    for (const pair of MSINFO_I18N_EN_TOKEN_PAIRS) {
-      const from = pair[0];
-      const to = pair[1];
-      if (!from || out.indexOf(from) === -1) continue;
-      out = out.split(from).join(to);
-    }
+    out = applyMsinfoI18nTokenPairTable(out);
     /** Spacing in MSInfo text exports varies; apply regex fallbacks after phrase table. */
     out = out
       .replace(/プロセッサ\s+ドライバー/g, "Processor driver")
@@ -9676,6 +9788,9 @@
       .replace(/\bTjänst\s+för\s+aggregerad\s+dataplattform\b/giu, "Aggregate Data Platform Service")
       .replace(/\bTjanst\s+för\s+aggregerad\s+dataplattform\b/giu, "Aggregate Data Platform Service")
       .replace(/\bLjudgatewaytjänst\s+för\s+Bluetooth\b/giu, "Bluetooth Audio Gateway Service");
+    /** Swedish service names often end with {@code -tjänst}; normalize after regex so phrase-table hits compound rows. */
+    out = out.replace(/-tjänst\b/gu, " Service").replace(/-tjanst\b/gu, " Service");
+    out = applyMsinfoI18nTokenPairTable(out);
     return out;
   }
 
@@ -9986,42 +10101,54 @@
     }
 
     return `<div class="mbbios">
-      <div class="mbbios-info">
-        <h4 class="mbbios-info__title"><span class="mbbios-info__glyph" aria-hidden="true">&#128203;</span> Motherboard information</h4>
-        <dl class="mbbios-dl">
-          <dt>Manufacturer</dt><dd>${sumI18nSpan(mb.manufacturer || "", esc, undefined, i18nOpts)}</dd>
-          <dt>Model</dt><dd>${sumI18nSpan(mb.product || "", esc, undefined, i18nOpts)}</dd>
-          ${mb.version ? `<dt>Version / serial</dt><dd>${sumI18nSpan(mb.version, esc, undefined, i18nOpts)}</dd>` : ""}
-          <dt>Current BIOS</dt><dd>${sumI18nSpan(biosFull, esc, undefined, i18nOpts)}</dd>
-        </dl>
-      </div>
-      <div class="mbbios-cards">
-        <div class="mbbios-card mbbios-card--current">
-          <span class="mbbios-card__kicker">Current BIOS</span>
-          <p class="mbbios-card__value">${sumI18nSpan(biosFull, esc, undefined, i18nOpts)}</p>
-          <span class="mbbios-card__foot">Installed version</span>
+      <div class="mbbios-layout">
+        <div class="mbbios-board">
+          <div class="mbbios-info">
+            <h4 class="mbbios-info__title"><span class="mbbios-info__glyph" aria-hidden="true">&#128203;</span> Motherboard information</h4>
+            <dl class="mbbios-dl">
+              <dt>Manufacturer</dt><dd>${sumI18nSpan(mb.manufacturer || "", esc, undefined, i18nOpts)}</dd>
+              <dt>Model</dt><dd>${sumI18nSpan(mb.product || "", esc, undefined, i18nOpts)}</dd>
+              ${mb.version ? `<dt>Version / serial</dt><dd>${sumI18nSpan(mb.version, esc, undefined, i18nOpts)}</dd>` : ""}
+              <dt>Current BIOS</dt><dd>${sumI18nSpan(biosFull, esc, undefined, i18nOpts)}</dd>
+            </dl>
+          </div>
         </div>
-        <div class="mbbios-card mbbios-card--check">
-          <span class="mbbios-card__kicker">Check required</span>
-          <p class="mbbios-card__value">${esc(biosCheckMain)}</p>
-          <p class="mbbios-card__detail">${esc(ageDetail)}</p>
-          <a class="mbbios-card__foot mbbios-card__foot--link" href="${esc(links.supportUrl)}" target="_blank" rel="noopener noreferrer">${esc(
+        <div class="mbbios-status">
+          <div class="mbbios-cards">
+            <div class="mbbios-card mbbios-card--current">
+              <span class="mbbios-card__kicker">Current BIOS</span>
+              <p class="mbbios-card__value">${sumI18nSpan(biosFull, esc, undefined, i18nOpts)}</p>
+              <span class="mbbios-card__foot">Installed version</span>
+            </div>
+            <div class="mbbios-card mbbios-card--check">
+              <span class="mbbios-card__kicker">Check required</span>
+              <p class="mbbios-card__value">${esc(biosCheckMain)}</p>
+              <p class="mbbios-card__detail">${esc(ageDetail)}</p>
+              <a class="mbbios-card__foot mbbios-card__foot--link" href="${esc(links.supportUrl)}" target="_blank" rel="noopener noreferrer">${esc(
       biosCheckFooter
     )}</a>
+            </div>
+          </div>
         </div>
       </div>
       <div class="mbbios-update">
         <h4 class="mbbios-update__title"><span class="mbbios-update__glyph" aria-hidden="true">&#9432;</span> BIOS update check</h4>
-        <p class="mbbios-update__copy">Visit the <strong>${sumI18nSpan(vendorName, esc, undefined, i18nOpts)}</strong> support site for the latest BIOS updates for your <strong>${sumI18nSpan(
+        <div class="mbbios-update__grid">
+          <div class="mbbios-update__lead">
+            <p class="mbbios-update__copy">Visit the <strong>${sumI18nSpan(vendorName, esc, undefined, i18nOpts)}</strong> support site for the latest BIOS updates for your <strong>${sumI18nSpan(
       modelForBlurb,
       esc,
       undefined,
       i18nOpts
     )}</strong>.</p>
-        ${lastUpdatedBlock}
-        <div class="rec-actions mbbios-actions">
-          <a class="rec-btn rec-btn--primary" href="${esc(links.googleUrl)}" target="_blank" rel="noopener noreferrer">Check BIOS updates</a>
-          <a class="rec-btn rec-btn--ghost" href="${esc(links.supportUrl)}" target="_blank" rel="noopener noreferrer">Support center</a>
+            ${lastUpdatedBlock}
+          </div>
+          <div class="mbbios-update__cta">
+            <div class="rec-actions mbbios-actions">
+              <a class="rec-btn rec-btn--primary" href="${esc(links.googleUrl)}" target="_blank" rel="noopener noreferrer">Check BIOS updates</a>
+              <a class="rec-btn rec-btn--ghost" href="${esc(links.supportUrl)}" target="_blank" rel="noopener noreferrer">Support center</a>
+            </div>
+          </div>
         </div>
         ${biosAlert}
         <p class="rec-footnote">Important: BIOS update steps differ by product. Use only files from your motherboard or OEM vendor for your exact model and revision; incorrect images can make the system unbootable.</p>

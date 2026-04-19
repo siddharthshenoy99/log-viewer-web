@@ -8,10 +8,34 @@ WHAT THIS IS
   charts, and summaries run in the browser from files on disk. No npm, Node,
   Python, installers, CDN, cloud API, or database.
 
+  Source repository (for issues, history, or cloning):
+    https://github.com/siddharthshenoy99/log-viewer-web
+
   Multilingual System Information (.nfo) exports: summaries and labels use
   local normalization and offline phrase mapping (no remote translation API).
-  Dedicated handling is included for Russian, Japanese, Turkish, Spanish, and
-  Portuguese in addition to English.
+  Dedicated handling is included for Russian, Japanese, Turkish, Spanish,
+  Portuguese, and Swedish in addition to English. Section-level “Translate”
+  uses the same offline tables (e.g. Swedish Services / Running Services
+  display names and common field labels).
+
+  Event Viewer exports: open local Windows Event Viewer binary logs (.evtx) on
+  the Event Viewer tab for summaries and keyed events — same offline rules as the
+  rest of the tool (nothing uploaded for parsing).
+
+  Tabs (physical row keys): Shift+1 System Information · Shift+2 BSOD / WinDbg
+  · Shift+3 GPU-Z logs · Shift+4 Event Viewer (.evtx). Skipped while typing in a
+  field or when the About dialog is open — see footer “About · scope, limits &
+  shortcuts”.
+
+  System report (light theme): accent color for several cards (e.g. Windows
+  Updates, Motherboard & BIOS) is purple/violet to match report headers, not
+  green. Dark theme remains the default black + green styling.
+
+  Motherboard & BIOS: on wide viewports, the motherboard details sit in a
+  left column and the “Current BIOS” / “Check required” cards stack in a right
+  column; the “BIOS update check” block places the action buttons beside the
+  main text when there is room. All data fields are unchanged; only layout
+  varies with screen width.
 
 ================================================================================
   FOLDER MANIFEST (keep these together in ONE directory)
@@ -60,7 +84,7 @@ WHAT THIS IS
   OFFLINE / AIR-GAPPED / LOCKED-DOWN NETWORKS
 ================================================================================
   Core features work with no internet connection: load .nfo / logs, summaries,
-  BSOD hints, GPU charts, export. Outbound https:// URLs exist only as normal
+  BSOD hints, GPU charts, local .evtx files, export. Outbound https:// URLs exist only as normal
   hyperlinks (e.g. Microsoft docs) or optional “open vendor / search” actions
   when someone explicitly clicks them — the app does not auto-fetch those URLs
   for analysis.
@@ -73,6 +97,6 @@ WHAT THIS IS
 
 QUESTIONS
   In the app: footer → “About · scope, limits & shortcuts”, or Shift+? outside
-  a text field.
+  a text field. Tab shortcuts: Shift+1 … Shift+4 as listed above.
 
 ================================================================================

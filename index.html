@@ -747,11 +747,12 @@
             <h3 id="about-purpose">Purpose</h3>
             <p>
               Read-only helpers for support workflows: structured MSInfo summaries, quick parsing of BSOD / bugcheck
-              text, and GPU-Z sensor log charts, without sending customer data to a remote service from this page. The
-              MSInfo path applies tolerant decoding and repair so a wide range of corrupted or partially damaged System
-              Information exports can still be read when the underlying content is recoverable. Summaries and labels also
-              support multilingual exports through local normalization and offline phrase mapping, with dedicated
-              handling for Russian, Japanese, Turkish, Spanish, and Portuguese in addition to English.
+              text, GPU-Z sensor log charts, and analysis helpers for exported Windows Event Viewer logs (including
+              <code>.evtx</code>), without sending customer data to a remote service from this page. The MSInfo path
+              applies tolerant decoding and repair so a wide range of corrupted or partially damaged System Information
+              exports can still be read when the underlying content is recoverable. Summaries and labels also support
+              multilingual exports through local normalization and offline phrase mapping, with dedicated handling for
+              Russian, Japanese, Turkish, Spanish, Portuguese, and Swedish in addition to English.
             </p>
           </section>
           <section class="about-dialog__section" aria-labelledby="about-privacy">
@@ -768,6 +769,11 @@
               <li>BSOD analysis is text-based heuristics and links, not a substitute for kernel debugging with the full dump in WinDbg.</li>
               <li>GPU charts and “soft checks” are interpretive; validate unusual results against raw logs and hardware context.</li>
               <li>MSInfo repair covers common XML damage patterns; severely truncated exports may still be incomplete.</li>
+              <li>
+                Event Viewer (<code>.evtx</code>) handling is for locally opened exports in this page; results are summarized
+                and keyed events may be incomplete on very large logs or unusual providers compared to Event Viewer on a live
+                PC.
+              </li>
             </ul>
           </section>
           <section class="about-dialog__section" aria-labelledby="about-keys">
@@ -775,9 +781,9 @@
             <ul>
               <li>
                 <strong>Tabs:</strong> <kbd>Shift</kbd>+<kbd>1</kbd> System Information, <kbd>Shift</kbd>+<kbd>2</kbd> BSOD
-                &amp; WinDbg, <kbd>Shift</kbd>+<kbd>3</kbd> GPU-Z logs (physical row keys; skipped in a text field and while
-                this About dialog is open). With focus on a tab, <kbd>Home</kbd> / <kbd>End</kbd> / arrow keys still move
-                between tools.
+                &amp; WinDbg, <kbd>Shift</kbd>+<kbd>3</kbd> GPU-Z logs, <kbd>Shift</kbd>+<kbd>4</kbd> Event Viewer (local
+                <code>.evtx</code>) (physical row keys; skipped in a text field and while this About dialog is open). With
+                focus on a tab, <kbd>Home</kbd> / <kbd>End</kbd> / arrow keys still move between tools.
               </li>
               <li><strong>BSOD panel:</strong> <kbd>Ctrl</kbd>+<kbd>Enter</kbd> in the paste box runs analysis.</li>
               <li>

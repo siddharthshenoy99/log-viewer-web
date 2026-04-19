@@ -3091,6 +3091,35 @@ details.report-category__details:not([open]) .report-category__chevron {
   align-items: stretch;
 }
 
+/** Top region: board details (left) + BIOS status cards (right) on wide screens */
+.mbbios-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  width: 100%;
+  align-items: start;
+}
+
+.mbbios-board,
+.mbbios-status {
+  min-width: 0;
+}
+
+@media (min-width: 800px) {
+  .mbbios-layout {
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+    gap: 1rem 1.15rem;
+  }
+
+  .mbbios-layout .mbbios-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .mbbios-board .mbbios-dl {
+    grid-template-columns: minmax(9rem, max-content) minmax(0, 1fr);
+  }
+}
+
 .mbbios-info {
   border-radius: 10px;
   padding: 0.9rem 1rem;
@@ -3267,6 +3296,41 @@ details.report-category__details:not([open]) .report-category__chevron {
 
 .mbbios-last--muted {
   color: var(--muted);
+}
+
+.mbbios-update__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.mbbios-update__lead .mbbios-update__copy {
+  margin-bottom: 0.45rem;
+}
+
+.mbbios-update__lead .mbbios-last {
+  margin-bottom: 0;
+}
+
+@media (min-width: 680px) {
+  .mbbios-update__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.75rem 1.35rem;
+    align-items: start;
+  }
+
+  .mbbios-update__cta .rec-actions {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    margin-bottom: 0;
+    align-items: stretch;
+    min-width: 10.5rem;
+  }
+
+  .mbbios-update__cta .rec-actions .rec-btn {
+    justify-content: center;
+  }
 }
 
 /* Primary actions use global green .rec-btn--primary — no blue override */
@@ -6180,6 +6244,61 @@ html[data-theme="light"] .wer-stat {
   box-shadow: var(--lm-shadow-sm);
 }
 
+/** WER timeline cards: use violet accents (dark mode uses NVIDIA green/teal remap). */
+html[data-theme="light"] .wer-timeline {
+  border-color: #e2e8f0;
+  background: #ffffff;
+}
+
+html[data-theme="light"] .wer-item {
+  border-color: rgba(91, 33, 182, 0.22);
+  border-left-color: rgba(109, 40, 217, 0.42);
+  background: #ffffff;
+}
+
+html[data-theme="light"] .wer-item--error {
+  border-left-color: var(--lm-violet-mid);
+  box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.18);
+}
+
+html[data-theme="light"] .wer-item--warning {
+  border-left-color: var(--lm-violet);
+}
+
+html[data-theme="light"] .wer-item--info {
+  border-left-color: rgba(109, 40, 217, 0.38);
+}
+
+html[data-theme="light"] .wer-item__marker {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.28);
+}
+
+html[data-theme="light"] .wer-sev-dot {
+  background: rgba(109, 40, 217, 0.38);
+  box-shadow: 0 0 0 1px rgba(109, 40, 217, 0.22);
+}
+
+html[data-theme="light"] .wer-sev-dot--error {
+  background: var(--lm-violet-mid);
+  box-shadow:
+    0 0 0 2px rgba(167, 139, 250, 0.42),
+    0 0 10px rgba(109, 40, 217, 0.18);
+}
+
+html[data-theme="light"] .wer-sev-dot--warning {
+  background: var(--lm-violet);
+  box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.45);
+}
+
+html[data-theme="light"] .wer-sev-dot--info {
+  background: rgba(109, 40, 217, 0.48);
+}
+
+html[data-theme="light"] .wer-tab:hover {
+  border-color: rgba(139, 92, 246, 0.45);
+}
+
 /* Collapsible report blocks — violet bar, restrained accent */
 html[data-theme="light"] .report-category.summary-card {
   border-color: #e2e8f0;
@@ -6431,6 +6550,7 @@ html[data-theme="light"] .os-winup {
 html[data-theme="light"] .os-winup__header {
   background: linear-gradient(90deg, #f5f3ff 0%, #ffffff 100%);
   border-color: #e9d5ff;
+  border-left: 4px solid #7c3aed;
 }
 
 html[data-theme="light"] .os-winup__sync-badge {
@@ -6461,8 +6581,16 @@ html[data-theme="light"] .os-winup__sub {
   color: #64748b;
 }
 
+html[data-theme="light"] .os-winup__card--build {
+  border-left-color: rgba(139, 92, 246, 0.55);
+}
+
+html[data-theme="light"] .os-winup__card--status {
+  border-left-color: #7c3aed;
+}
+
 html[data-theme="light"] .os-winup__status {
-  color: #059669;
+  color: #5b21b6;
 }
 
 html[data-theme="light"] .os-winup__status-note {
@@ -6470,23 +6598,24 @@ html[data-theme="light"] .os-winup__status-note {
 }
 
 html[data-theme="light"] .os-winup__banner {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #14532d;
+  background: linear-gradient(90deg, #faf5ff 0%, #f5f3ff 100%);
+  border-color: #ddd6fe;
+  border-left: 4px solid #7c3aed;
+  color: #312e81;
 }
 
 html[data-theme="light"] .os-winup__check {
-  background: #d1fae5;
-  border-color: #6ee7b7;
-  color: #047857;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b21b6;
 }
 
 html[data-theme="light"] .os-winup__banner-title {
-  color: #065f46;
+  color: #4c1d95;
 }
 
 html[data-theme="light"] .os-winup__banner-text {
-  color: #166534;
+  color: #5b21b6;
   opacity: 1;
 }
 
@@ -6522,7 +6651,7 @@ html[data-theme="light"] .mbbios-card--current {
 }
 
 html[data-theme="light"] .mbbios-card--check {
-  border-left-color: #059669;
+  border-left-color: #a78bfa;
 }
 
 html[data-theme="light"] .mbbios-card__kicker {
@@ -6545,7 +6674,7 @@ html[data-theme="light"] .mbbios-card__foot--link {
 html[data-theme="light"] .mbbios-update {
   background: #ffffff;
   border-color: #e5e7eb;
-  border-left-color: #059669;
+  border-left-color: #7c3aed;
 }
 
 html[data-theme="light"] .mbbios-update__title {
@@ -6553,7 +6682,7 @@ html[data-theme="light"] .mbbios-update__title {
 }
 
 html[data-theme="light"] .mbbios-update__glyph {
-  color: #059669;
+  color: #6d28d9;
 }
 
 html[data-theme="light"] .mbbios-update__copy,

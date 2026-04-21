@@ -5077,7 +5077,8 @@ details.report-category__details:not([open]) .report-category__chevron {
 
 .site-footer p {
   margin: 0;
-  max-width: min(58rem, 100%);
+  max-width: 100%;
+  width: 100%;
   line-height: 1.62;
   opacity: 0.94;
   text-align: left;

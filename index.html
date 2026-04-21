@@ -27,7 +27,7 @@
       content="Portable NVIDIA Report Viewer: MSInfo (.nfo) summary, BSOD and WinDbg text hints, GPU-Z log charts, runs locally in the browser with no upload pipeline."
     />
     <!--
-      Portable / offline — copy the entire log-viewer-web folder. No npm, Node, Python, build step, CDN,
+      Portable / offline: copy the entire log-viewer-web folder. No npm, Node, Python, build step, CDN,
       database, or remote API. Analysis runs in the browser from local files only.
       Required: index.html, styles.css, app.js, nvidia-logo.png (same folder). Optional: favicon.svg (tab icon).
       Optional: Open-Report-Viewer.bat, serve.ps1, PORTABLE-HANDOFF.txt (handoff notes).
@@ -36,7 +36,7 @@
     -->
     <title>NVIDIA Report Viewer</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=evtx15" />
     <script>
       (function () {
         try {
@@ -291,7 +291,7 @@
             </div>
             <div class="panel__head-text">
               <h2>System Information</h2>
-              <p class="panel__hint">Windows MSInfo export — <code>.nfo</code> (usually UTF-16 XML)</p>
+              <p class="panel__hint">Windows MSInfo export: <code>.nfo</code> (usually UTF-16 XML)</p>
             </div>
           </div>
         </div>
@@ -326,7 +326,7 @@
             <div class="dropzone__inner">
               <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
               <p><strong>Choose or drop <code>.nfo</code> / <code>.xml</code></strong></p>
-              <p class="dropzone__sub">Same parsing as msinfo32 export — UTF-16 and UTF-8 handled automatically.</p>
+              <p class="dropzone__sub">Same parsing as msinfo32 export; UTF-16 and UTF-8 handled automatically.</p>
             </div>
             <input type="file" class="file-input" accept=".nfo,.xml,text/*" />
           </div>
@@ -460,7 +460,7 @@
           <label class="bsod-paste__label" for="bsod-paste-input">Paste WinDbg or Event Viewer text</label>
           <p class="bsod-paste__hint" id="bsod-paste-hint">
             Copy the output of <code>!analyze -v</code> (bugcheck block, arguments, <code>IMAGE_NAME</code>), Event
-            Viewer bugcheck details, or any plain-text BSOD export — then run analysis. No file required.
+            Viewer bugcheck details, or any plain-text BSOD export; then run analysis. No file required.
           </p>
           <textarea
             id="bsod-paste-input"
@@ -674,7 +674,7 @@
               <p class="panel__hint">
                 Load an exported Windows log: binary <code>.evtx</code> (parsed in-browser) or
                 <code>.xml</code> from “Save All Events As…”. This tab highlights GPU- and stability-related Event IDs and
-                explains what they often mean — heuristics only, not a diagnosis.
+                explains what they often mean: heuristics only, not a diagnosis.
               </p>
             </div>
           </div>
@@ -693,33 +693,143 @@
             <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
             <p><strong>Drop <code>.evtx</code> or <code>.xml</code></strong> or click to browse</p>
             <p class="dropzone__sub">
-              XML exports give the richest text. EVTX is scanned locally for records (may miss rare encodings); for a
-              stubborn file, use Event Viewer → <strong>Save All Events As…</strong> → XML.
+              Binary <code>.evtx</code> is parsed locally (standard <code>ElfFile</code> / <code>ElfChnk</code> layout).
+              XML exports still give the richest message text; use “Save All Events As…” if a damaged log cannot be read.
             </p>
           </div>
           <input type="file" class="file-input file-input--evtx" accept=".evtx,.xml,text/xml,application/xml,text/*" />
         </div>
+        <details class="evtx-edu" open>
+          <summary class="evtx-edu__summary">Essential Event Viewer errors &amp; quick differentiation</summary>
+          <div class="evtx-edu__body">
+            <p class="evtx-edu__intro">
+              Reference for <strong>Windows Logs → System</strong>, <strong>Application</strong> (where Driver Frameworks
+              appears), and <strong>Reliability Monitor</strong>. Same caveat as the panel header: patterns are educational,
+              not a diagnosis. IDs must match your export: provider and message text matter.
+            </p>
+
+            <section class="evtx-edu__block" aria-labelledby="evtx-edu-ess">
+              <h4 id="evtx-edu-ess" class="evtx-edu__h">Essential Event Viewer errors to check</h4>
+              <dl class="evtx-edu__dl">
+                <dt class="evtx-edu__dt">Event ID <strong>4101</strong> (Display)</dt>
+                <dd class="evtx-edu__dd">
+                  Often quotes “Display driver nvlddmkm stopped responding and has successfully recovered.” That is a
+                  <strong>TDR</strong> recovery: the GPU missed a deadline and Windows reset it. Frequently driver bugs or
+                  corruption, thermals, unstable overclock, weak power to the card, or failing GPU hardware.
+                </dd>
+                <dt class="evtx-edu__dt">Event ID <strong>10110</strong> / <strong>10111</strong> (Driver Frameworks)</dt>
+                <dd class="evtx-edu__dd">
+                  User-Mode Driver Framework: live device/driver failures; messages may name <strong>nvlddmkm</strong> or
+                  <strong>amdkmdag</strong>. Strong signal for a direct display-driver crash path. Typical follow-up: DDU
+                  clean install of the vendor driver; test at stock clocks. If you expected “10010”, that is a different
+                  Windows event family; confirm the digit in Event Viewer.
+                </dd>
+                <dt class="evtx-edu__dt">Event ID <strong>41</strong> (Kernel-Power)</dt>
+                <dd class="evtx-edu__dd">
+                  Common text: “The system has rebooted without cleanly shutting down first.” Means an unclean shutdown:
+                  sudden power loss, hard reset, or crash. Under gaming load this often raises suspicion for PSU capacity,
+                  failing PSU, or loose power cables; pair with ID <strong>6008</strong> and timestamps.
+                </dd>
+                <dt class="evtx-edu__dt">Event ID <strong>63</strong> (Kernel-Power)</dt>
+                <dd class="evtx-edu__dd">
+                  Another Kernel-Power pattern for abnormal shutdown semantics on some builds; interpret next to 41 and 6008.
+                </dd>
+                <dt class="evtx-edu__dt">Event ID <strong>17</strong> / <strong>18</strong> / <strong>19</strong> /
+                  <strong>20</strong> (WHEA-Logger)</dt>
+                <dd class="evtx-edu__dd">
+                  Hardware error reporting (wording varies by ID: correctable vs fatal, etc.). Often discussed with
+                  <strong>PCIe</strong>, GPU, RAM, CPU, or motherboard. Always read the full <strong>Message</strong> and XML
+                  component fields; update chipset/BIOS from the OEM if errors persist.
+                </dd>
+                <dt class="evtx-edu__dt">Event ID <strong>6008</strong> (EventLog)</dt>
+                <dd class="evtx-edu__dd">
+                  Typical text: previous shutdown was unexpected, usually the companion narrative to an unclean shutdown;
+                  correlate with Kernel-Power <strong>41</strong>.
+                </dd>
+              </dl>
+            </section>
+
+            <section class="evtx-edu__block" aria-labelledby="evtx-edu-diff">
+              <h4 id="evtx-edu-diff" class="evtx-edu__h">Differentiating component failures (rule-of-thumb)</h4>
+              <p class="evtx-edu__note">
+                One row never proves a single component. Use timing, repetition, thermals, and stress tests together.
+              </p>
+              <div class="evtx-diff-wrap">
+                <table class="evtx-diff-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Event / behavior</th>
+                      <th scope="col">Often points to</th>
+                      <th scope="col">Typical next checks</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td><code>nvlddmkm</code> / <code>amdkmdag</code> errors, Display <strong>4101</strong>, Driver
+                        Frameworks <strong>10110/10111</strong></td>
+                      <td>GPU stack / drivers</td>
+                      <td>DDU reinstall, stock clocks, temps, power connectors</td>
+                    </tr>
+                    <tr>
+                      <td>Kernel-Power <strong>41</strong> (instant power-off feel)</td>
+                      <td>PSU / power path</td>
+                      <td>PSU capacity vs GPU class, re-seat modular cables, different outlet or PSU trial</td>
+                    </tr>
+                    <tr>
+                      <td>LiveKernelEvent <strong>0x141</strong>-style codes (freeze under load)</td>
+                      <td>GPU / drivers</td>
+                      <td>Thermal headroom, BIOS stability, driver version</td>
+                    </tr>
+                    <tr>
+                      <td>Freeze or BSOD with <strong>no</strong> matching log row in the export</td>
+                      <td>RAM / CPU / board (or logging gap)</td>
+                      <td>MemTest86, CPU thermals, min-Dump path under <code>%SystemRoot%\Minidump</code></td>
+                    </tr>
+                    <tr>
+                      <td>Visual artifacting plus crash</td>
+                      <td>GPU (e.g. VRAM)</td>
+                      <td>Vendor RMA process, different display / driver test</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="evtx-edu__block" aria-labelledby="evtx-edu-more">
+              <h4 id="evtx-edu-more" class="evtx-edu__h">More patterns (same log)</h4>
+              <p>
+                <strong>IDs 13 / 14</strong>: display driver stopped responding. <strong>LiveKernelEvent</strong> /
+                parameter codes such as <strong>0x141</strong>, <strong>0x1a8</strong>, <strong>0x1b8</strong>,
+                <strong>0x193</strong> (TDR-style failures under load). <strong>XID</strong> (NVIDIA driver): decode the code
+                in NVIDIA’s XID documentation (PCIe vs VRAM vs power classes). Some entries use Event ID <strong>0</strong>
+                on certain builds; we do not auto-count ID 0 (too generic).
+              </p>
+            </section>
+          </div>
+        </details>
         <div class="evtx-body" hidden>
           <p class="evtx-parse-note insight-disclaimer" aria-live="polite"></p>
           <div class="evtx-summary" aria-live="polite"></div>
           <div class="evtx-watch-section">
             <h3 class="evtx-section-title">Key Event IDs (this file)</h3>
             <p class="evtx-section-lead">
-              These IDs are commonly reviewed for GPU and system stability. Counts reflect matches in your export.
+              Includes Display / Driver Frameworks / Kernel-Power / WHEA / EventLog IDs we track here. Counts reflect matches
+              in your export. Always open the row for provider and full message text.
             </p>
             <div class="evtx-watch-cards"></div>
           </div>
           <details class="evtx-table-details" open>
-            <summary class="evtx-table-summary">Matching events (table)</summary>
+            <summary class="evtx-table-summary">Events in this file</summary>
             <div class="evtx-table-wrap">
               <table class="evtx-table">
                 <thead>
                   <tr>
                     <th scope="col">Time</th>
-                    <th scope="col">ID</th>
+                    <th scope="col">Event ID</th>
+                    <th scope="col" title="Rows in this file with the same provider + Event ID">Times in file</th>
                     <th scope="col">Provider</th>
                     <th scope="col">Channel</th>
-                    <th scope="col">Notes</th>
+                    <th scope="col">What happened</th>
                   </tr>
                 </thead>
                 <tbody class="evtx-table-body"></tbody>
@@ -902,6 +1012,6 @@
       })();
     </script>
     <!-- Plain script (not ES modules) so file:// works with no local server -->
-    <script src="app.js" charset="utf-8"></script>
+    <script src="app.js?v=evtx13" charset="utf-8"></script>
   </body>
 </html>

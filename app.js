@@ -13308,42 +13308,71 @@
     });
   }
 
-  /** EVTX/XML — watched Event IDs for GPU / stability triage (education only). */
+  /** EVTX/XML: watched Event IDs for GPU / stability triage (education only). Omit generic ID 0 from matching (too noisy). */
   const EVTX_WATCHED_IDS = /** @type {Set<number>} */ (
-    new Set([4101, 10110, 10111, 41, 18, 14])
+    new Set([4101, 10110, 10111, 41, 18, 14, 153, 13, 63, 193, 17, 19, 20, 6008])
   );
 
-  /** Narrative blurbs keyed by ID (shown for every key ID; counts come from the file). */
+  /**
+   * Narrative blurbs keyed by ID (counts from file when ids is non-empty).
+   * referenceOnly: show “Reference” badge (no Event ID counting; e.g. XID varies by detail field).
+   * @type {readonly { ids: readonly number[], title: string, body: string, referenceOnly?: boolean }[]}
+   */
   const EVTX_KEY_EVENT_BLURBS = [
+    {
+      ids: [13, 14],
+      title: "nvlddmkm / amdkmdag (IDs 13, 14)",
+      body:
+        "Display driver stopped responding. Typical causes include unstable clocks, thermals, corrupt drivers, or failing GPU hardware. Compare with LiveKernelEvent / TDR codes and Kernel-Power in the same session.",
+    },
     {
       ids: [4101],
       title: "Event ID 4101 (Display)",
       body:
-        '“Display driver nvlddmkm stopped responding and has successfully recovered.” This is the most common sign of a GPU driver crash, often indicating unstable overclocking, overheating, or driver corruption.',
+        'Quoted message often includes “Display driver nvlddmkm stopped responding and has successfully recovered.” That is TDR recovery: Windows reset the GPU after it missed a deadline. Common contributors: driver bugs or corruption, overheating, unstable overclock, power delivery to the card, or faulty GPU hardware.',
+    },
+    {
+      ids: [153],
+      title: "Event ID 153 (nvlddmkm / Display)",
+      body:
+        "From the NVIDIA kernel driver stack; often clusters with other Display/TDR entries. Bursts under load warrant checking PCIe power connectors, PSU capacity on 12V GPU rails, thermals, and a clean driver install.",
     },
     {
       ids: [10110, 10111],
       title: "Event ID 10110 / 10111 (Driver Frameworks)",
       body:
-        "Indicates that a device (the GPU) has experienced a failure and was disconnected, often followed by a reconnection. This frequently points to a physical hardware failure or severe driver failure.",
+        "Microsoft-Windows-DriverFrameworks-UserMode (UMDF): live driver/device failures. Often GPU-related when messages reference nvlddmkm or amdkmdag. Typical next steps: remove drivers with Display Driver Uninstaller (DDU) and clean-install from NVIDIA or AMD; retest at stock clocks. Note: published GPU-troubleshooting IDs are **10110 / 10111**, not unrelated events that happen to look like **10010**.",
     },
     {
-      ids: [41],
-      title: "Event ID 41 (Kernel-Power)",
+      ids: [41, 63],
+      title: "Kernel-Power (IDs 41, 63)",
       body:
-        "Indicates the system rebooted without cleanly shutting down. If this happens while gaming, it often means the GPU drew too much power or caused a critical system failure.",
+        'For ID 41, the message often begins “The system has rebooted without cleanly shutting down first.” That flags an unclean shutdown, sometimes seen under heavy GPU load when power delivery fails. Frequently points to PSU limits, failing PSU, loose PCIe / EPS cables, or mains loss; correlate with Event ID 6008 and timestamps.',
     },
     {
-      ids: [18],
-      title: "Event ID 18 (WHEA-Logger)",
+      ids: [6008],
+      title: "Event ID 6008 (EventLog)",
       body:
-        "Indicates a Hardware Error, often pointing to PCIe bus issues, improper seating of the card, or a failing GPU.",
+        'Often “The previous system shutdown at … was unexpected.” Typically logged after a hard reset or loss of power; commonly appears alongside Kernel-Power 41 for the same incident. Use timing with other entries (not GPU-specific by itself).',
     },
     {
-      ids: [14],
-      title: "Event ID 14 (nvlddmkm)",
+      ids: [17, 18, 19, 20],
+      title: "Event ID 17 / 18 / 19 / 20 (WHEA-Logger)",
       body:
-        "Usually appears after a crash, indicating a failure to initialize the GPU or a failure of the hardware to respond.",
+        "Windows Hardware Error Architecture reports; wording varies by ID (correctable vs fatal hardware error). Often tied to PCIe links, GPU, RAM, CPU package, or motherboard paths when details list buses or components. Next steps: read the full Message / XML fields, update chipset and BIOS from the OEM, re-seat GPU and RAM, stress-test; persistent WHEA warrants hardware-focused diagnosis.",
+    },
+    {
+      ids: [193],
+      title: "LiveKernelEvent / TDR detail (ID 193, …)",
+      body:
+        "LiveKernelEvent payloads often carry codes such as 0x141, 0x1a8, 0x1b8 (typical TDR-style failures under load). Cross-check hex parameters in XML and Reliability Monitor.",
+    },
+    {
+      ids: [],
+      title: "XID errors (NVIDIA)",
+      body:
+        "Hardware-reported PCIe or GPU memory errors from the NVIDIA driver stack. Use the XID code in the event XML / details with NVIDIA documentation to interpret bus vs VRAM vs power delivery.",
+      referenceOnly: true,
     },
   ];
 
@@ -13383,10 +13412,15 @@
       if (msgBlock) message = stripHtmlToText(msgBlock[1]).slice(0, 900);
       if (!message) {
         const dataParts = [];
-        const dr = /<Data\b[^>]*>([^<]*)<\/Data>/gi;
+        const dr = /<Data\b[^>]*>([\s\S]*?)<\/Data>/gi;
         let dm;
-        while ((dm = dr.exec(block))) if (dm[1].trim()) dataParts.push(dm[1].trim());
-        message = dataParts.slice(0, 6).join(" · ");
+        while ((dm = dr.exec(block))) {
+          const t = stripHtmlToText(dm[1]).trim();
+          if (t) dataParts.push(t);
+        }
+        if (dataParts.length >= 2 && /^\\\\Device\\/i.test(dataParts[0]))
+          message = dataParts.slice(1).join(" · ").slice(0, 900);
+        else message = dataParts.slice(0, 8).join(" · ").slice(0, 900);
       }
       const eventId = idM ? Number.parseInt(idM[1], 10) : null;
       if (eventId == null || Number.isNaN(eventId)) continue;
@@ -13417,6 +13451,18 @@
   }
 
   /** @param {Uint8Array} u8 @param {number} pos */
+  function readU16le(u8, pos) {
+    return u8[pos] | (u8[pos + 1] << 8);
+  }
+
+  /** @param {Uint8Array} u8 @param {number} pos @param {number} len */
+  function readAsciiFixed(u8, pos, len) {
+    let s = "";
+    for (let i = 0; i < len && pos + i < u8.length; i++) s += String.fromCharCode(u8[pos + i]);
+    return s;
+  }
+
+  /** @param {Uint8Array} u8 @param {number} pos */
   function readU64le(u8, pos) {
     const lo = BigInt(readU32le(u8, pos));
     const hi = BigInt(readU32le(u8, pos + 4));
@@ -13434,25 +13480,653 @@
     }
   }
 
+  /** Max bytes to scan for embedded XML / BinXml text inside a record payload. */
+  const EVTX_LITERAL_EVENTID_CAP = 8 * 1024 * 1024;
+
+  /**
+   * Event Viewer’s “Date and Time” column uses {@code System TimeCreated} from the rendered XML; it is not always identical to
+   * the FILETIME at record offset {@code 0x10}. Prefer this when BinXml still carries a readable {@code TimeCreated} tag.
+   * @param {Uint8Array | null | undefined} payload
+   * @param {Uint8Array | null | undefined} recordEnvelope
+   * @returns {string} ISO string in UTC, or ""
+   */
+  function extractSystemTimeCreatedIso(payload, recordEnvelope) {
+    const reLoose =
+      /<TimeCreated\b[^>]{0,1200}?>/i;
+    const reSysDq = /\bSystemTime\s*=\s*"([^"]+)"/i;
+    const reSysSq = /\bSystemTime\s*=\s*'([^']+)'/i;
+    /** @param {string} raw */
+    const normalizeMs = (raw) => {
+      const t = String(raw || "").trim();
+      if (!t) return NaN;
+      let ms = Date.parse(t);
+      if (!Number.isNaN(ms)) return ms;
+      if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(t) && !/[zZ+\-]\d/.test(t.slice(-6)))
+        ms = Date.parse(t + "Z");
+      return ms;
+    };
+    /** @param {Uint8Array} buf */
+    const scanDecoded = (buf) => {
+      /** Event {@code System}/{@code TimeCreated} for this row lives in the first part of the payload — avoid matching older template copies deeper in the buffer. */
+      const max = Math.min(buf.length, 98304);
+      const slice = buf.subarray(0, max);
+      const attempts = [
+        () => new TextDecoder("utf-16le", { fatal: false }).decode(slice),
+        () => new TextDecoder("utf-8", { fatal: false }).decode(slice),
+      ];
+      for (const decode of attempts) {
+        let s = "";
+        try {
+          s = decode();
+        } catch {
+          continue;
+        }
+        const mOpen = reLoose.exec(s);
+        if (!mOpen) continue;
+        const tag = mOpen[0];
+        let sm = reSysDq.exec(tag);
+        if (!sm) sm = reSysSq.exec(tag);
+        if (!sm) {
+          const whole = /<TimeCreated\b[^>]*\bSystemTime\s*=\s*"([^"]+)"/i.exec(s);
+          if (whole) sm = whole;
+        }
+        if (!sm) continue;
+        const ms = normalizeMs(sm[1]);
+        if (!Number.isNaN(ms)) return new Date(ms).toISOString();
+      }
+      let latin = "";
+      const lm = Math.min(slice.length, 262144);
+      for (let i = 0; i < lm; i++) latin += String.fromCharCode(slice[i]);
+      const mOpenLat = reLoose.exec(latin);
+      if (!mOpenLat) return "";
+      const tagLat = mOpenLat[0];
+      let smLat = reSysDq.exec(tagLat) || reSysSq.exec(tagLat);
+      if (!smLat) return "";
+      const msLat = normalizeMs(smLat[1]);
+      if (!Number.isNaN(msLat)) return new Date(msLat).toISOString();
+      return "";
+    };
+
+    /** Prefer payload only first — full envelope can include chunk string tables that carry unrelated {@code TimeCreated} text. */
+    if (payload?.length) {
+      const got = scanDecoded(payload);
+      if (got) return got;
+    }
+    if (recordEnvelope?.length) {
+      const got = scanDecoded(recordEnvelope);
+      if (got) return got;
+    }
+    return "";
+  }
+
+  /**
+   * Locate UTF-16 LE {@code </EventID>} beginning at or after {@code start} within {@code maxScan} bytes.
+   * @param {Uint8Array} buf
+   * @param {number} start
+   * @param {Uint8Array} closeSeq
+   * @param {number} maxScan
+   */
+  function findUtf16SeqFrom(buf, start, closeSeq, maxScan) {
+    const lim = Math.min(buf.length, start + maxScan);
+    for (let i = start; i + closeSeq.length <= lim; i++) {
+      let ok = true;
+      for (let j = 0; j < closeSeq.length; j++)
+        if (buf[i + j] !== closeSeq[j]) {
+          ok = false;
+          break;
+        }
+      if (ok) return i;
+    }
+    return -1;
+  }
+
+  /**
+   * UTF-16 LE: {@code <EventID ...> … </EventID>} where the inner value is either UTF-16 digits **or** BinXml UInt16
+   * ({@code 0x06} + LE word) — Windows often stores IDs as typed BinXml inside the element, not as literal digit text.
+   * Always requires a UTF-16 {@code </EventID>} closing tag after the value region (within a bounded scan).
+   * @param {Uint8Array} buf
+   * @returns {number | null}
+   */
+  function extractLiteralEventIdUtf16ClosedTags(buf) {
+    const len = buf.length;
+    /** `<EventID` as UTF-16 LE (leading {@code <} included). */
+    const openPrefix = new Uint8Array([
+      0x3c, 0, 0x45, 0, 0x76, 0, 0x65, 0, 0x6e, 0, 0x74, 0, 0x49, 0, 0x44, 0,
+    ]);
+    /** `</EventID>` as UTF-16 LE */
+    const closeSeq = new Uint8Array([
+      0x3c, 0, 0x2f, 0, 0x45, 0, 0x76, 0, 0x65, 0, 0x6e, 0, 0x74, 0, 0x49, 0, 0x44, 0, 0x3e, 0,
+    ]);
+    for (let i = 0; i + openPrefix.length <= len; i++) {
+      let prefixOk = true;
+      for (let j = 0; j < openPrefix.length; j++)
+        if (buf[i + j] !== openPrefix[j]) {
+          prefixOk = false;
+          break;
+        }
+      if (!prefixOk) continue;
+      let k = i + openPrefix.length;
+      const cap = Math.min(len, i + 900);
+      let contentStart = -1;
+      for (; k + 1 < cap; k++) {
+        if (buf[k] === 0x3e && buf[k + 1] === 0) {
+          contentStart = k + 2;
+          break;
+        }
+      }
+      if (contentStart < 0) continue;
+      let p = contentStart;
+      while (p + 1 < len) {
+        const lo = buf[p];
+        const hi = buf[p + 1];
+        if (hi !== 0 || (lo !== 0x20 && lo !== 0x09 && lo !== 0x0a && lo !== 0x0d)) break;
+        p += 2;
+      }
+      /** BinXml UInt16 value token (matches Event Viewer XML → same number as rendered {@code <EventID>153</EventID>}). */
+      if (p + 3 <= len && buf[p] === 0x06) {
+        const idBin = buf[p + 1] | (buf[p + 2] << 8);
+        if (idBin >= 1 && idBin <= 65535) {
+          const closePos = findUtf16SeqFrom(buf, p + 3, closeSeq, 8192);
+          if (closePos >= 0) return idBin;
+        }
+      }
+      let num = 0;
+      let digits = 0;
+      while (p + 1 < len && digits < 9) {
+        const lo = buf[p];
+        const hi = buf[p + 1];
+        if (hi !== 0 || lo < 0x30 || lo > 0x39) break;
+        num = num * 10 + (lo - 0x30);
+        digits++;
+        p += 2;
+      }
+      if (digits === 0 || num <= 0) continue;
+      while (p + 1 < len) {
+        const lo = buf[p];
+        const hi = buf[p + 1];
+        if (hi !== 0 || (lo !== 0x20 && lo !== 0x09 && lo !== 0x0a && lo !== 0x0d)) break;
+        p += 2;
+      }
+      if (p + closeSeq.length > len) continue;
+      let closeOk = true;
+      for (let j = 0; j < closeSeq.length; j++)
+        if (buf[p + j] !== closeSeq[j]) {
+          closeOk = false;
+          break;
+        }
+      if (closeOk) return num;
+    }
+    return null;
+  }
+
+  /**
+   * ASCII / UTF-8 bytes: {@code <EventID>digits</EventID>} with verified closing tag (case-insensitive name).
+   * @param {Uint8Array} buf
+   * @returns {number | null}
+   */
+  function extractLiteralEventIdAsciiClosedTags(buf) {
+    const len = buf.length;
+    /** @param {number} c */
+    const asciiLower = (c) => (c >= 0x41 && c <= 0x5a ? c | 0x20 : c);
+    const name = "eventid";
+    for (let i = 0; i + 24 < len; i++) {
+      if (buf[i] !== 0x3c) continue;
+      let ok = true;
+      for (let j = 0; j < name.length; j++) {
+        if (asciiLower(buf[i + 1 + j]) !== name.charCodeAt(j)) {
+          ok = false;
+          break;
+        }
+      }
+      if (!ok) continue;
+      let k = i + 1 + name.length;
+      while (k < len && buf[k] !== 0x3e) k++;
+      if (k >= len || buf[k] !== 0x3e) continue;
+      k++;
+      let num = 0;
+      let digits = 0;
+      while (k < len && digits < 9) {
+        const c = buf[k];
+        if (c < 0x30 || c > 0x39) break;
+        num = num * 10 + (c - 0x30);
+        digits++;
+        k++;
+      }
+      if (digits === 0 || num <= 0) {
+        /** ASCII {@code <EventID>} — inner value may be BinXml UInt16 ({@code 0x06} + LE) before {@code </EventID>}. */
+        if (k + 3 <= len && buf[k] === 0x06) {
+          const idBin = buf[k + 1] | (buf[k + 2] << 8);
+          if (idBin >= 1 && idBin <= 65535) {
+            const lim = Math.min(len, k + 3 + 640);
+            for (let i = k + 3; i + 2 + name.length + 1 <= lim; i++) {
+              if (buf[i] !== 0x3c || buf[i + 1] !== 0x2f) continue;
+              let cok = true;
+              for (let j = 0; j < name.length; j++) {
+                if (asciiLower(buf[i + 2 + j]) !== name.charCodeAt(j)) {
+                  cok = false;
+                  break;
+                }
+              }
+              if (cok && buf[i + 2 + name.length] === 0x3e) return idBin;
+            }
+          }
+        }
+        continue;
+      }
+      if (k + 2 + name.length + 1 > len) continue;
+      if (buf[k] !== 0x3c || buf[k + 1] !== 0x2f) continue;
+      let closeOk = true;
+      for (let j = 0; j < name.length; j++) {
+        if (asciiLower(buf[k + 2 + j]) !== name.charCodeAt(j)) {
+          closeOk = false;
+          break;
+        }
+      }
+      if (!closeOk || buf[k + 2 + name.length] !== 0x3e) continue;
+      return num;
+    }
+    return null;
+  }
+
+  /**
+   * ASCII {@code <EventID>} islands are often embedded as single-byte XML in EVTX payloads; UTF-8/UTF-16 decoders break on
+   * null bytes, so map each byte to a Latin-1 code unit and regex (same technique as many EVTX viewers).
+   * @param {Uint8Array} buf
+   * @returns {number | null}
+   */
+  function extractLiteralEventIdLatin1Regex(buf) {
+    const max = Math.min(buf.length, 2 * 1024 * 1024);
+    let s = "";
+    for (let i = 0; i < max; i++) s += String.fromCharCode(buf[i]);
+    /** Prefer {@code System} block so we never latch onto unrelated {@code EventID} text elsewhere in the chunk. */
+    const patterns = [
+      /<System\b[^>]*>[\s\S]{0,14000}?<EventID\b[^>]{0,600}>\s*(\d{1,9})\s*<\/EventID>/i,
+      /<EventID\b[^>]{0,600}>\s*(\d{1,9})\s*<\/EventID>/i,
+    ];
+    for (const re of patterns) {
+      const m = re.exec(s);
+      if (m) {
+        const v = Number.parseInt(m[1], 10);
+        if (Number.isFinite(v) && v > 0) return v;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * BinXml stores {@code EventID} as a NormalSubstitution UInt16 ({@code 0x06} + LE word). The ASCII {@code <EventID>}
+   * tags are often **absent** from the raw record bytes — correlate each candidate UInt16 with the UTF-16 element name
+   * {@code EventID} appearing shortly before it (same approach as structured EVTX parsers).
+   * @param {Uint8Array} buf
+   * @returns {number | null}
+   */
+  function extractEventIdBinXmlSubstitutionAnchored(buf) {
+    const len = buf.length;
+    /** UTF-16 LE {@code EventID} name token (no angle brackets). */
+    const nameUtf16 = new Uint8Array([
+      0x45, 0, 0x76, 0, 0x65, 0, 0x6e, 0, 0x74, 0, 0x49, 0, 0x44, 0,
+    ]);
+    /**
+     * BinXml may place other opcode bytes between the UInt16 value and a UTF-16 {@code </EventID>}; requiring an
+     * immediate close tag dropped every candidate (blank table). Prefer {@code EventID}-name proximity; optional
+     * verification when a UTF-16 close tag appears within range.
+     */
+    const closeSeq = new Uint8Array([
+      0x3c, 0, 0x2f, 0, 0x45, 0, 0x76, 0, 0x65, 0, 0x6e, 0, 0x74, 0, 0x49, 0, 0x44, 0, 0x3e, 0,
+    ]);
+    /** @type {{ id: number, gap: number, verified: boolean }[]} */
+    const hits = [];
+    for (let p = 0; p + 3 < len; p++) {
+      if (buf[p] !== 0x06) continue;
+      const id = buf[p + 1] | (buf[p + 2] << 8);
+      if (id < 1 || id > 65535) continue;
+      const backLo = Math.max(0, p - 4096);
+      let nameEnd = -1;
+      for (let i = backLo; i + nameUtf16.length <= p; i++) {
+        let ok = true;
+        for (let j = 0; j < nameUtf16.length; j++)
+          if (buf[i + j] !== nameUtf16[j]) {
+            ok = false;
+            break;
+          }
+        if (ok) nameEnd = Math.max(nameEnd, i + nameUtf16.length);
+      }
+      if (nameEnd >= 0) {
+        const gap = p - nameEnd;
+        /** Chunk templates may insert many BinXml tokens between name and substitution — keep gap generous. */
+        if (gap >= 0 && gap <= 4096) {
+          const verified = findUtf16SeqFrom(buf, p, closeSeq, 16384) >= 0;
+          hits.push({ id, gap, verified });
+        }
+      }
+    }
+    if (!hits.length) return null;
+    hits.sort((a, b) => {
+      if (a.verified !== b.verified) return a.verified ? -1 : 1;
+      const g = a.gap - b.gap;
+      if (g !== 0) return g;
+      const wa = EVTX_WATCHED_IDS.has(a.id) ? 0 : 1;
+      const wb = EVTX_WATCHED_IDS.has(b.id) ? 0 : 1;
+      if (wa !== wb) return wa - wb;
+      return a.id - b.id;
+    });
+    return hits[0].id;
+  }
+
+  /**
+   * Many records store System XML only as UTF-16 template text; Latin1 regex never sees {@code <EventID>}.
+   * @param {Uint8Array} buf
+   * @returns {number | null}
+   */
+  function extractLiteralEventIdUtf16DecodedRegex(buf) {
+    const max = Math.min(buf.length, EVTX_LITERAL_EVENTID_CAP);
+    const s = new TextDecoder("utf-16le", { fatal: false }).decode(buf.subarray(0, max));
+    const patterns = [
+      /<System\b[^>]*>[\s\S]{0,28000}?<EventID\b[^>]{0,600}>\s*(\d{1,9})\s*<\/EventID>/i,
+      /<EventID\b[^>]{0,600}>\s*(\d{1,9})\s*<\/EventID>/i,
+    ];
+    for (const re of patterns) {
+      const m = re.exec(s);
+      if (m) {
+        const v = Number.parseInt(m[1], 10);
+        if (Number.isFinite(v) && v > 0) return v;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Event ID from embedded XML / BinXml {@code EventID}: Latin1 ASCII regex first, then UTF-16 / ASCII closed-tag walkers,
+   * BinXml {@code 0x06} inside the element, then UTF-16 / UTF-8 decode regex.
+   * @param {Uint8Array} payload
+   * @returns {number | null}
+   */
+  function extractLiteralEventIdFromEmbeddedXml(payload) {
+    if (!payload.length) return null;
+    const max = Math.min(payload.length, EVTX_LITERAL_EVENTID_CAP);
+    const buf = payload.subarray(0, max);
+    let n = extractLiteralEventIdLatin1Regex(buf);
+    if (n != null) return n;
+    n = extractLiteralEventIdUtf16DecodedRegex(buf);
+    if (n != null) return n;
+    n = extractLiteralEventIdUtf16ClosedTags(buf);
+    if (n != null) return n;
+    n = extractEventIdBinXmlSubstitutionAnchored(buf);
+    if (n != null) return n;
+    n = extractLiteralEventIdAsciiClosedTags(buf);
+    if (n != null) return n;
+    const re = /<EventID\b[^>]*>\s*(\d{1,9})\s*<\/EventID>/i;
+    const s16 = new TextDecoder("utf-16le", { fatal: false }).decode(buf);
+    let m = re.exec(s16);
+    if (m) {
+      const v = Number.parseInt(m[1], 10);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    const s8 = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+    m = re.exec(s8);
+    if (m) {
+      const v = Number.parseInt(m[1], 10);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    return null;
+  }
+
+  /**
+   * Human-readable line from {@code EventData} for the Notes column (nvlddmkm: usually the non–device-path {@code Data}).
+   * @param {Uint8Array} payload
+   * @returns {string}
+   */
+  function extractEvtxEventDataNotes(payload) {
+    const max = Math.min(payload.length, EVTX_LITERAL_EVENTID_CAP);
+    const buf = payload.subarray(0, max);
+    /** @param {string} s */
+    const collect = (s) => {
+      /** @type {string[]} */
+      const out = [];
+      const re = /<Data\b[^>]*>([\s\S]*?)<\/Data>/gi;
+      let m;
+      while ((m = re.exec(s))) {
+        const t = stripHtmlToText(m[1]).trim();
+        if (t) out.push(t);
+      }
+      return out;
+    };
+    const latinMax = Math.min(buf.length, 2 * 1024 * 1024);
+    let latin = "";
+    for (let i = 0; i < latinMax; i++) latin += String.fromCharCode(buf[i]);
+    let parts = collect(latin);
+    if (!parts.length) parts = collect(new TextDecoder("utf-16le", { fatal: false }).decode(buf));
+    if (!parts.length) parts = collect(new TextDecoder("utf-8", { fatal: false }).decode(buf));
+    if (!parts.length) return "";
+    const devPath = /^\\\\Device\\/i;
+    if (parts.length >= 2 && devPath.test(parts[0]) && parts[1]) return parts[1].slice(0, 380);
+    return parts[parts.length - 1].slice(0, 380);
+  }
+
+  /** Pull Provider {@code Name} or detect {@code nvlddmkm} from binary / UTF-16 fragments. */
+  function extractProviderFromEvtxBinPayload(payload) {
+    const len = Math.min(payload.length, 98304);
+    const u = payload.subarray(0, len);
+    const utf8 = new TextDecoder("utf-8", { fatal: false }).decode(u);
+    const utf16 = new TextDecoder("utf-16le", { fatal: false }).decode(u);
+    for (const block of [utf8, utf16]) {
+      const pm =
+        /<Provider\b[^>]*\bName\s*=\s*"([^"]*)"|<Provider\b[^>]*\bName\s*=\s*'([^']*)'/i.exec(block);
+      if (pm) return (pm[1] || pm[2] || "").trim();
+    }
+    for (let i = 0; i + 8 <= u.length; i++) {
+      if (
+        u[i] === 0x6e &&
+        u[i + 1] === 0x76 &&
+        u[i + 2] === 0x6c &&
+        u[i + 3] === 0x64 &&
+        u[i + 4] === 0x64 &&
+        u[i + 5] === 0x6d &&
+        u[i + 6] === 0x6b &&
+        u[i + 7] === 0x6d
+      )
+        return "nvlddmkm";
+    }
+    const needleNv = new Uint8Array([
+      0x6e, 0, 0x76, 0, 0x6c, 0, 0x64, 0, 0x64, 0, 0x6d, 0, 0x6b, 0, 0x6d, 0,
+    ]);
+    outer: for (let i = 0; i + needleNv.length <= u.length; i++) {
+      for (let j = 0; j < needleNv.length; j++) if (u[i + j] !== needleNv[j]) continue outer;
+      return "nvlddmkm";
+    }
+    return "";
+  }
+
+  /**
+   * Latin1 {@code <Channel>...</Channel>} from raw bytes (no UTF decoding).
+   * @param {Uint8Array} buf
+   */
+  function extractChannelLatin1(buf) {
+    const mx = Math.min(buf.length, 2 * 1024 * 1024);
+    let lat = "";
+    for (let i = 0; i < mx; i++) lat += String.fromCharCode(buf[i]);
+    let cm = /<Channel\b[^>]{0,240}>([^<]{1,200})<\/Channel>/i.exec(lat);
+    if (!cm) cm = /<Channel[^>]*>([^<]*)<\/Channel>/i.exec(lat);
+    return cm ? stripHtmlToText(cm[1]).trim() : "";
+  }
+
+  /** Channel text when the record template is UTF-16 (Latin1 channel regex never fires). */
+  function extractChannelFromUtf16Template(buf) {
+    const mx = Math.min(buf.length, 2 * 1024 * 1024);
+    const s = new TextDecoder("utf-16le", { fatal: false }).decode(buf.subarray(0, mx));
+    const cm = /<Channel\b[^>]{0,320}>\s*([^<]{1,240})\s*<\/Channel>/i.exec(s);
+    return cm ? stripHtmlToText(cm[1]).trim() : "";
+  }
+
+  /**
+   * Strip mis-decoded tails (full-buffer UTF-16 often picks up garbage after the real ASCII line).
+   * @param {string} s
+   */
+  function sanitizeEvtxDetailVisibleLine(s) {
+    let t = String(s || "").replace(/\uFFFD/g, "").trim();
+    const lead = /^\s*([\x09\x20-\x7E]+)/.exec(t);
+    if (lead && lead[1].length >= 10) t = lead[1].trim();
+    return t.length > 380 ? t.slice(0, 380) : t;
+  }
+
+  /** UTF-16 LE bytes for {@code ascii} (ASCII code units, high byte 0 per char). */
+  function utf16LeAsciiPattern(ascii) {
+    const u = new Uint8Array(ascii.length * 2);
+    for (let i = 0; i < ascii.length; i++) {
+      u[i * 2] = ascii.charCodeAt(i) & 0xff;
+      u[i * 2 + 1] = 0;
+    }
+    return u;
+  }
+
+  /** @param {Uint8Array} buf @param {number} idx index of UTF-16 LE ASCII run start */
+  function readUtf16AsciiPrintableRun(buf, idx, maxOut) {
+    let out = "";
+    for (let off = idx; off + 1 < buf.length && out.length < maxOut; ) {
+      const lo = buf[off];
+      const hi = buf[off + 1];
+      off += 2;
+      if (hi !== 0) break;
+      if (lo === 0x09 || lo === 0x20 || (lo >= 0x21 && lo <= 0x7e)) out += String.fromCharCode(lo);
+      else break;
+    }
+    return sanitizeEvtxDetailVisibleLine(out);
+  }
+
+  /**
+   * Locate UTF-16 LE ASCII substring without decoding the whole record (avoids alignment garbage).
+   * @param {Uint8Array} buf @param {Uint8Array} pat
+   */
+  function findUtf16AsciiPattern(buf, pat) {
+    outer: for (let i = 0; i + pat.length <= buf.length; i++) {
+      for (let j = 0; j < pat.length; j++)
+        if (buf[i + j] !== pat[j]) continue outer;
+      return i;
+    }
+    return -1;
+  }
+
+  /** nvlddmkm often embeds TDR wording as UTF-16 strings without intact {@code <Data>} XML wrappers. */
+  function extractNvlddmkmDetailHeuristic(buf) {
+    const max = Math.min(buf.length, EVTX_LITERAL_EVENTID_CAP);
+    const sub = buf.subarray(0, max);
+    /** Prefer aligned UTF-16 ASCII needles — matches Event Viewer message bytes. */
+    const utf16Starts = [
+      utf16LeAsciiPattern("GPU recovery action changed from "),
+      utf16LeAsciiPattern("Restarting TDR occurred on GPUID:"),
+      utf16LeAsciiPattern("Reset TDR occurred on GPUID:"),
+      utf16LeAsciiPattern("Resetting TDR occurred on GPUID:"),
+      utf16LeAsciiPattern("GpuRcReset TDR occurred on GPUID:"),
+      utf16LeAsciiPattern("Error occurred on GPUID: "),
+      utf16LeAsciiPattern("Error occurred on GPUID:"),
+    ];
+    for (const pat of utf16Starts) {
+      const ix = findUtf16AsciiPattern(sub, pat);
+      if (ix >= 0) {
+        const line = readUtf16AsciiPrintableRun(sub, ix, 220);
+        if (line.length >= 8) return line;
+      }
+    }
+    const s16 = new TextDecoder("utf-16le", { fatal: false }).decode(sub);
+    const tight = [
+      /GPU recovery action changed from 0x[0-9a-f]+\s*\([^)]+\)\s+to\s+0x[0-9a-f]+\s*\([^)]+\)/i,
+      /(?:Restarting|Resetting|Reset)\s+TDR occurred on\s+GPUID\s*:\s*\d+/i,
+      /GpuRcReset TDR occurred on\s+GPUID\s*:\s*\d+/i,
+      /Error occurred on GPUID\s*:\s*\d+/i,
+    ];
+    for (const re of tight) {
+      const m = s16.match(re);
+      if (m) return sanitizeEvtxDetailVisibleLine(m[0]);
+    }
+    let latin = "";
+    for (let i = 0; i < max; i++) latin += String.fromCharCode(sub[i]);
+    for (const re of tight) {
+      const m = latin.match(re);
+      if (m) return sanitizeEvtxDetailVisibleLine(m[0]);
+    }
+    return "";
+  }
+
+  /** Detect nvlddmkm bytes when {@code provider} isn’t filled yet from XML scan. */
+  function evtxBlobContainsNvlddmkm(buf) {
+    if (!buf?.length) return false;
+    const lim = Math.min(buf.length, 786432);
+    const slice = buf.subarray(0, lim);
+    const ascii = new Uint8Array([0x6e, 0x76, 0x6c, 0x64, 0x64, 0x6d, 0x6b, 0x6d]);
+    outer: for (let i = 0; i + ascii.length <= slice.length; i++) {
+      for (let j = 0; j < ascii.length; j++) if (slice[i + j] !== ascii[j]) continue outer;
+      return true;
+    }
+    const u16 = utf16LeAsciiPattern("nvlddmkm");
+    return findUtf16AsciiPattern(slice, u16) >= 0;
+  }
+
+  /**
+   * Many NVIDIA System events never embed the literal provider name — Event Viewer resolves it from metadata.
+   * Offline {@code .evtx} often still carries UTF-16 kernel message bytes ({@code GPUID}, TDR, recovery). Treat like {@code nvlddmkm}.
+   * @param {Uint8Array} payload
+   * @param {Uint8Array | null | undefined} recordEnvelope
+   */
+  function nvKernelBinarySignalsNvlddmkmProvider(payload, recordEnvelope) {
+    const blobs = [payload, recordEnvelope].filter((b) => b?.length);
+    for (const buf of blobs) {
+      if (extractNvlddmkmDetailHeuristic(buf)) return true;
+      const sub = buf.subarray(0, Math.min(buf.length, EVTX_LITERAL_EVENTID_CAP));
+      const extraNeedles = [
+        "GPUID:",
+        "GPUID: ",
+        "TDR occurred",
+        "GpuRcReset",
+        "GPU recovery",
+      ];
+      for (const n of extraNeedles) {
+        if (findUtf16AsciiPattern(sub, utf16LeAsciiPattern(n)) >= 0) return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Modern {@code .evtx} stores Event IDs as BinXml **NormalSubstitution** ({@code 0x0D}+index), resolved against chunk
+   * templates — not as raw UInt16 {@code 153} in the record slice. When literal XML / substitution parsing can’t recover
+   * the number, map **153** / **14** from the same driver detail strings Event Viewer shows in exported XML (TDR vs recovery).
+   * @param {string} text
+   * @returns {number | null}
+   */
+  function inferNvlddmkmEventIdFromDriverDetail(text) {
+    const s = String(text || "").trim();
+    if (!s) return null;
+    if (/gpu\s+recovery\s+action\s+changed\s+from/i.test(s)) return 14;
+    if (
+      /restart(?:ing)?\s+tdr\s+occurred|reset(?:ting)?\s+tdr\s+occurred|\breset\s+tdr\s+occurred|gpurcreset\s+tdr/i.test(
+        s,
+      ) ||
+      /error\s+occurred\s+on\s+gpuid/i.test(s)
+    )
+      return 153;
+    return null;
+  }
+
   /**
    * Best-effort metadata from EVTX BinXml payload (often contains embedded XML fragments).
-   * @param {Uint8Array} payload
+   * @param {Uint8Array} payload BinXml fragment ({@code off + 0x18} … {@code off + sz - 4}) as in typical parsers.
+   * @param {Uint8Array | null | undefined} recordEnvelope Optional full record ({@code off … off + sz}), including headers —
+   *   some builds place readable XML islands only in this span.
    */
-  function extractWindowsEventFromBinPayload(payload) {
-    let confidence = "low";
+  function extractWindowsEventFromBinPayload(payload, recordEnvelope) {
+    /** Prefer literal XML text in the blob; falls back to BinXml substitution tied to an EventID token only. */
     /** @type {number | null} */
-    let eventId = null;
+    let eventId = extractLiteralEventIdFromEmbeddedXml(payload);
+    if (eventId == null && recordEnvelope && recordEnvelope.length)
+      eventId = extractLiteralEventIdFromEmbeddedXml(recordEnvelope);
+
+    let confidence = eventId != null ? "high" : "low";
     let provider = "";
     let channel = "";
     let message = "";
 
     /** @param {string} s */
     const scan = (s) => {
-      let idm = /<EventID[^>]*>(\d+)<\/EventID>/i.exec(s);
-      if (idm) {
-        eventId = Number.parseInt(idm[1], 10);
-        confidence = "high";
-      }
       const pm = /<Provider[^>]*\bName\s*=\s*"([^"]*)"|<Provider[^>]*\bName\s*=\s*'([^']*)'/i.exec(s);
       if (pm && !provider) provider = (pm[1] || pm[2] || "").trim();
       const cm = /<Channel[^>]*>([^<]*)<\/Channel>/i.exec(s);
@@ -13463,52 +14137,276 @@
         message = "Driver / nvlddmkm text pattern in record (see full log in Event Viewer).";
     };
 
-    scan(new TextDecoder("utf-8", { fatal: false }).decode(payload));
-    if (eventId == null) scan(new TextDecoder("utf-16le", { fatal: false }).decode(payload));
+    for (const blob of [
+      payload,
+      recordEnvelope && recordEnvelope.length ? recordEnvelope : null,
+    ]) {
+      if (!blob?.length) continue;
+      scan(new TextDecoder("utf-8", { fatal: false }).decode(blob));
+      scan(new TextDecoder("utf-16le", { fatal: false }).decode(blob));
+      if (!channel && blob.length) {
+        const ch = extractChannelLatin1(blob);
+        if (ch) channel = ch;
+      }
+      if (!channel && blob.length) {
+        const chu = extractChannelFromUtf16Template(blob);
+        if (chu) channel = chu;
+      }
+    }
+
+    if (!provider && payload.length) provider = extractProviderFromEvtxBinPayload(payload);
+    if (!provider && recordEnvelope?.length) provider = extractProviderFromEvtxBinPayload(recordEnvelope);
+
+    if (!/nvlddmkm|amdkmdag/i.test(provider || "") && nvKernelBinarySignalsNvlddmkmProvider(payload, recordEnvelope))
+      provider = "nvlddmkm";
+
+    if (!channel && /nvlddmkm|amdkmdag/i.test(provider))
+      channel = "System";
+
+    if (!message && payload.length) {
+      let dataHint = extractEvtxEventDataNotes(payload);
+      if (!dataHint && recordEnvelope?.length) dataHint = extractEvtxEventDataNotes(recordEnvelope);
+      if (dataHint) message = sanitizeEvtxDetailVisibleLine(dataHint);
+    }
+    if (!message && /nvlddmkm|amdkmdag/i.test(provider)) {
+      let hint = extractNvlddmkmDetailHeuristic(payload);
+      if (!hint && recordEnvelope?.length) hint = extractNvlddmkmDetailHeuristic(recordEnvelope);
+      if (hint) message = hint;
+    }
+
+    const nvProviderLike =
+      /nvlddmkm|amdkmdag/i.test(provider || "") ||
+      nvKernelBinarySignalsNvlddmkmProvider(payload, recordEnvelope) ||
+      evtxBlobContainsNvlddmkm(payload) ||
+      (recordEnvelope?.length && evtxBlobContainsNvlddmkm(recordEnvelope));
+
+    /**
+     * BinXml often yields a wrong Event ID (wrong UInt16 token or template noise). Event Viewer shows the real ID from
+     * metadata; our literal parse can surface values like {@code 912} while the UTF-16 message line clearly matches
+     * {@code 153}/{@code 14}. Prefer the message when it matches known NVIDIA kernel wording.
+     */
+    const idFromMessage = inferNvlddmkmEventIdFromDriverDetail(message);
+    if (nvProviderLike && idFromMessage != null && (eventId == null || eventId !== idFromMessage))
+      eventId = idFromMessage;
+
+    if (
+      !/nvlddmkm|amdkmdag/i.test(provider || "") &&
+      eventId != null &&
+      (eventId === 14 || eventId === 153) &&
+      /^system$/i.test(String(channel || "").trim())
+    )
+      provider = "nvlddmkm";
+
+    if (!message && eventId != null && /nvlddmkm|amdkmdag/i.test(provider)) {
+      message = `Event ${eventId} from this driver. Use “Copy” in Event Viewer or save as XML to see the same text the MMC shows.`;
+    }
+
+    if (eventId != null) confidence = "high";
 
     return { eventId, provider, channel, message, confidence };
   }
 
+  /** Group events that share the same calendar second (UTC ISO) for burst dedupe. */
+  function evtxIsoToSecondKey(iso) {
+    const t = Date.parse(iso || "");
+    if (Number.isNaN(t)) return "";
+    return new Date(t).toISOString().slice(0, 19);
+  }
+
   /**
-   * Scan binary EVTX for Windows Event Log records (magic 0x2a2a2a2a).
-   * @param {ArrayBuffer} buffer
+   * Post-pass: optional same-second burst fill only (never “vote” Event IDs — that erased real {@code 14} rows).
+   * Mutates {@code events} in place.
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function enrichEvtxParsedEvents(events) {
+    if (!events.length) return;
+
+    /** @type {Map<string, typeof events>} */
+    const bySecond = new Map();
+    for (const e of events) {
+      const sec = evtxIsoToSecondKey(e.timeIso);
+      const pk = `${sec}\x00${(e.provider || "").toLowerCase()}`;
+      if (!bySecond.has(pk)) bySecond.set(pk, []);
+      bySecond.get(pk).push(e);
+    }
+    for (const group of bySecond.values()) {
+      if (group.length < 2) continue;
+      const anchor = group.find((g) => g.eventId != null && String(g.message || "").trim().length >= 4);
+      if (!anchor) continue;
+      for (const e of group) {
+        if (e === anchor) continue;
+        if (!/nvlddmkm|amdkmdag/i.test(e.provider || "")) continue;
+        if (e.eventId == null && anchor.eventId != null) {
+          e.eventId = anchor.eventId;
+          e.confidence = "low";
+        }
+        if (!String(e.message || "").trim() && String(anchor.message || "").trim()) {
+          e.message = anchor.message;
+          e.confidence = "low";
+        }
+      }
+    }
+  }
+
+  /**
+   * Count rows per provider + Event ID (full export, after enrichment).
+   * @param {{ eventId: number | null, provider: string }[]} events
+   */
+  function countEvtxOccurrencesByProviderId(events) {
+    /** @type {Map<string, number>} */
+    const m = new Map();
+    for (const e of events) {
+      if (e.eventId == null) continue;
+      const k = `${(e.provider || "").toLowerCase()}\x00${e.eventId}`;
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }
+
+  /** Compact summary line: nvlddmkm counts by Event ID (for the summary banner). */
+  function buildNvlddmkmIdOccurrenceSummary(events) {
+    /** @type {Record<number, number>} */
+    const tally = {};
+    for (const e of events) {
+      if (!/nvlddmkm/i.test(e.provider || "") || e.eventId == null) continue;
+      tally[e.eventId] = (tally[e.eventId] || 0) + 1;
+    }
+    const ids = Object.keys(tally).map(Number).sort((a, b) => (tally[b] || 0) - (tally[a] || 0));
+    if (!ids.length) return "";
+    const parts = ids.map((id) => `ID ${id}: ${tally[id]}×`);
+    return `<p class="evtx-summary-breakdown"><strong>nvlddmkm</strong> in this file: ${parts.join("; ")}</p>`;
+  }
+
+  /** Magic at start of each EVTX record (same as python-evtx Record). Not {@code 0x2a2a2a2a}. */
+  const EVTX_RECORD_MAGIC = 0x00002a2a;
+  /** Standard EVTX chunk size (64 KiB). */
+  const EVTX_CHUNK_BYTES = 0x10000;
+  /** Event records begin at this offset within each chunk (after chunk header / tables). */
+  const EVTX_CHUNK_RECORD_BASE = 0x200;
+
+  /**
+   * Parse binary Windows Event Log (.evtx): {@code ElfFile} header, {@code ElfChnk} chunks,
+   * records with signature {@link EVTX_RECORD_MAGIC}. Falls back to a linear scan only if
+   * structured parsing yields no rows (damaged or unusual exports).
+   * @param {ArrayBuffer | Uint8Array} buffer
    */
   function parseEvtxBinaryRecords(buffer) {
     const u8 = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
     /** @type {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} */
     const events = [];
-    let off = 0;
-    while (off + 48 <= u8.length) {
-      if (readU32le(u8, off) !== 0x2a2a2a2a) {
-        off++;
-        continue;
-      }
-      const sz = readU32le(u8, off + 4);
-      if (sz < 48 || sz > 0x100000 || off + sz > u8.length) {
-        off++;
-        continue;
-      }
+
+    /** @param {number} off @param {number} sz */
+    function pushRecord(off, sz) {
+      if (sz < 48 || sz > EVTX_CHUNK_BYTES || off + sz > u8.length) return;
       const tail = readU32le(u8, off + sz - 4);
-      if (sz !== tail) {
-        off++;
-        continue;
-      }
+      if (tail !== sz) return;
       const ft = readU64le(u8, off + 0x10);
-      const timeIso = filetimeToIsoString(ft);
       const payload = u8.subarray(off + 0x18, off + sz - 4);
-      const meta = extractWindowsEventFromBinPayload(payload);
-      if (meta.eventId != null || meta.message || meta.provider) {
-        events.push({
-          eventId: meta.eventId,
-          provider: meta.provider,
-          channel: meta.channel,
-          timeIso,
-          message: meta.message,
-          confidence: meta.confidence,
-        });
-      }
-      off += sz;
+      const recordEnvelope = u8.subarray(off, off + sz);
+      let timeIso = extractSystemTimeCreatedIso(payload, recordEnvelope);
+      if (!timeIso.trim()) timeIso = filetimeToIsoString(ft);
+      const meta = extractWindowsEventFromBinPayload(payload, recordEnvelope);
+      events.push({
+        eventId: meta.eventId,
+        provider: meta.provider,
+        channel: meta.channel,
+        timeIso,
+        message: meta.message,
+        confidence: meta.confidence,
+      });
     }
+
+    /**
+     * Walk the record chain starting at {@code 0x200} like python-evtx; advance by {@code size} after each valid record.
+     * On magic/size failure, step forward one byte until the next valid header (handles gaps / rare padding).
+     * @param {number} chunkAbs Absolute file offset of chunk start
+     */
+    function parseRecordsInChunk(chunkAbs) {
+      const chunkTail = chunkAbs + EVTX_CHUNK_BYTES;
+      let off = chunkAbs + EVTX_CHUNK_RECORD_BASE;
+      while (off + 48 <= chunkTail && off + 48 <= u8.length) {
+        if (readU32le(u8, off) !== EVTX_RECORD_MAGIC) {
+          off += 1;
+          continue;
+        }
+        const sz = readU32le(u8, off + 4);
+        if (sz < 48 || sz > EVTX_CHUNK_BYTES || off + sz > chunkTail || off + sz > u8.length) {
+          off += 1;
+          continue;
+        }
+        if (readU32le(u8, off + sz - 4) !== sz) {
+          off += 1;
+          continue;
+        }
+        pushRecord(off, sz);
+        off += sz;
+      }
+    }
+
+    if (u8.length >= 0x1000 && readAsciiFixed(u8, 0, 8) === "ElfFile\x00") {
+      /**
+       * python-evtx places the first chunk at {@code header_chunk_size} (WORD {@code 0x28}), not the dword at {@code 0x20}
+       * ({@code header_size}) — those often match ({@code 0x1000}) but differ on some builds.
+       */
+      let firstChunk = readU16le(u8, 0x28);
+      if (
+        !firstChunk ||
+        firstChunk < 0x100 ||
+        firstChunk >= u8.length ||
+        firstChunk + EVTX_CHUNK_BYTES > u8.length
+      )
+        firstChunk = readU32le(u8, 0x20);
+      if (
+        !firstChunk ||
+        firstChunk < 0x100 ||
+        firstChunk >= u8.length ||
+        firstChunk + EVTX_CHUNK_BYTES > u8.length
+      )
+        firstChunk = 0x1000;
+
+      function walkChunksFrom(abs0) {
+        const maxChunkIndex = Math.ceil(Math.max(0, u8.length - abs0) / EVTX_CHUNK_BYTES);
+        for (let i = 0; i < maxChunkIndex; i++) {
+          const chunkAbs = abs0 + i * EVTX_CHUNK_BYTES;
+          if (chunkAbs + EVTX_CHUNK_BYTES > u8.length) break;
+          if (readAsciiFixed(u8, chunkAbs, 8) !== "ElfChnk\x00") continue;
+          parseRecordsInChunk(chunkAbs);
+        }
+      }
+
+      walkChunksFrom(firstChunk);
+
+      /** Rare exports: first chunk offset matches {@code header_size} dword (0x20) instead of {@code header_chunk_size}. */
+      if (events.length === 0) {
+        const alt = readU32le(u8, 0x20);
+        if (
+          alt >= EVTX_CHUNK_RECORD_BASE &&
+          alt + EVTX_CHUNK_BYTES <= u8.length &&
+          alt !== firstChunk
+        ) {
+          walkChunksFrom(alt);
+        }
+      }
+    }
+
+    if (events.length === 0) {
+      let off = 0;
+      while (off + 48 <= u8.length) {
+        if (readU32le(u8, off) === EVTX_RECORD_MAGIC) {
+          const sz = readU32le(u8, off + 4);
+          if (sz >= 48 && sz <= EVTX_CHUNK_BYTES && off + sz <= u8.length) {
+            const tail = readU32le(u8, off + sz - 4);
+            if (tail === sz) {
+              pushRecord(off, sz);
+              off += sz;
+              continue;
+            }
+          }
+        }
+        off++;
+      }
+    }
+
     return events;
   }
 
@@ -13544,12 +14442,139 @@
     const t = Date.parse(iso);
     if (!Number.isNaN(t)) {
       try {
-        return new Date(t).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "medium" });
+        const d = new Date(t);
+        return d.toLocaleString(undefined, {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+        });
       } catch {
         /* fall through */
       }
     }
     return iso.trim();
+  }
+
+  /**
+   * Short PSU vs GPU vs “other hardware” hints from decoded rows (education only; not medical or warranty advice).
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} all
+   */
+  function buildEvtxStabilityTriage(all) {
+    if (!all.length) return "";
+    const counts = countWatchedById(all);
+    let nvHint = 0;
+    for (const e of all) {
+      if (/nvlddmkm|amdkmdag/i.test(e.provider || "") || /nvlddmkm|amdkmdag/i.test(e.message || "")) nvHint++;
+    }
+    const hasNvId = Boolean(
+      counts[13] ||
+        counts[14] ||
+        counts[153] ||
+        counts[193] ||
+        counts[4101] ||
+        counts[10110] ||
+        counts[10111]
+    );
+    const hasNv = nvHint > 0 || hasNvId;
+    const hasKernelPower = Boolean(counts[41] || counts[63]);
+    const hasWhea = Boolean(counts[17] || counts[18] || counts[19] || counts[20]);
+    const has6008 = Boolean(counts[6008]);
+
+    /** @type {string[]} */
+    const paras = [];
+    paras.push(
+      `<p class="evtx-triage__lead"><strong>Stability triage</strong> (heuristic only; not a diagnosis). Patterns help separate <strong>power delivery / PSU / unclean shutdown</strong> from <strong>GPU driver &amp; card issues</strong>; confirm with OEM specs, cables, and stress tests.</p>`
+    );
+
+    if (hasKernelPower && has6008) {
+      paras.push(
+        `<p><strong>Kernel-Power (41 / 63) + EventLog 6008</strong>: Often the same <strong>unexpected shutdown</strong> episode (timestamp correlation). Points to power loss, PSU trip, hard reset, or crash. Use surrounding GPU / WHEA entries to narrow cause.</p>`
+      );
+    }
+
+    if (hasNv && hasKernelPower) {
+      paras.push(
+        `<p><strong>Mixed display-driver errors + Kernel-Power (41 / 63)</strong>: Often <strong>transient power</strong> (GPU spikes, PSU shutdown, connector loss) or reset during heavy load. Check PSU headroom on 12V GPU rails, PCIe power seating, wall power, and thermal limits; pair with a clean graphics driver install.</p>`
+      );
+    } else if (hasNv && !hasKernelPower) {
+      paras.push(
+        `<p><strong>Display driver stack (nvlddmkm / amdkmdag / Display)</strong>: Points to <strong>driver, GPU, VRAM, thermals, or power to the card</strong>. Prefer vendor driver reinstall, monitor GPU temps, verify all PCIe power connectors, and rule out insufficient PSU for the GPU class.</p>`
+      );
+    } else if (!hasNv && hasKernelPower) {
+      paras.push(
+        `<p><strong>Kernel-Power (41 / 63) without nvlddmkm/amdkmdag in this decode</strong>: Typical of <strong>unexpected shutdown</strong>: PSU fault, overload, mains dip, sleep bugs, or non-GPU crashes. Less specific to “GPU vs PSU”, but <strong>undersized or failing PSU</strong> is a frequent cause under load.</p>`
+      );
+    }
+
+    if (hasWhea && hasNv) {
+      paras.push(
+        `<p><strong>WHEA + display stack in the same export</strong>: Hardware error reporting alongside GPU/TDR entries. Worth checking <strong>PCIe slot and power connectors</strong>, thermals, and BIOS/chipset updates; use WHEA XML fields to see which component path Windows attributed.</p>`
+      );
+    } else if (hasWhea && !hasNv) {
+      paras.push(
+        `<p><strong>WHEA-Logger (17 / 18 / 19 / 20)</strong>: Hardware error paths; often <strong>PCIe, GPU, RAM, or CPU package</strong> depending on event details. Reseat GPU and RAM, update BIOS/chipset from the OEM, and review the full message fields in XML.</p>`
+      );
+    }
+
+    if (!hasNv && !hasKernelPower && !hasWhea && !has6008 && all.length > 0) {
+      paras.push(
+        `<p>No decoded rows matched the key IDs above. Export <strong>XML</strong> from Event Viewer for full message text, or verify the log contains Application/System provider entries.</p>`
+      );
+    }
+
+    return `<div class="evtx-triage">${paras.join("")}</div>`;
+  }
+
+  /**
+   * Rows for the Event Viewer table: tracked Event IDs or anything tied to nvlddmkm when an ID could not be decoded.
+   * Drop {@code nvlddmkm}/{@code amdkmdag} shells with **no** Event ID and **no** message. Those are usually stray UTF-16
+   * matches in unrelated records (they appear as “extra” blank rows vs Event Viewer).
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function filterEvtxTableEvents(events) {
+    return events.filter((e) => {
+      if (e.eventId != null && EVTX_WATCHED_IDS.has(e.eventId)) return true;
+      if (/nvlddmkm|amdkmdag/i.test(e.provider || "")) {
+        const hasBody = e.eventId != null || String(e.message || "").trim().length > 0;
+        return hasBody;
+      }
+      return false;
+    });
+  }
+
+  /**
+   * One short, non-jargony line for typical NVIDIA kernel messages (rendered under the technical text).
+   * @param {string} message
+   * @param {number | null} eventId
+   */
+  function nvKernelMessagePlainHint(message, eventId) {
+    const m = String(message || "");
+
+    if (/GPU recovery action changed/i.test(m) || eventId === 14) {
+      return `<div class="evtx-msg-hint">${esc(
+        "Windows changed how strongly it resets the graphics card after a freeze. You did not change this yourself.",
+      )}</div>`;
+    }
+
+    const hasGpuId = /GPUID/i.test(m);
+    const hasTdr =
+      /\bTDR\b|Restarting TDR|Reset TDR|Resetting TDR|GpuRcReset|Error occurred on GPUID/i.test(m) || eventId === 153;
+
+    if (!hasGpuId && !hasTdr) return "";
+
+    let line = "";
+    if (hasTdr && hasGpuId)
+      line =
+        "Your graphics card was too slow finishing a frame, so Windows reset the driver. GPUID is a code the driver prints for its own logs. It is not “GPU 0” or “GPU 1” in Task Manager.";
+    else if (hasTdr)
+      line =
+        "The graphics card fell behind while drawing the screen and Windows tried to recover. If this repeats, update drivers, recheck power cables to the card, and watch heat and PSU size.";
+    else line = "GPUID is only a code in the log. You can ignore it when reading this at home.";
+
+    return `<div class="evtx-msg-hint">${esc(line)}</div>`;
   }
 
   function setupEvtxPanel(panel) {
@@ -13578,24 +14603,39 @@
     /** @param {ReturnType<typeof parseWindowsEventXmlExport>} all */
     function renderEvtxResults(name, all, parseNote, source) {
       if (!summaryEl || !cardsEl || !tbody || !parseNoteEl) return;
+      enrichEvtxParsedEvents(all);
       const watched = filterWatchedEvtxEvents(all);
+      const tableEvents = filterEvtxTableEvents(all);
       const counts = countWatchedById(all);
+      const occMap = countEvtxOccurrencesByProviderId(all);
       const totalScanned = all.length;
       parseNoteEl.textContent = parseNote || "";
       const medium = all.filter((e) => e.confidence === "low").length;
 
+      const evtxBinaryNote =
+        source === "evtx"
+          ? `<p class="evtx-summary-tip">Binary <code>.evtx</code> often does not store the provider label Event Viewer displays (Windows resolves it live). This tab treats NVIDIA kernel UTF-16 strings (<code>GPUID</code>, TDR, recovery, …) as <strong>nvlddmkm</strong>. If Event Viewer shows more rows than this export, use <strong>Save All Events As…</strong> for the full log, or save the <strong>filtered</strong> log: the file on disk must contain those rows.</p>`
+          : "";
+
       summaryEl.innerHTML = `<div class="evtx-summary-inner">
         <p><strong>${esc(name)}</strong> · source: <strong>${esc(source)}</strong> · records scanned: <strong>${totalScanned}</strong>
-        · matching key IDs: <strong>${watched.length}</strong>${medium ? ` · ${medium} EVTX row(s) had low-confidence text decode` : ""}</p>
+        · matching key Event IDs: <strong>${watched.length}</strong>
+        · events shown in table: <strong>${tableEvents.length}</strong>${medium ? ` · <span class="evtx-summary-tip">rows marked low confidence may differ slightly from Event Viewer. Use <strong>Save All Events As… → XML</strong> for identical wording</span>` : ""}</p>
+        ${evtxBinaryNote}
+        ${buildNvlddmkmIdOccurrenceSummary(all)}
+        ${buildEvtxStabilityTriage(all)}
       </div>`;
 
       /** @type {string[]} */
       const cardParts = [];
       for (const blurb of EVTX_KEY_EVENT_BLURBS) {
         let n = 0;
-        for (const id of blurb.ids) n += counts[id] || 0;
-        const badge =
-          n > 0 ? `<span class="evtx-card__count">${n} in file</span>` : `<span class="evtx-card__count evtx-card__count--none">Not seen</span>`;
+        if (!blurb.referenceOnly) for (const id of blurb.ids) n += counts[id] || 0;
+        const badge = blurb.referenceOnly
+          ? `<span class="evtx-card__count evtx-card__count--ref">Reference</span>`
+          : n > 0
+            ? `<span class="evtx-card__count">${n} in file</span>`
+            : `<span class="evtx-card__count evtx-card__count--none">Not seen</span>`;
         cardParts.push(`<article class="evtx-card">
           <header class="evtx-card__head"><h4 class="evtx-card__title">${esc(blurb.title)}</h4>${badge}</header>
           <p class="evtx-card__body">${esc(blurb.body)}</p>
@@ -13603,27 +14643,34 @@
       }
       cardsEl.innerHTML = cardParts.join("");
 
-      const sorted = watched.slice().sort((a, b) => {
+      const sorted = tableEvents.slice().sort((a, b) => {
         const ta = Date.parse(a.timeIso || "") || 0;
         const tb = Date.parse(b.timeIso || "") || 0;
         return tb - ta;
       });
       const rows = sorted.map((e) => {
-        const confText =
-          e.confidence === "high" ? "" : ` (${e.confidence} confidence decode)`;
-        const msg = e.message ? esc(e.message.slice(0, 220)) + (e.message.length > 220 ? "…" : "") : "—";
+        const msgLimit = 420;
+        const msg = e.message
+          ? esc(e.message.slice(0, msgLimit)) + (e.message.length > msgLimit ? "…" : "")
+          : "—";
+        const hint =
+          /nvlddmkm|amdkmdag/i.test(e.provider || "") ? nvKernelMessagePlainHint(e.message || "", e.eventId) : "";
+        const occKey = `${(e.provider || "").toLowerCase()}\x00${e.eventId}`;
+        const occ =
+          e.eventId != null ? esc(String(occMap.get(occKey) ?? 1)) : "—";
         return `<tr>
           <td>${esc(formatEvtxDisplayTime(e.timeIso))}</td>
           <td>${e.eventId != null ? esc(String(e.eventId)) : "—"}</td>
+          <td class="evtx-col-count" title="How many rows in this file share this provider + Event ID">${occ}</td>
           <td>${esc(e.provider || "—")}</td>
           <td>${esc(e.channel || "—")}</td>
-          <td>${msg}${esc(confText)}</td>
+          <td class="evtx-msg-cell">${msg}${hint}</td>
         </tr>`;
       });
       tbody.innerHTML =
         rows.length > 0
           ? rows.join("")
-          : `<tr><td colspan="5" class="evtx-empty-row">No matching key Event IDs in this export. The log may not include these providers, or you can try an Event Viewer XML export for richer text.</td></tr>`;
+          : `<tr><td colspan="6" class="evtx-empty-row">No matching rows in this decode. Drop the same <code>.evtx</code> you open in Event Viewer, or use <strong>Save All Events As… → XML</strong> for a text-perfect match.</td></tr>`;
 
       if (toolbar) toolbar.hidden = false;
       if (body) body.hidden = false;
@@ -13652,7 +14699,7 @@
           events = parseWindowsEventXmlExport(text);
           if (!events.length)
             parseNote =
-              "No <Event> blocks parsed — confirm this is an Event Viewer XML export (not plain text).";
+              "No <Event> blocks parsed. Confirm this is an Event Viewer XML export (not plain text).";
           renderEvtxResults(name, events, parseNote, "xml");
           if (metaEl) metaEl.textContent = `${name} · XML`;
           return;
@@ -13664,7 +14711,7 @@
           events = parseWindowsEventXmlExport(decodedProbe.text);
           if (!events.length)
             parseNote =
-              "XML-like head found but no <Event> blocks parsed — file may be truncated or not an Event Viewer export.";
+              "XML-like head found but no <Event> blocks parsed; file may be truncated or not an Event Viewer export.";
           renderEvtxResults(name, events, parseNote, "xml");
           if (metaEl) metaEl.textContent = `${name} · XML (detected)`;
           return;
@@ -13673,12 +14720,13 @@
         events = parseEvtxBinaryRecords(buf);
         if (!events.length) {
           parseNote =
-            "No EVTX records could be decoded from this binary — open the log in Event Viewer and use Save All Events As… → XML, then load the .xml here.";
+            "No EVTX records could be decoded from this binary. Open the log in Event Viewer and use Save All Events As… → XML, then load the .xml here.";
         } else {
           const missed = events.filter((e) => e.eventId == null).length;
-          if (missed > events.length * 0.4)
+          /** Only warn when a large majority of rows still lack IDs after BinXml extraction (avoid noisy hints). */
+          if (missed > 0 && events.length >= 16 && missed / events.length > 0.82)
             parseNote =
-              "Many EVTX rows lacked a readable Event ID in the payload — XML export usually lists IDs and messages more reliably.";
+              "Some EVTX rows still lack a decoded Event ID (heavy template compression or damaged chunk). XML export may list every ID and message.";
         }
         renderEvtxResults(name, events, parseNote, "evtx");
         if (metaEl) metaEl.textContent = `${name} · EVTX (binary)`;

@@ -2,3 +2,6 @@ Thumbs.db
 .DS_Store
 *.tmp
 ~$*
+
+# Local EVTX debugging scripts (not used by the browser app)
+evtx-probe*.mjs

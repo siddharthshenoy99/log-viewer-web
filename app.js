@@ -7954,7 +7954,12 @@
       /** GPU / display (ASCII; same strings as {@link translateMsinfoI18nTokensToEnglish} Spanish pass). */
       /\bcompatible\s+con\b/i.test(u) ||
       /\bno\s+disponible\b/i.test(u) ||
-      /\bhercios\b/i.test(u)
+      /\bhercios\b/i.test(u) ||
+      /\bSistema\s+de\s+archivos\b/i.test(u) ||
+      /\bTamaño\s+total\b/i.test(u) ||
+      /\bEspacio\s+libre\b/i.test(u) ||
+      /\bDiscos\b/i.test(u) ||
+      /\bTipo\s+de\s+sistema\b/i.test(u)
     );
   }
 
@@ -8610,11 +8615,24 @@
     ["procesadores logicos", "logical processors"],
     ["procesadores principales", "physical processors"],
     ["Hora estándar romance", "Romance Standard Time"],
+    ["Hora de verano romance", "Romance Daylight Time"],
     ["Hora estándar centroeuropea", "Central European Standard Time"],
     ["Hora estándar del Pacífico", "Pacific Standard Time"],
     ["Hora estándar oriental", "Eastern Standard Time"],
     ["Rol de la plataforma", "Platform Role"],
     ["Rol de plataforma", "Platform Role"],
+    ["Tipo de sistema", "System Type"],
+    ["Procesador", "Processor"],
+    ["Clasificación", "Classification"],
+    ["Clasificacion", "Classification"],
+    ["Memoria virtual total", "Total Virtual Memory"],
+    ["Memoria virtual disponible", "Available Virtual Memory"],
+    ["Espacio del archivo de paginación", "Page File Space"],
+    ["Espacio del archivo de paginacion", "Page File Space"],
+    ["Ubicación del archivo de paginación", "Page File Location(s)"],
+    ["Ubicacion del archivo de paginacion", "Page File Location(s)"],
+    ["Número de serie", "Serial Number"],
+    ["Numero de serie", "Serial Number"],
     ["Memoria física instalada (RAM)", "Installed Physical Memory (RAM)"],
     ["Memoria física instalada", "Installed Physical Memory"],
     ["Memoria física total", "Total Physical Memory"],
@@ -8627,6 +8645,8 @@
     ["Fabricante", "Manufacturer"],
     ["Modelo", "Model"],
     ["En ejecución", "Running"],
+    /** Spanish Services list state (Windows uses “Activo” / “Detenido”, not “En ejecución”). */
+    ["Activo", "Running"],
     ["Detenido", "Stopped"],
     ["Deshabilitado", "Disabled"],
     ["Automático", "Automatic"],
@@ -8989,8 +9009,6 @@
     ["Rulare", "Running"],
     ["Oprit", "Stopped"],
     ["Dezactivat", "Disabled"],
-    ["Automat", "Automatic"],
-    ["Da", "Yes"],
     ["Nu", "No"],
     ["Indisponibil", "Unavailable"],
     // --- Hungarian (hu) ---
@@ -9787,7 +9805,15 @@
       .replace(/\bTid\s+fran\s+mobilnat\b/giu, "Cellular Time")
       .replace(/\bTjänst\s+för\s+aggregerad\s+dataplattform\b/giu, "Aggregate Data Platform Service")
       .replace(/\bTjanst\s+för\s+aggregerad\s+dataplattform\b/giu, "Aggregate Data Platform Service")
-      .replace(/\bLjudgatewaytjänst\s+för\s+Bluetooth\b/giu, "Bluetooth Audio Gateway Service");
+      .replace(/\bLjudgatewaytjänst\s+för\s+Bluetooth\b/giu, "Bluetooth Audio Gateway Service")
+      /** Romanian startup type: never use substring token pair {@code Automat}→… (it corrupts “Automatic” → “Automaticicic”). */
+      .replace(/\bAutomat\b/gu, "Automatic")
+      /** Romanian “Da” = yes; never use substring pair (it corrupts “Daylight” → “Yesylight”). */
+      .replace(/\bDa\b/gu, "Yes")
+      /** Spanish MSInfo Services table headers when used as whole cell text (avoids touching “Nombre del SO”, etc.). */
+      .replace(/^Nombre$/gu, "Name")
+      .replace(/^Estado$/gu, "State")
+      .replace(/^Tipo de inicio$/gu, "Startup type");
     /** Swedish service names often end with {@code -tjänst}; normalize after regex so phrase-table hits compound rows. */
     out = out.replace(/-tjänst\b/gu, " Service").replace(/-tjanst\b/gu, " Service");
     out = applyMsinfoI18nTokenPairTable(out);
@@ -10307,6 +10333,52 @@
   }
 
   /**
+   * Heuristic: Spanish {@code msinfo32} export (labels + values often ASCII; section Translate must still apply).
+   * @param {NonNullable<ReturnType<typeof extractSystemSummary>>} sum
+   */
+  function msinfoExportLooksSpanish(sum) {
+    const mem = sum.memory || {};
+    const drives = sum.storageDrives || [];
+    const os = sum.os || {};
+    const parts = [
+      sum.systemTypeRaw,
+      sum.processor,
+      sum.platformRole,
+      sum.timeZone,
+      sum.systemForm,
+      mem.installedRam,
+      mem.totalPhysical,
+      mem.availablePhysical,
+      mem.totalVirtual,
+      mem.availableVirtual,
+      mem.pageFileSpace,
+      mem.pageFileLocation,
+      os.name,
+      os.versionLine,
+      os.build,
+      os.installDate,
+    ];
+    for (const d of drives) {
+      parts.push(d.title, d.fileSystem, d.totalSize, d.freeSpace, d.used, d.volumeName, d.serialNumber);
+    }
+    const blob = parts.filter((p) => p && String(p).trim()).join(" | ");
+    return looksLikeSpanishWindowsLatinHint(blob);
+  }
+
+  /**
+   * {@code <dt>} label: plain English unless the export looks Spanish; then Spanish text in {@link sumI18nSpan} so the section Translate control swaps labels with values.
+   * @param {string} enLabel
+   * @param {string} esLabel
+   * @param {(s: string) => string} escFn
+   * @param {boolean} spanishExport
+   * @param {{ forceI18nSpan?: boolean }} i18nOpts
+   */
+  function summaryDlDtLabel(enLabel, esLabel, escFn, spanishExport, i18nOpts) {
+    if (!spanishExport) return `<dt>${escFn(enLabel)}</dt>`;
+    return `<dt>${sumI18nSpan(esLabel, escFn, undefined, i18nOpts)}</dt>`;
+  }
+
+  /**
    * @param {HTMLElement} el
    * @param {ReturnType<typeof extractSystemSummary> | null} sum
    * @param {boolean} ok
@@ -10336,6 +10408,11 @@
         '<p class="summary-empty">Could not build a structured summary from this file. Open <strong>Raw export</strong> below, try a different encoding, export a fresh <code>.nfo</code> from msinfo32, or use <strong>Copy repaired XML</strong> if it appears after a partial fix.</p>';
       return;
     }
+
+    const spanishExport = msinfoExportLooksSpanish(sum);
+    /** When the export is Spanish, force {@code .sum-i18n} on values in these blocks so section Translate updates every cell together with Spanish {@code <dt>} labels. */
+    const summaryLblOpts = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
+    const sumI18nSummary = spanishExport ? summaryLblOpts : undefined;
 
     const mbBiosBody = renderMotherboardBiosBody(sum, esc, { forceI18nSpan: true });
     const mbBiosHtml = renderReportCategoryAccordion("Motherboard & BIOS", mbBiosBody, esc, {
@@ -10380,11 +10457,11 @@
     }
 
     const overviewBody = `<dl class="system-summary-dl">
-      <dt>System Type</dt><dd>${sumI18nSpan(sum.systemTypeRaw, esc)}</dd>
-      <dt>Processor</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(sum.processor, esc)}</dd>
-      <dt>Platform Role</dt><dd>${sumI18nSpan(sum.platformRole, esc)}</dd>
-      <dt>Time Zone</dt><dd>${sumI18nSpan(sum.timeZone, esc)}</dd>
-      <dt>Classification</dt><dd>${sumI18nSpan(sum.systemForm, esc)}</dd>
+      ${summaryDlDtLabel("System Type", "Tipo de sistema", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.systemTypeRaw, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Processor", "Procesador", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(sum.processor, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Platform Role", "Rol de plataforma", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.platformRole, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Time Zone", "Zona horaria", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.timeZone, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Classification", "Clasificación", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.systemForm, esc, undefined, sumI18nSummary)}</dd>
     </dl>`;
     const overviewHtml = renderReportCategoryAccordion("System Overview", overviewBody, esc, {
       open: true,
@@ -10394,29 +10471,32 @@
 
     const mem = sum.memory || {};
     const memoryBody = `<dl class="system-summary-dl">
-      <dt>Installed Physical Memory (RAM)</dt><dd>${sumI18nSpan(mem.installedRam, esc)}</dd>
-      <dt>Total Physical Memory</dt><dd>${sumI18nSpan(mem.totalPhysical, esc)}</dd>
-      <dt>Available Physical Memory</dt><dd>${sumI18nSpan(mem.availablePhysical, esc)}</dd>
-      <dt>Total Virtual Memory</dt><dd>${sumI18nSpan(mem.totalVirtual, esc)}</dd>
-      <dt>Available Virtual Memory</dt><dd>${sumI18nSpan(mem.availableVirtual, esc)}</dd>
-      <dt>Page File Space</dt><dd>${sumI18nSpan(mem.pageFileSpace, esc)}</dd>
-      <dt>Page File Location(s)</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(mem.pageFileLocation, esc)}</dd>
+      ${summaryDlDtLabel("Installed Physical Memory (RAM)", "Memoria física instalada (RAM)", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.installedRam, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Total Physical Memory", "Memoria física total", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.totalPhysical, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Available Physical Memory", "Memoria física disponible", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.availablePhysical, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Total Virtual Memory", "Memoria virtual total", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.totalVirtual, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Available Virtual Memory", "Memoria virtual disponible", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.availableVirtual, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Page File Space", "Espacio del archivo de paginación", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.pageFileSpace, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Page File Location(s)", "Ubicación del archivo de paginación", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(mem.pageFileLocation, esc, undefined, sumI18nSummary)}</dd>
     </dl>`;
-    const memoryHtml = renderReportCategoryAccordion("Memory Information", memoryBody, esc, { icon: "memory" });
+    const memoryHtml = renderReportCategoryAccordion("Memory Information", memoryBody, esc, {
+      icon: "memory",
+      alwaysOfferTranslate: spanishExport,
+    });
 
     const storageDrives = sum.storageDrives || [];
     const storageBody =
       storageDrives.length > 0
         ? `<div class="system-ext-stack">${storageDrives
             .map(
-              (d) => `<article class="system-storage-card"><h4 class="system-storage-card__title">${sumI18nSpan(d.title, esc)}</h4>
+              (d) => `<article class="system-storage-card"><h4 class="system-storage-card__title">${sumI18nSpan(d.title, esc, undefined, sumI18nSummary)}</h4>
       <dl class="system-summary-dl system-summary-dl--compact">
-        <dt>File System</dt><dd>${sumI18nSpan(d.fileSystem, esc)}</dd>
-        <dt>Total Size</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(d.totalSize, esc)}</dd>
-        <dt>Free Space</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(d.freeSpace, esc)}</dd>
-        <dt>Used</dt><dd>${sumI18nSpan(d.used, esc)}</dd>
-        <dt>Volume Name</dt><dd>${sumI18nSpan(d.volumeName, esc)}</dd>
-        <dt>Serial Number</dt><dd>${sumI18nSpan(d.serialNumber, esc)}</dd>
+        ${summaryDlDtLabel("File System", "Sistema de archivos", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.fileSystem, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Total Size", "Tamaño total", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.totalSize, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Free Space", "Espacio libre", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.freeSpace, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Used", "Espacio usado", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.used, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Volume Name", "Nombre de volumen", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.volumeName, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Serial Number", "Número de serie", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.serialNumber, esc, undefined, sumI18nSummary)}</dd>
       </dl></article>`
             )
             .join("")}</div>`
@@ -10449,9 +10529,13 @@
     const svcOfferTranslate = svcAll.length > 0 || runningList.length > 0;
     const svcI18nOpts =
       svcOfferTranslate || svcNeedsI18n ? { forceI18nSpan: true } : undefined;
+    const svcTableHead =
+      spanishExport && svcI18nOpts
+        ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicio", esc, undefined, svcI18nOpts)}</th></tr></thead>`
+        : `<thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead>`;
     const svcRows = (list) =>
       list.length > 0
-        ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Services"><thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead><tbody>${list
+        ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="${esc("Services")}">${svcTableHead}<tbody>${list
             .map(
               (s) =>
                 `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc, undefined, svcI18nOpts)}</td><td>${sumI18nSpan(s.state, esc, undefined, svcI18nOpts)}</td><td>${sumI18nSpan(s.startMode, esc, undefined, svcI18nOpts)}</td></tr>`
@@ -10489,10 +10573,10 @@
 
     const os = sum.os || { name: "", versionLine: "", build: "", installDate: "" };
     const osDl = `<dl class="system-summary-dl">
-      <dt>OS Name</dt><dd>${sumI18nSpan(os.name, esc)}</dd>
-      <dt>Version</dt><dd class="system-summary-dd--wrap">${sumI18nSpan(os.versionLine, esc)}</dd>
-      <dt>Build</dt><dd>${sumI18nSpan(os.build, esc)}</dd>
-      <dt>Original Install Date</dt><dd>${sumI18nSpan(os.installDate, esc)}</dd>
+      ${summaryDlDtLabel("OS Name", "Nombre del SO", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(os.name, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Version", "Versión", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(os.versionLine, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Build", "Compilación", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(os.build, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Original Install Date", "Fecha de instalación original", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(os.installDate, esc, undefined, sumI18nSummary)}</dd>
     </dl>`;
     const osBody = `${osDl}${renderWindowsUpdatesOsEmbed(sum, esc)}`;
     const osHtml = renderReportCategoryAccordion("OS Information", osBody, esc, {

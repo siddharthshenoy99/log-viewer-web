@@ -629,6 +629,62 @@
   }
 
   /**
+   * @param {any} recovery result of parseMsInfoDocumentWithRecovery
+   * @returns {{ kvs: { path: string, item: string, value: string }[], rows: { path: string, fields: Record<string, string> }[] } | null}
+   */
+  function getMsInfoStructuredDataFromRecovery(recovery) {
+    if (!recovery) return null;
+    if (recovery.doc) {
+      try {
+        return walkMsInfo(recovery.doc);
+      } catch {
+        return null;
+      }
+    }
+    if (recovery.data && Array.isArray(recovery.data.kvs)) {
+      return recovery.data;
+    }
+    return null;
+  }
+
+  /**
+   * @param {{ kvs: { path: string, item: string, value: string }[] } | null} dataA
+   * @param {{ kvs: { path: string, item: string, value: string }[] } | null} dataB
+   */
+  function diffMsInfoKvsData(dataA, dataB) {
+    const kvsA = dataA && dataA.kvs ? dataA.kvs : [];
+    const kvsB = dataB && dataB.kvs ? dataB.kvs : [];
+    const keyOf = (/** @type {{ path: string, item: string }} */ r) => `${r.path}\u0001${r.item}`;
+    const ma = new Map();
+    for (const r of kvsA) {
+      ma.set(keyOf(r), { path: r.path, item: r.item, value: r.value });
+    }
+    const mb = new Map();
+    for (const r of kvsB) {
+      mb.set(keyOf(r), { path: r.path, item: r.item, value: r.value });
+    }
+    /** @type {{ path: string, item: string, value: string }[]} */
+    const onlyA = [];
+    /** @type {{ path: string, item: string, value: string }[]} */
+    const onlyB = [];
+    /** @type {{ path: string, item: string, valueA: string, valueB: string }[]} */
+    const changed = [];
+    for (const [k, a] of ma) {
+      if (!mb.has(k)) onlyA.push(a);
+      else {
+        const b = /** @type {{ path: string, item: string, value: string }} */ (mb.get(k));
+        if (a.value !== b.value) {
+          changed.push({ path: a.path, item: a.item, valueA: a.value, valueB: b.value });
+        }
+      }
+    }
+    for (const [k, b] of mb) {
+      if (!ma.has(k)) onlyB.push(b);
+    }
+    return { onlyA, onlyB, changed, nA: kvsA.length, nB: kvsB.length };
+  }
+
+  /**
    * Intel Windows DCH driver style — never treat as NVIDIA.
    * @param {string} s
    */
@@ -10657,6 +10713,107 @@
 </div>`;
   }
 
+  /**
+   * Suffix `id` / ARIA list attributes in a cloned report fragment so the compare view does not clash with the main panel.
+   * @param {Element} root
+   * @param {string} suffix
+   */
+  function suffixDomIdAttributes(root, suffix) {
+    if (!suffix) return;
+    root.querySelectorAll("[id]").forEach((el) => {
+      if (el.id) el.id = el.id + suffix;
+    });
+    root.querySelectorAll("label[for]").forEach((el) => {
+      if (el instanceof HTMLLabelElement && el.htmlFor) el.htmlFor = el.htmlFor + suffix;
+    });
+    for (const attr of ["aria-labelledby", "aria-owns", "aria-describedby"]) {
+      root.querySelectorAll(`[${attr}]`).forEach((el) => {
+        const v = el.getAttribute(attr);
+        if (v) {
+          el.setAttribute(
+            attr,
+            v
+              .split(/\s+/)
+              .filter(Boolean)
+              .map((t) => t + suffix)
+              .join(" "),
+          );
+        }
+      });
+    }
+  }
+
+  /**
+   * Stacked report: for each section (System Overview, Memory, …) show the full file 1 card, then the full file 2 card.
+   * @param {HTMLElement} out
+   * @param {string} nameA
+   * @param {string} nameB
+   * @param {ReturnType<typeof extractSystemSummary> | null} sumA
+   * @param {ReturnType<typeof extractSystemSummary> | null} sumB
+   * @param {string[]} recNotesA
+   * @param {string[]} recNotesB
+   * @param {string[]} xmlRepA
+   * @param {string[]} xmlRepB
+   */
+  function buildSystemCompareStackedView(out, nameA, nameB, sumA, sumB, recNotesA, recNotesB, xmlRepA, xmlRepB) {
+    out.textContent = "";
+    const wrap = document.createElement("div");
+    wrap.className = "system-compare-paired system-compare-paired--stacked";
+    const runU = `u${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    const hostA = document.createElement("div");
+    const hostB = document.createElement("div");
+    const na = Array.isArray(recNotesA) ? recNotesA : [];
+    const nb = Array.isArray(recNotesB) ? recNotesB : [];
+    renderSystemSummary(hostA, sumA, !!sumA, na, xmlRepA);
+    renderSystemSummary(hostB, sumB, !!sumB, nb, xmlRepB);
+    const listA = hostA.querySelectorAll(".system-summary-stack .report-category");
+    const listB = hostB.querySelectorAll(".system-summary-stack .report-category");
+    if (listA.length === 0 && listB.length === 0) {
+      const p = document.createElement("p");
+      p.className = "system-compare-report__warn";
+      p.textContent = "Could not build report sections for either file. Try Raw line diff, Encoding, or a fresh .nfo from msinfo32.";
+      wrap.appendChild(p);
+      out.appendChild(wrap);
+      return 0;
+    }
+    if (listA.length !== listB.length) {
+      const p = document.createElement("p");
+      p.className = "system-compare-paired__mismatch";
+      p.setAttribute("role", "status");
+      p.textContent = `The two reports have a different number of sections (file 1: ${listA.length}, file 2: ${listB.length}). Showing the first ${Math.min(listA.length, listB.length)} section groups in order.`;
+      wrap.appendChild(p);
+    }
+    const n = Math.min(listA.length, listB.length);
+    for (let i = 0; i < n; i++) {
+      const secA = /** @type {HTMLElement} */ (listA[i]);
+      const secB = /** @type {HTMLElement} */ (listB[i]);
+      const titleEl = secA.querySelector(".report-category__summary-text");
+      const title = titleEl && titleEl.textContent ? titleEl.textContent.replace(/\s+/g, " ").trim() : `Section ${i + 1}`;
+      const pair = document.createElement("div");
+      pair.className = "system-compare-stack__pair";
+      pair.setAttribute("data-compare-section", title);
+      const suffA = `-${runU}-a${i}`;
+      const suffB = `-${runU}-b${i}`;
+      const kickerA = document.createElement("p");
+      kickerA.className = "system-compare-stack__kicker system-compare-stack__kicker--1";
+      kickerA.textContent = `File 1 · ${nameA}`;
+      const kickerB = document.createElement("p");
+      kickerB.className = "system-compare-stack__kicker system-compare-stack__kicker--2";
+      kickerB.textContent = `File 2 · ${nameB}`;
+      const cA = /** @type {HTMLElement} */ (secA.cloneNode(true));
+      suffixDomIdAttributes(cA, suffA);
+      const cB = /** @type {HTMLElement} */ (secB.cloneNode(true));
+      suffixDomIdAttributes(cB, suffB);
+      pair.appendChild(kickerA);
+      pair.appendChild(cA);
+      pair.appendChild(kickerB);
+      pair.appendChild(cB);
+      wrap.appendChild(pair);
+    }
+    out.appendChild(wrap);
+    return n;
+  }
+
   /** @param {string} s */
   function esc(s) {
     return s
@@ -12661,11 +12818,22 @@
     const loadProgress = panel.querySelector(".system-panel-load__progress");
     const loadLabel = panel.querySelector(".system-panel-load__label");
     const loadStatusRow = panel.querySelector(".system-panel-load__status");
+    const loadPercentEl = panel.querySelector(".system-panel-load__percent");
+    const systemCompare = document.getElementById("advanced-system-compare");
+    const compareDrop1 = systemCompare?.querySelector(".dropzone--compare-1");
+    const compareDrop2 = systemCompare?.querySelector(".dropzone--compare-2");
+    const comparePicked1 = systemCompare?.querySelector("[data-compare-picked='1']");
+    const comparePicked2 = systemCompare?.querySelector("[data-compare-picked='2']");
+    const compareInput1 = systemCompare?.querySelector(".file-input--compare-1");
+    const compareInput2 = systemCompare?.querySelector(".file-input--compare-2");
+    const compareRun = systemCompare?.querySelector(".system-compare-run");
+    const compareStatus = systemCompare?.querySelector(".system-compare__status");
+    const compareStructured = systemCompare?.querySelector(".system-compare__structured");
+    const compareRawDetails = systemCompare?.querySelector(".system-compare__raw-details");
+    const compareOut = systemCompare?.querySelector(".system-compare__pre");
+    const SYSTEM_COMPARE_MAX_CHARS = 200000;
     /** @type {AbortController | null} */
     let systemLoadAbort = null;
-    /** "read" = bytes still loading; "work" = parsed/analyzed. Spinner + "Analyzing…" only in "work". */
-    let systemLoadJobPhase = "read";
-
     /** @type {{ name: string, buffer: ArrayBuffer, label: string, fileMetaBase: string, msiRepairedXml: string | null, msiOriginalDecoded: string, msiFixedRaw: string | null, msiViewOriginal: boolean } | null} */
     let state = null;
     /** @type {ReturnType<typeof setTimeout> | null} */
@@ -12675,6 +12843,90 @@
       if (toolbarWrap) toolbarWrap.hidden = !loaded;
       if (systemBody) systemBody.hidden = !loaded;
       dropzone.style.display = loaded ? "none" : "";
+      if (!loaded) clearCompareUi();
+    }
+
+    function clearCompareUi() {
+      if (compareStatus) compareStatus.textContent = "";
+      if (compareOut) compareOut.textContent = "";
+      if (compareInput1 instanceof HTMLInputElement) compareInput1.value = "";
+      if (compareInput2 instanceof HTMLInputElement) compareInput2.value = "";
+      if (compareRawDetails) compareRawDetails.open = false;
+      if (compareStructured) {
+        compareStructured.innerHTML = "";
+        compareStructured.hidden = true;
+      }
+      if (comparePicked1) {
+        comparePicked1.textContent = "";
+        comparePicked1.hidden = true;
+      }
+      if (comparePicked2) {
+        comparePicked2.textContent = "";
+        comparePicked2.hidden = true;
+      }
+      if (compareDrop1) compareDrop1.classList.remove("is-dragover");
+      if (compareDrop2) compareDrop2.classList.remove("is-dragover");
+    }
+
+    function syncComparePickedLabelsAndStatus() {
+      const f1 = compareInput1 && compareInput1.files && compareInput1.files[0] ? compareInput1.files[0] : null;
+      const f2 = compareInput2 && compareInput2.files && compareInput2.files[0] ? compareInput2.files[0] : null;
+      if (comparePicked1) {
+        if (f1) {
+          comparePicked1.textContent = f1.name;
+          comparePicked1.hidden = false;
+        } else {
+          comparePicked1.textContent = "";
+          comparePicked1.hidden = true;
+        }
+      }
+      if (comparePicked2) {
+        if (f2) {
+          comparePicked2.textContent = f2.name;
+          comparePicked2.hidden = false;
+        } else {
+          comparePicked2.textContent = "";
+          comparePicked2.hidden = true;
+        }
+      }
+      if (compareStatus) {
+        if (f1 && f2) {
+          compareStatus.textContent = "Click “Run comparison” when you’re ready.";
+        } else if (f1) {
+          compareStatus.textContent = "Add file 2, then run comparison.";
+        } else if (f2) {
+          compareStatus.textContent = "Add file 1, then run comparison.";
+        } else {
+          compareStatus.textContent = "";
+        }
+      }
+    }
+
+    /**
+     * Display text aligned with the summary parser (repaired raw when present).
+     * @param {ArrayBuffer} buffer
+     * @param {string} enc
+     */
+    function displayTextForSystemCompare(buffer, enc) {
+      const { text } = decodeBuffer(buffer, "system", enc);
+      const recovery = parseMsInfoDocumentWithRecovery(text);
+      return recovery.rawDisplayText != null ? recovery.rawDisplayText : text;
+    }
+
+    /** @param {string[]} la @param {string[]} lb */
+    function lineDiffLines(la, lb) {
+      const max = Math.max(la.length, lb.length);
+      const out = [];
+      for (let i = 0; i < max; i++) {
+        const A = la[i];
+        const B = lb[i];
+        if (A === B) out.push(`  ${A ?? ""}`);
+        else {
+          if (A !== undefined) out.push(`- ${A}`);
+          if (B !== undefined) out.push(`+ ${B}`);
+        }
+      }
+      return out.join("\n");
     }
 
     /** @param {string} s */
@@ -12823,54 +13075,28 @@
     }
 
     async function loadFile(file) {
-      const useProgressUi = file.size >= LARGE_FILE_PROGRESS_THRESHOLD;
-      let pauseForDoneUi = false;
+      /** Progress bar is only used for “Run comparison”; main load is silent. */
       systemLoadAbort?.abort();
       systemLoadAbort = new AbortController();
       const signal = systemLoadAbort.signal;
-
-      const showJob = () => {
-        if (loadJobEl && useProgressUi) {
-          systemLoadJobPhase = "read";
-          loadJobEl.classList.add("panel-load-job--phase-read");
-          loadJobEl.hidden = false;
-          if (loadProgress) {
-            loadProgress.value = 0;
-            loadProgress.max = 100;
-          }
-          if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
-          if (loadLabel) loadLabel.textContent = "Loading file…";
-        }
-      };
-      const hideJob = () => {
+      const hideSystemLoadJob = () => {
         if (loadJobEl) {
           loadJobEl.hidden = true;
           loadJobEl.classList.remove("panel-load-job--phase-read");
         }
-      };
-      const setP = (/** @type {number} */ frac, /** @type {string} */ _msg) => {
-        if (loadProgress) loadProgress.value = Math.round(frac * 100);
-        const done = frac >= 1;
-        if (loadStatusRow) loadStatusRow.classList.toggle("panel-load-job__status--done", done);
-        if (loadLabel) {
-          if (done) loadLabel.textContent = "Completed";
-          else if (systemLoadJobPhase === "read") loadLabel.textContent = "Loading file…";
-          else loadLabel.textContent = "Analyzing…";
+        if (loadPercentEl) {
+          loadPercentEl.textContent = "";
+          loadPercentEl.hidden = true;
+          loadPercentEl.removeAttribute("aria-label");
         }
+        if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+        if (loadLabel) loadLabel.textContent = "Comparing";
       };
-
       try {
-        showJob();
-        const buffer = useProgressUi
-          ? await readFileAsArrayBufferWithProgress(file, signal, (frac) => setP(frac * 0.32, ""))
-          : await file.arrayBuffer();
+        hideSystemLoadJob();
+        clearCompareUi();
+        const buffer = await file.arrayBuffer();
         signal.throwIfAborted();
-        if (useProgressUi) {
-          systemLoadJobPhase = "work";
-          if (loadJobEl) loadJobEl.classList.remove("panel-load-job--phase-read");
-          if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
-          if (loadLabel) loadLabel.textContent = "Analyzing…";
-        }
         state = {
           name: file.name,
           buffer,
@@ -12883,16 +13109,18 @@
         };
         encodingSelect.value = "auto";
         setVisible(true);
-        await applyDecode(
-          useProgressUi
-            ? {
-                signal,
-                onStage: (frac, _msg) => setP(0.32 + frac * 0.68, ""),
-              }
-            : undefined,
-        );
+        await applyDecode(undefined);
         signal.throwIfAborted();
-        if (useProgressUi) pauseForDoneUi = true;
+        if (compareInput1 instanceof HTMLInputElement) {
+          const dt = new DataTransfer();
+          try {
+            dt.items.add(file);
+            compareInput1.files = dt.files;
+          } catch {
+            /* */
+          }
+        }
+        syncComparePickedLabelsAndStatus();
       } catch (e) {
         if (e && (/** @type {Error} */ (e).name === "AbortError" || /** @type {any} */ (e).code === 20)) {
           state = null;
@@ -12910,11 +13138,7 @@
           if (meta) meta.textContent = "Could not load this file.";
         }
       } finally {
-        if (useProgressUi && pauseForDoneUi) {
-          setP(1, "");
-          await new Promise((r) => setTimeout(r, 520));
-        }
-        hideJob();
+        hideSystemLoadJob();
       }
     }
 
@@ -12946,39 +13170,40 @@
       }
     });
     encodingSelect.addEventListener("change", () => void applyDecode(undefined));
-    if (summaryEl) {
-      summaryEl.addEventListener(
-        "click",
-        (e) => {
-          const btn = e.target.closest(".report-category__translate");
-          if (!btn || !summaryEl.contains(btn)) return;
-          e.preventDefault();
-          e.stopPropagation();
-          const det = btn.closest("details");
-          const root = det && det.querySelector(".report-category__i18n-root");
-          if (!root) return;
-          const pressed = btn.getAttribute("aria-pressed") === "true";
-          const showEn = !pressed;
-          btn.setAttribute("aria-pressed", showEn ? "true" : "false");
-          btn.textContent = showEn ? "Original" : "Translate";
-          root.querySelectorAll(".sum-i18n").forEach((span) => {
-            const enc = span.getAttribute("data-i18n-enc");
-            let raw = "";
-            if (enc) {
-              try {
-                raw = decodeURIComponent(enc);
-              } catch {
-                raw = span.getAttribute("data-export") || "";
-              }
-            } else {
+    panel.addEventListener(
+      "click",
+      (e) => {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+        const btn = t.closest(".report-category__translate");
+        if (!btn) return;
+        if (!summaryEl?.contains(btn) && !compareStructured?.contains(btn)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const det = btn.closest("details");
+        const root = det && det.querySelector(".report-category__i18n-root");
+        if (!root) return;
+        const pressed = btn.getAttribute("aria-pressed") === "true";
+        const showEn = !pressed;
+        btn.setAttribute("aria-pressed", showEn ? "true" : "false");
+        btn.textContent = showEn ? "Original" : "Translate";
+        root.querySelectorAll(".sum-i18n").forEach((span) => {
+          const enc = span.getAttribute("data-i18n-enc");
+          let raw = "";
+          if (enc) {
+            try {
+              raw = decodeURIComponent(enc);
+            } catch {
               raw = span.getAttribute("data-export") || "";
             }
-            span.textContent = showEn ? translateExportValueToEnglish(raw) : raw;
-          });
-        },
-        true
-      );
-    }
+          } else {
+            raw = span.getAttribute("data-export") || "";
+          }
+          span.textContent = showEn ? translateExportValueToEnglish(raw) : raw;
+        });
+      },
+      true
+    );
     if (searchInput) {
       searchInput.addEventListener("input", () => {
         if (searchDebounce) clearTimeout(searchDebounce);
@@ -13010,6 +13235,7 @@
       if (searchInput) searchInput.value = "";
       performRawSearch("");
       if (searchResults) searchResults.hidden = true;
+      clearCompareUi();
       setVisible(false);
     });
     btnCopy.addEventListener("click", async () => {
@@ -13060,6 +13286,269 @@
         meta.textContent = `${state.name} · ${(state.buffer.byteLength / 1024).toFixed(1)} KiB · pretty XML`;
       }
       if (searchInput && searchInput.value.trim()) performRawSearch(searchInput.value);
+    });
+
+    /**
+     * @param {HTMLElement | null | undefined} drop
+     * @param {HTMLInputElement | null | undefined} fileInput
+     */
+    function wireCompareDropzone(drop, fileInput) {
+      if (!drop || !(fileInput instanceof HTMLInputElement)) return;
+      const preventCompareDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) => {
+        drop.addEventListener(ev, preventCompareDrop);
+      });
+      drop.addEventListener("dragenter", () => drop.classList.add("is-dragover"));
+      drop.addEventListener("dragleave", () => drop.classList.remove("is-dragover"));
+      drop.addEventListener("dragover", () => drop.classList.add("is-dragover"));
+      drop.addEventListener("drop", (e) => {
+        drop.classList.remove("is-dragover");
+        const dt = e.dataTransfer;
+        if (!dt || !dt.files.length) return;
+        const f = dt.files[0];
+        const transfer = new DataTransfer();
+        transfer.items.add(f);
+        fileInput.files = transfer.files;
+        syncComparePickedLabelsAndStatus();
+      });
+      drop.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          fileInput.click();
+        }
+      });
+      fileInput.addEventListener("change", () => {
+        syncComparePickedLabelsAndStatus();
+      });
+    }
+    wireCompareDropzone(compareDrop1, compareInput1);
+    wireCompareDropzone(compareDrop2, compareInput2);
+
+    /** Show the System Advanced block so compare output is not hidden. Matches Settings ▸ Advanced. */
+    function showAdvancedForCompare() {
+      const advInline = document.getElementById("advanced-inline");
+      if (advInline && advInline.hidden) {
+        document.documentElement.setAttribute("data-advanced", "on");
+        try {
+          localStorage.setItem("log-viewer-advanced", "1");
+        } catch {
+          /* */
+        }
+        advInline.hidden = false;
+        const t = document.getElementById("advanced-toggle");
+        if (t) {
+          t.setAttribute("aria-expanded", "true");
+          t.textContent = "Advanced · on";
+        }
+      }
+    }
+
+    /** @param {number} frac 0..1 */
+    function setCompareJobVisual(frac) {
+      const f = Math.max(0, Math.min(1, frac));
+      const p = Math.round(f * 100);
+      if (loadProgress) {
+        loadProgress.value = p;
+        loadProgress.max = 100;
+      }
+      if (loadPercentEl) {
+        loadPercentEl.textContent = `${p}%`;
+        loadPercentEl.hidden = false;
+        loadPercentEl.setAttribute("aria-label", `Comparing, ${p} percent complete`);
+      }
+      if (loadLabel) loadLabel.textContent = "Comparing";
+    }
+
+    function startCompareJob() {
+      if (!loadJobEl) return;
+      loadJobEl.hidden = false;
+      loadJobEl.classList.remove("panel-load-job--phase-read");
+      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+      setCompareJobVisual(0);
+    }
+
+    async function finishCompareJobAsync() {
+      if (loadProgress) loadProgress.value = 100;
+      if (loadPercentEl) {
+        loadPercentEl.textContent = "100%";
+        loadPercentEl.hidden = false;
+        loadPercentEl.setAttribute("aria-label", "Comparing, 100 percent, completed");
+      }
+      if (loadStatusRow) loadStatusRow.classList.add("panel-load-job__status--done");
+      if (loadLabel) loadLabel.textContent = "Completed";
+      await new Promise((r) => setTimeout(r, 520));
+      if (loadJobEl) loadJobEl.hidden = true;
+      if (loadPercentEl) {
+        loadPercentEl.textContent = "";
+        loadPercentEl.hidden = true;
+        loadPercentEl.removeAttribute("aria-label");
+      }
+      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+      if (loadLabel) loadLabel.textContent = "Comparing";
+    }
+
+    function resetCompareJobOnError() {
+      if (loadJobEl) loadJobEl.hidden = true;
+      if (loadProgress) loadProgress.value = 0;
+      if (loadPercentEl) {
+        loadPercentEl.textContent = "";
+        loadPercentEl.hidden = true;
+        loadPercentEl.removeAttribute("aria-label");
+      }
+      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+      if (loadLabel) loadLabel.textContent = "Comparing";
+    }
+
+    compareRun?.addEventListener("click", async () => {
+      const f1 = compareInput1 instanceof HTMLInputElement && compareInput1.files?.[0] ? compareInput1.files[0] : null;
+      const f2 = compareInput2 instanceof HTMLInputElement && compareInput2.files?.[0] ? compareInput2.files[0] : null;
+      if (!f1 || !f2) {
+        if (compareStatus) {
+          compareStatus.textContent = f1
+            ? "Add file 2 in the right-hand box, then run comparison."
+            : f2
+              ? "Add file 1 in the left-hand box, then run comparison."
+              : "Add both .nfo / .xml files (file 1 and file 2), then run comparison.";
+        }
+        if (!f1 && compareDrop1) {
+          try {
+            compareDrop1.focus();
+          } catch {
+            /* */
+          }
+        } else if (f1 && !f2 && compareDrop2) {
+          try {
+            compareDrop2.focus();
+          } catch {
+            /* */
+          }
+        }
+        return;
+      }
+      showAdvancedForCompare();
+      if (compareStatus) compareStatus.textContent = "";
+      if (compareRun instanceof HTMLButtonElement) compareRun.disabled = true;
+      startCompareJob();
+      const compareReadAbort = new AbortController();
+      try {
+        const enc = encodingSelect instanceof HTMLSelectElement ? encodingSelect.value : "auto";
+        setCompareJobVisual(0.02);
+        await yieldToMain();
+        const bufA = await readFileAsArrayBufferWithProgress(f1, compareReadAbort.signal, (frac) => {
+          setCompareJobVisual(0.02 + 0.14 * frac);
+        });
+        setCompareJobVisual(0.16);
+        await yieldToMain();
+        const bufB = await readFileAsArrayBufferWithProgress(f2, compareReadAbort.signal, (frac) => {
+          setCompareJobVisual(0.16 + 0.15 * frac);
+        });
+        setCompareJobVisual(0.32);
+        await yieldToMain();
+        const { text: rawA } = decodeBuffer(bufA, "system", enc);
+        setCompareJobVisual(0.38);
+        await yieldToMain();
+        const { text: rawB } = decodeBuffer(bufB, "system", enc);
+        setCompareJobVisual(0.45);
+        await yieldToMain();
+        const recA = parseMsInfoDocumentWithRecovery(rawA);
+        setCompareJobVisual(0.55);
+        await yieldToMain();
+        const recB = parseMsInfoDocumentWithRecovery(rawB);
+        setCompareJobVisual(0.6);
+        await yieldToMain();
+        const dataA = getMsInfoStructuredDataFromRecovery(recA);
+        const dataB = getMsInfoStructuredDataFromRecovery(recB);
+        const canStructure = !!(dataA && dataB);
+        /** @type {ReturnType<typeof diffMsInfoKvsData>} */
+        const diffKvs = canStructure
+          ? diffMsInfoKvsData(/** @type {any} */ (dataA), /** @type {any} */ (dataB))
+          : { onlyA: [], onlyB: [], changed: [], nA: 0, nB: 0 };
+        setCompareJobVisual(0.68);
+        await yieldToMain();
+        const xmlRepA =
+          recA.doc && Array.isArray(/** @type {any} */ (recA.doc)._msinfoRepairs)
+            ? /** @type {any} */ (recA.doc)._msinfoRepairs
+            : [];
+        const xmlRepB =
+          recB.doc && Array.isArray(/** @type {any} */ (recB.doc)._msinfoRepairs)
+            ? /** @type {any} */ (recB.doc)._msinfoRepairs
+            : [];
+        const sumA = canStructure && dataA ? extractSystemSummary(/** @type {any} */ (dataA)) : null;
+        const sumB = canStructure && dataB ? extractSystemSummary(/** @type {any} */ (dataB)) : null;
+
+        let nPairs = 0;
+        if (compareStructured) {
+          compareStructured.hidden = false;
+          if (canStructure) {
+            nPairs = buildSystemCompareStackedView(
+              compareStructured,
+              f1.name,
+              f2.name,
+              sumA,
+              sumB,
+              recA.notes,
+              recB.notes,
+              xmlRepA,
+              xmlRepB,
+            );
+            requestAnimationFrame(() => {
+              try {
+                compareStructured.scrollIntoView({ block: "nearest", behavior: "smooth" });
+              } catch {
+                /* */
+              }
+            });
+          } else {
+            compareStructured.innerHTML = `<p class="system-compare-report__warn">The exports could not be parsed the same way as a normal report. Open Raw line diff, or re-save as .nfo and match Encoding.</p>`;
+          }
+        }
+        setCompareJobVisual(0.8);
+        await yieldToMain();
+        if (compareRawDetails) {
+          if (!canStructure) compareRawDetails.open = true;
+          else compareRawDetails.open = nPairs === 0;
+        }
+
+        const textA = displayTextForSystemCompare(bufA, enc);
+        const textB = displayTextForSystemCompare(bufB, enc);
+        const truncA = textA.length > SYSTEM_COMPARE_MAX_CHARS;
+        const truncB = textB.length > SYSTEM_COMPARE_MAX_CHARS;
+        const sa = textA.slice(0, SYSTEM_COMPARE_MAX_CHARS);
+        const sb = textB.slice(0, SYSTEM_COMPARE_MAX_CHARS);
+        if (compareOut) {
+          compareOut.textContent = lineDiffLines(sa.split("\n"), sb.split("\n"));
+        }
+        setCompareJobVisual(0.94);
+        await yieldToMain();
+        let msg = `Compared “${f1.name}” (1) vs “${f2.name}” (2).`;
+        if (canStructure) {
+          msg += ` ${nPairs} report section group(s), stacked. ${diffKvs.changed.length} item row(s) differ, ${diffKvs.onlyA.length} only in file 1, ${diffKvs.onlyB.length} only in file 2.`;
+        }
+        if (truncA || truncB) {
+          msg += ` Raw line view is limited to the first ${SYSTEM_COMPARE_MAX_CHARS.toLocaleString()} characters per side.`;
+        } else if (canStructure && nPairs > 0) {
+          msg += " For each group, the first full card is from file 1, the next from file 2.";
+        } else {
+          msg += " See “Raw line diff” below to compare the raw text.";
+        }
+        setCompareJobVisual(0.99);
+        await finishCompareJobAsync();
+        if (compareStatus) compareStatus.textContent = msg;
+      } catch (e) {
+        console.error(e);
+        resetCompareJobOnError();
+        if (compareStatus) compareStatus.textContent = "Could not compare these files.";
+        if (compareOut) compareOut.textContent = "";
+        if (compareStructured) {
+          compareStructured.hidden = false;
+          compareStructured.innerHTML = `<p class="system-compare-report__warn">Could not read one of the files.</p>`;
+        }
+      } finally {
+        if (compareRun instanceof HTMLButtonElement) compareRun.disabled = false;
+      }
     });
   }
 
@@ -16679,30 +17168,9 @@
 
   function setupAdvancedHub() {
     const ADVANCED_LS = "log-viewer-advanced";
-    const PRESET_LS = "log-viewer-advanced-presets";
     const toggle = document.getElementById("advanced-toggle");
     const inline = document.getElementById("advanced-inline");
     const palette = document.getElementById("command-palette-dialog");
-    const caseInput = document.getElementById("advanced-case-dir");
-    const caseRun = document.getElementById("advanced-case-run");
-    const caseStatus = document.getElementById("advanced-case-status");
-    const timelineOut = document.getElementById("advanced-timeline-out");
-    const timelineRebuild = document.getElementById("advanced-timeline-rebuild");
-    const timelineDl = document.getElementById("advanced-timeline-dl");
-    const snapDl = document.getElementById("advanced-snapshot-dl");
-    const presetName = document.getElementById("advanced-preset-name");
-    const presetSave = document.getElementById("advanced-preset-save");
-    const presetExport = document.getElementById("advanced-preset-export");
-    const presetImport = document.getElementById("advanced-preset-import");
-    const presetList = document.getElementById("advanced-preset-list");
-    const diffA = document.getElementById("advanced-diff-a");
-    const diffB = document.getElementById("advanced-diff-b");
-    const diffRun = document.getElementById("advanced-diff-run");
-    const diffOut = document.getElementById("advanced-diff-out");
-    const redactHost = document.getElementById("advanced-redact-host");
-    const redactEmail = document.getElementById("advanced-redact-email");
-    const redactPath = document.getElementById("advanced-redact-path");
-    const redactRun = document.getElementById("advanced-redact-run");
     const modeOff = document.getElementById("advanced-mode-off");
     const paletteFilter = document.getElementById("command-palette-filter");
     const paletteList = document.getElementById("command-palette-list");
@@ -16739,120 +17207,6 @@
       if (inline) inline.hidden = !on;
     }
 
-    function readPresets() {
-      try {
-        const raw = localStorage.getItem(PRESET_LS);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
-      } catch {
-        return [];
-      }
-    }
-
-    function writePresets(arr) {
-      try {
-        localStorage.setItem(PRESET_LS, JSON.stringify(arr));
-      } catch {
-        /* */
-      }
-    }
-
-    function renderPresetList() {
-      if (!presetList) return;
-      presetList.innerHTML = "";
-      readPresets().forEach((p, i) => {
-        const li = document.createElement("li");
-        const name = p && p.name ? String(p.name) : `Preset ${i + 1}`;
-        const applyBtn = document.createElement("button");
-        applyBtn.type = "button";
-        applyBtn.className = "btn btn--ghost";
-        applyBtn.textContent = "Apply";
-        applyBtn.addEventListener("click", () => {
-          if (p && p.theme) {
-            document.documentElement.setAttribute("data-theme", p.theme === "light" ? "light" : "dark");
-            try {
-              localStorage.setItem("log-viewer-theme", p.theme === "light" ? "light" : "dark");
-            } catch {
-              /* */
-            }
-          }
-          if (p && p.hash) {
-            try {
-              location.hash = p.hash;
-            } catch {
-              /* */
-            }
-          }
-        });
-        const delBtn = document.createElement("button");
-        delBtn.type = "button";
-        delBtn.className = "btn btn--ghost";
-        delBtn.textContent = "Delete";
-        delBtn.addEventListener("click", () => {
-          const next = readPresets().filter((_, j) => j !== i);
-          writePresets(next);
-          renderPresetList();
-        });
-        li.appendChild(document.createTextNode(`${name} · `));
-        li.appendChild(applyBtn);
-        li.appendChild(document.createTextNode(" "));
-        li.appendChild(delBtn);
-        presetList.appendChild(li);
-      });
-    }
-
-    function escHtml(s) {
-      return String(s)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-    }
-
-    async function readHeadText(file, max) {
-      return new Promise((resolve) => {
-        const slice = file.slice(0, max);
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result || ""));
-        r.onerror = () => resolve("");
-        r.readAsText(slice);
-      });
-    }
-
-    async function classifyCaseFile(file) {
-      const n = file.name.toLowerCase();
-      if (n.endsWith(".evtx")) return "evtx";
-      if (n.endsWith(".nfo")) return "system";
-      if (n.endsWith(".xml")) return /evtx|elf/i.test(n) ? "evtx" : "system";
-      if (n.includes("dxdiag") && (n.endsWith(".txt") || n.endsWith(".log"))) return "dxdiag";
-      if (n.endsWith(".txt") || n.endsWith(".log")) {
-        const head = await readHeadText(file, 6000);
-        const t = head.trim();
-        if (/^={3,}\s*dxdiag|^-{5,}\s*dxdiag|^dxdiag\s+version/i.test(t)) return "dxdiag";
-        if (/^date,|^time,|sensor|gpu-z|gpu clock|memory clock/i.test(t)) return "gpu";
-        if (/microsoft windows|system information|^\s*<?\?xml/i.test(t)) return "system";
-        return "bsod";
-      }
-      return "bsod";
-    }
-
-    async function assignFilesToInput(selector, files, /** @type {string | null} */ navHash) {
-      if (navHash) {
-        try {
-          location.hash = navHash;
-        } catch {
-          /* */
-        }
-        await new Promise((r) => setTimeout(r, 80));
-      }
-      const input = document.querySelector(selector);
-      if (!(input instanceof HTMLInputElement) || !files.length) return;
-      const dt = new DataTransfer();
-      for (const f of files) dt.items.add(f);
-      input.files = dt.files;
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-
     toggle?.addEventListener("click", () => {
       if (!inline) return;
       if (!isAdvanced()) {
@@ -16873,181 +17227,6 @@
     modeOff?.addEventListener("click", () => {
       setAdvanced(false);
       if (palette instanceof HTMLDialogElement) palette.close();
-    });
-
-    caseRun?.addEventListener("click", async () => {
-      if (!(caseInput instanceof HTMLInputElement) || !caseInput.files?.length) {
-        if (caseStatus) caseStatus.textContent = "Choose a folder first.";
-        return;
-      }
-      if (caseStatus) caseStatus.textContent = "Routing files…";
-      const files = [...caseInput.files];
-      /** @type {Record<string, File[]>} */
-      const buckets = { system: [], bsod: [], gpu: [], evtx: [], dxdiag: [] };
-      for (const f of files) {
-        const tab = await classifyCaseFile(f);
-        if (buckets[tab]) buckets[tab].push(f);
-        else buckets.bsod.push(f);
-      }
-      try {
-        for (const f of buckets.system) await assignFilesToInput("#tool-panel-system .file-input", [f], "#tool-panel-system");
-        for (const f of buckets.bsod) await assignFilesToInput("#tool-panel-bsod .file-input--bsod", [f], "#tool-panel-bsod");
-        if (buckets.gpu.length) await assignFilesToInput("#tool-panel-gpu .file-input--multi", buckets.gpu, "#tool-panel-gpu");
-        for (const f of buckets.evtx) await assignFilesToInput("#tool-panel-evtx .file-input--evtx", [f], "#tool-panel-evtx");
-        for (const f of buckets.dxdiag) await assignFilesToInput("#tool-panel-dxdiag .file-input--dxdiag", [f], "#tool-panel-dxdiag");
-        if (caseStatus) {
-          caseStatus.textContent = `Queued ${files.length} file(s): system ${buckets.system.length}, bsod ${buckets.bsod.length}, gpu ${buckets.gpu.length}, evtx ${buckets.evtx.length}, dxdiag ${buckets.dxdiag.length}.`;
-        }
-      } catch (err) {
-        console.error(err);
-        if (caseStatus) caseStatus.textContent = "Some files could not be routed. See console.";
-      }
-    });
-
-    function collectTimelineText() {
-      const parts = [];
-      document.querySelectorAll("pre.content, .analyzer-meta, .file-meta, .bsod-file-meta").forEach((el) => {
-        if (el instanceof HTMLElement && el.textContent) parts.push(el.textContent);
-      });
-      return parts.join("\n");
-    }
-
-    function extractIsoLikeDates(text) {
-      const re = /\b20\d{2}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?|\b\d{1,2}\/\d{1,2}\/20\d{2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? 20\d{2}\b/gi;
-      const found = text.match(re);
-      return found ? [...new Set(found)] : [];
-    }
-
-    timelineRebuild?.addEventListener("click", () => {
-      if (!timelineOut) return;
-      const dates = extractIsoLikeDates(collectTimelineText());
-      const lines = [`# Timeline (Advanced) · ${new Date().toISOString()}`, `Active tab: ${location.hash || "(default)"}`, ""];
-      lines.push(...dates.map((d) => `- ${d}`));
-      lines.push("", "# Raw excerpts (trimmed)", collectTimelineText().slice(0, 12000));
-      timelineOut.value = lines.join("\n");
-      timelineOut.removeAttribute("readonly");
-    });
-
-    timelineDl?.addEventListener("click", () => {
-      if (!timelineOut) return;
-      const blob = new Blob([timelineOut.value], { type: "text/plain;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `report-timeline-${Date.now()}.txt`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-
-    snapDl?.addEventListener("click", () => {
-      const chunks = [];
-      chunks.push(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Report snapshot</title></head><body>`);
-      chunks.push(`<h1>Report snapshot</h1><p>Generated locally · ${escHtml(new Date().toLocaleString())}</p>`);
-      chunks.push(`<p>Tab: <code>${escHtml(location.hash || "")}</code></p>`);
-      document.querySelectorAll(".tool-panel.panel").forEach((panel) => {
-        const id = panel.id || "";
-        const h2 = panel.querySelector(".panel__head h2");
-        const title = h2 ? h2.textContent : id;
-        chunks.push(`<h2>${escHtml(title || id)}</h2>`);
-        panel.querySelectorAll("pre.content").forEach((pre) => {
-          if (pre instanceof HTMLElement && pre.textContent && pre.textContent.trim()) {
-            chunks.push(`<pre style="white-space:pre-wrap;max-height:24rem;overflow:auto;border:1px solid #ccc;padding:8px">`);
-            chunks.push(escHtml(pre.textContent.slice(0, 12000)));
-            chunks.push(`</pre>`);
-          }
-        });
-      });
-      chunks.push(`</body></html>`);
-      const blob = new Blob(chunks, { type: "text/html;charset=utf-8" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `report-snapshot-${Date.now()}.html`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-
-    presetSave?.addEventListener("click", () => {
-      const name = presetName && "value" in presetName ? String(/** @type {HTMLInputElement} */ (presetName).value).trim() : "";
-      if (!name) {
-        alert("Enter a preset name.");
-        return;
-      }
-      const arr = readPresets();
-      arr.push({
-        name,
-        hash: location.hash || "#tool-panel-system",
-        theme: document.documentElement.getAttribute("data-theme") || "dark",
-      });
-      writePresets(arr);
-      renderPresetList();
-      if (presetName instanceof HTMLInputElement) presetName.value = "";
-    });
-
-    presetExport?.addEventListener("click", () => {
-      const blob = new Blob([JSON.stringify(readPresets(), null, 2)], { type: "application/json" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = `report-presets-${Date.now()}.json`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
-
-    presetImport?.addEventListener("change", () => {
-      const inp = presetImport;
-      if (!(inp instanceof HTMLInputElement) || !inp.files?.[0]) return;
-      const r = new FileReader();
-      r.onload = () => {
-        try {
-          const data = JSON.parse(String(r.result || "[]"));
-          if (!Array.isArray(data)) throw new Error("not array");
-          writePresets(readPresets().concat(data));
-          renderPresetList();
-        } catch {
-          alert("Invalid presets JSON.");
-        }
-        inp.value = "";
-      };
-      r.readAsText(inp.files[0]);
-    });
-
-    diffRun?.addEventListener("click", () => {
-      if (!(diffA instanceof HTMLTextAreaElement) || !(diffB instanceof HTMLTextAreaElement) || !diffOut) return;
-      const la = diffA.value.slice(0, 8000).split("\n");
-      const lb = diffB.value.slice(0, 8000).split("\n");
-      const max = Math.max(la.length, lb.length);
-      const out = [];
-      for (let i = 0; i < max; i++) {
-        const A = la[i];
-        const B = lb[i];
-        if (A === B) out.push(`  ${A ?? ""}`);
-        else {
-          if (A !== undefined) out.push(`- ${A}`);
-          if (B !== undefined) out.push(`+ ${B}`);
-        }
-      }
-      diffOut.textContent = out.join("\n");
-    });
-
-    redactRun?.addEventListener("click", () => {
-      const apply = (txt) => {
-        let s = txt;
-        if (redactHost instanceof HTMLInputElement && redactHost.checked) {
-          s = s.replace(/\b(?:DESKTOP|WIN|LAPTOP)-[A-Z0-9]{4,}\b/gi, "[HOST]");
-        }
-        if (redactEmail instanceof HTMLInputElement && redactEmail.checked) {
-          s = s.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[EMAIL]");
-        }
-        if (redactPath instanceof HTMLInputElement && redactPath.checked) {
-          s = s.replace(/\\Users\\[^\\]+\\/gi, "\\Users\\[user]\\");
-        }
-        return s;
-      };
-      document.querySelectorAll("textarea.bsod-paste__textarea").forEach((el) => {
-        if (el instanceof HTMLTextAreaElement) el.value = apply(el.value);
-      });
-      document.querySelectorAll("pre.content--bsod, pre.content--system, pre.content--dxdiag").forEach((el) => {
-        if (el instanceof HTMLElement) el.textContent = apply(el.textContent || "");
-      });
-      alert("Redaction applied to in-memory text in those fields.");
     });
 
     const PALETTE_CMDS = [
@@ -17071,9 +17250,14 @@
         },
       },
       {
-        label: "Open Advanced tools",
+        label: "Open System tab & Advanced compare",
         run: () => {
           setAdvanced(true);
+          try {
+            location.hash = "#tool-panel-system";
+          } catch {
+            /* */
+          }
           if (inline) {
             requestAnimationFrame(() => {
               try {
@@ -17129,7 +17313,6 @@
     });
 
     syncToggleUi();
-    renderPresetList();
   }
 
   document.querySelectorAll(".panel--system").forEach((p) => {

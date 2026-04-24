@@ -1543,6 +1543,62 @@ details.sys-section:not([open]) .sys-section__chevron {
   margin: 0.65rem var(--panel-pad-x) 0;
 }
 
+/* Single-file (non-Advanced): prompt to run analysis after a file is chosen */
+.system-pending-analyze {
+  margin: 0.5rem var(--panel-pad-x) 0;
+  padding: 0.6rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 185, 0, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+}
+.system-pending-analyze[hidden] {
+  display: none !important;
+}
+.system-pending-analyze__lede {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--text-muted, #9ca3af);
+  max-width: min(100%, 40rem);
+}
+.system-pending-analyze__fname {
+  font-weight: 600;
+  color: #e2e8f0;
+  word-break: break-all;
+}
+html[data-theme="light"] .system-pending-analyze {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+html[data-theme="light"] .system-pending-analyze__fname {
+  color: #0f172a;
+}
+html[data-theme="light"] .system-pending-analyze__lede {
+  color: #475569;
+}
+.panel-load-job__check {
+  display: none;
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  line-height: 1.15rem;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #86efac;
+  border: 1px solid rgba(134, 239, 172, 0.65);
+  border-radius: 50%;
+  background: rgba(22, 101, 52, 0.35);
+}
+.panel-load-job__status--done .panel-load-job__check {
+  display: inline-block;
+}
+
 /* [hidden] alone is overridden by .panel-load-job { display: flex } — keep compare/load jobs actually hidden until JS shows them. */
 .panel-load-job[hidden] {
   display: none !important;
@@ -9941,6 +9997,27 @@ html[data-theme="light"] .panel--system .system-compare-run.btn--secondary:hover
 
 html[data-theme="light"] .panel--system .system-compare-run.btn--secondary:disabled,
 html[data-theme="light"] .panel--system .system-compare-run.btn--secondary[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* After-load Analyze: same purple CTA as Copy raw / Run comparison (lives in .system-pending-analyze, not .system-toolbar). */
+html[data-theme="light"] .panel--system .system-btn-analyze.btn--secondary {
+  border-color: #5b21b6;
+  background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 55%, #5b21b6 100%);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+html[data-theme="light"] .panel--system .system-btn-analyze.btn--secondary:hover {
+  border-color: #6d28d9;
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 55%, #6d28d9 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(91, 33, 182, 0.3);
+}
+html[data-theme="light"] .panel--system .system-btn-analyze.btn--secondary:disabled,
+html[data-theme="light"] .panel--system .system-btn-analyze.btn--secondary[disabled] {
   opacity: 0.6;
   cursor: not-allowed;
   box-shadow: none;

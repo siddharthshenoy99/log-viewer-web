@@ -2985,7 +2985,13 @@
         /Lagring.*Diskar|Diskar.*Lagring|Komponenter.*Lagring|\/Lagring\/|\/Diskar\//i.test(s) ||
         (/Lagring/i.test(s) && /(?:Disk|Volym|Lokal|Enhet|enhet)/i.test(s)) ||
         /Lokal\s+disk\s*\([A-Z]:/i.test(s) ||
-        /Volym\s*\([A-Z]:/i.test(s)
+        /Volym\s*\([A-Z]:/i.test(s) ||
+        /Disque local\s*\([A-Z]:/i.test(s) ||
+        /Lecteur local\s*\([A-Z]:/i.test(s) ||
+        /Lecteur\s+[A-Z]:/i.test(s) ||
+        (/Composants/i.test(s) && /Stockage/i.test(s) && /(Disque|Lecteur|Disques|Volumes?)/i.test(s) && /[A-Z]:/i.test(s)) ||
+        /Composants.*Stockage.*(Disque|Lecteur)/i.test(s) ||
+        /Disque\s+\d+.*Lecteur.*[A-Z]:/i.test(s)
       );
     };
 
@@ -4316,6 +4322,8 @@
           f["Weergavenaam"] ||
           f["Visningsnavn"] ||
           f["Visningsnamn"] ||
+          f["Nom d'affichage"] ||
+          f["Nom d\u2019affichage"] ||
           f["Tjänstnamn"] ||
           f["Tjanstnamn"] ||
           f["Näyttönimi"] ||
@@ -4404,7 +4412,7 @@
         /\bgestartet\b/i.test(s) ||
         /\bwird ausgeführt\b/i.test(s) ||
         /\bläuft\b/i.test(s) ||
-        /\ben cours d['']exécution\b/i.test(s) ||
+        /\ben cours d['\u2019]exécution\b/i.test(s) ||
         /\bfuncionando\b/i.test(s) ||
         /\ben ejecuci[oó]n\b/i.test(s) ||
         /\battivo\b/i.test(s) ||
@@ -4486,7 +4494,7 @@
 
     /** Some pt-BR exports use column tags like {@code Nome_para_exibição} (underscores) instead of spaces. */
     const serviceRecordStartRe =
-      /^(表示名|サービス名|Display Name|Service Name|サービス\s*名|Отображаемое имя|Имя службы|Имя\s*службы|Dienstname|Nom du service|Nombre del servicio|Nome de exibição|Nome de Exibição|Nome_para_exibição|Nome_para_exibicao|Nome_de_exibição|Nome_de_exibicao|Görünen_Ad|Görünen_ad|Gorunen_Ad|Görünen\s+Ad|Görünen\s+ad|Görüntülenen\s+Ad|Hizmet\s+Adı|Hizmet\s+adı|Hizmetin\s+görüntülenen\s+adı|Visningsnamn|Visnings\s+namn|Tjänstnamn|Tjanstnamn)$/iu;
+      /^(表示名|サービス名|Display Name|Service Name|サービス\s*名|Отображаемое имя|Имя службы|Имя\s*службы|Dienstname|Nom du service|Nom d['\u2019]affichage|Nombre del servicio|Nome de exibição|Nome de Exibição|Nome_para_exibição|Nome_para_exibicao|Nome_de_exibição|Nome_de_exibicao|Görünen_Ad|Görünen_ad|Gorunen_Ad|Görünen\s+Ad|Görünen\s+ad|Görüntülenen\s+Ad|Hizmet\s+Adı|Hizmet\s+adı|Hizmetin\s+görüntülenen\s+adı|Visningsnamn|Visnings\s+namn|Tjänstnamn|Tjanstnamn)$/iu;
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!isServicesSectionPath(p)) continue;
@@ -4530,7 +4538,8 @@
         (/\b(запущенн[\s\w,.-]{0,40}служб|работающ[\s\w,.-]{0,40}служб)\b/i.test(p) ||
           /実行中のサービス|起動しているサービス/.test(p) ||
           /çalışan\s+hizmetler|calisan\s+hizmetler/i.test(p) ||
-          /Körande\s+tjänster|kör\s+tjänster|Igång\s+tjänster/i.test(p))
+          /Körande\s+tjänster|kör\s+tjänster|Igång\s+tjänster/i.test(p) ||
+          /en\s+cours\s+d['\u2019]ex[ée]cution|Services en cours|services\s+en\s+cours/i.test(p))
       );
     });
     return { all: all.slice(0, 800), running: running.slice(0, 400) };
@@ -5111,11 +5120,11 @@
    */
   const MSINFO_I18N = {
     summaryPath:
-      /System Summary|Systemübersicht|Résumé du système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
+      /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
     softwareEnvPath:
       /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Programmiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービ스|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
     memoryRowPath:
-      /System Summary|Systemübersicht|Résumé du système|Resumen del sistema|Resumo do sistema|Memory|\bMinne\b|Maskinvaruresurser|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama|Växlingsfil/i,
+      /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumen del sistema|Resumo do sistema|Memory|\bMinne\b|Maskinvaruresurser|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama|Växlingsfil/i,
     /** @param {RegExp | RegExp[]} labelRe */
     itemPatterns(labelRe) {
       return Array.isArray(labelRe) ? labelRe : [labelRe];
@@ -5149,7 +5158,7 @@
       .replace(/\s+/g, " ")
       .trim();
     if (MSINFO_I18N.summaryPath.test(s)) return true;
-    return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения|システムの要約|\bSysteminformation\b|Maskinvaruresurser|\bDator\s*\/\s*Systemöversikt/i.test(
+    return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения|システムの要約|Résumé\s+système|\bSysteminformation\b|Maskinvaruresurser|\bDator\s*\/\s*Systemöversikt/i.test(
       s
     );
   }
@@ -5285,6 +5294,7 @@
         (/^Тип$/i.test((k.item || "").trim()) ||
           /^Tür$/u.test((k.item || "").trim()) ||
           /^Tipo$/iu.test((k.item || "").trim()) ||
+          /^Type$/i.test((k.item || "").trim()) ||
           /^Typ$/i.test((k.item || "").trim()))
     );
     if (!cand.length) return "";
@@ -5296,7 +5306,7 @@
       /\bWindows\s+Error\s+Reporting\b/i.test(String(t || "")) ||
       /\bfault\s+bucket\b/i.test(String(t || ""));
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|à\s+base|processeur|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
@@ -5327,6 +5337,7 @@
           !/^Тип$/i.test(k.trim()) &&
           !/^Tür$/u.test(k.trim()) &&
           !/^Tipo$/iu.test(k.trim()) &&
+          !/^Type$/i.test(k.trim()) &&
           !/^Typ$/i.test(k.trim())
         )
           continue;
@@ -5340,7 +5351,7 @@
       /^application\s+hang$/i.test(String(t || "").trim()) ||
       /\bWindows\s+Error\s+Reporting\b/i.test(String(t || ""));
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|à\s+base|processeur|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
@@ -5881,7 +5892,7 @@
           /^OS Name$/i,
           /^Operativsystemets namn$/iu,
           /^Betriebssystemname$/i,
-          /^Nom du système d'exploitation$/i,
+          /^Nom du système d[\u2019']exploitation$/i,
           /^Nombre del sistema operativo$/i,
           /** Spanish MSInfo “SO” abbreviation for the OS name row. */
           /^Nombre del SO$/i,
@@ -5916,7 +5927,7 @@
           /^OS Name$/i,
           /^Operativsystemets namn$/iu,
           /^Betriebssystemname$/i,
-          /^Nom du système d'exploitation$/i,
+          /^Nom du système d[\u2019']exploitation$/i,
           /^Nombre del sistema operativo$/i,
           /^Nombre del SO$/i,
           /^Название ОС$/i,
@@ -5939,7 +5950,7 @@
           /^Versão$/i,
           /^Betriebssystemversion$/i,
           /^Version du système$/i,
-          /^Version du système d'exploitation$/i,
+          /^Version du système d[\u2019']exploitation$/i,
           /^Versión del sistema operativo$/i,
           /^Versão do sistema operacional$/i,
           /^Версия ОС$/i,
@@ -5955,7 +5966,8 @@
         [
           /^OS Version$/i,
           /^Betriebssystemversion$/i,
-          /^Version du système d'exploitation$/i,
+          /^Version du système$/i,
+          /^Version du système d[\u2019']exploitation$/i,
           /^Версия$/i,
           /^Версия ОС$/i,
           /^バージョン$/,
@@ -5971,6 +5983,8 @@
         [
           /^OS Version$/i,
           /^Betriebssystemversion$/i,
+          /^Version du système$/i,
+          /^Version du système d[\u2019']exploitation$/i,
           /^Версия$/i,
           /^Версия ОС$/i,
           /^バージョン$/,
@@ -5987,6 +6001,8 @@
         const it = (k.item || "").trim();
         const versionish =
           /^Version$/i.test(it) ||
+          /^Version du système$/i.test(it) ||
+          /^Version du système d[\u2019']exploitation$/i.test(it) ||
           /^Betriebssystemversion$/i.test(it) ||
           /^OS Version$/i.test(it) ||
           /^Versión$/i.test(it) ||
@@ -6058,6 +6074,8 @@
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
+          /** fr-FR MSInfo often uses the bare “Type” label in the system summary table. */
+          /^Type$/i,
           /^Type du système$/i,
           /^Tipo de sistema$/i,
           /^Tipo de Sistema$/i,
@@ -6083,6 +6101,7 @@
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
+          /^Type$/i,
           /^Tipo de sistema$/i,
           /^Tipo do sistema$/i,
           /^Тип системы$/i,
@@ -6102,6 +6121,7 @@
           /^Typ av dator$/iu,
           /^Systemets typ$/iu,
           /^Dators typ$/iu,
+          /^Type$/i,
           /^Type du système$/i,
           /^Tipo de sistema$/i,
           /^Tipo do sistema$/i,
@@ -6166,6 +6186,8 @@
           /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
+          /** Some fr-FR builds use the plural “Fuseaux horaires” for the same row. */
+          /^Fuseaux horaires$/i,
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
@@ -6183,6 +6205,7 @@
           /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
+          /^Fuseaux horaires$/i,
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
@@ -6199,6 +6222,7 @@
           /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
+          /^Fuseaux horaires$/i,
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
@@ -6215,6 +6239,7 @@
           /^Tidszon$/iu,
           /^Zeitzone$/i,
           /^Fuseau horaire$/i,
+          /^Fuseaux horaires$/i,
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
@@ -6233,8 +6258,8 @@
           /Ursprungligt installationsdatum/i,
           /Ursprüngliches Installationsdatum/i,
           /^Installationsdatum$/i,
-          /Date d'installation d'origine/i,
-          /Date d'installation originale/i,
+          /Date d[\u2019']installation d[\u2019']origine/i,
+          /Date d[\u2019']installation originale/i,
           /Fecha de instalación original/i,
           /Data de instalação original/i,
           /Data da instalação original/i,
@@ -6253,7 +6278,7 @@
           /Ursprungligt installationsdatum/i,
           /Ursprüngliches Installationsdatum/i,
           /^Installationsdatum$/i,
-          /Date d'installation/i,
+          /Date d[\u2019']installation/i,
           /Orijinal Kurulum Tarihi/u,
           /Orijinal kurulum tarihi/u,
           /^İlk Kurulum Tarihi$/u,
@@ -6268,7 +6293,7 @@
           /Original Install Date/i,
           /Ursprungligt installationsdatum/i,
           /Ursprüngliches Installationsdatum/i,
-          /Date d'installation d'origine/i,
+          /Date d[\u2019']installation d[\u2019']origine/i,
           /Fecha de instalación original/i,
           /Orijinal Kurulum Tarihi/u,
           /Orijinal kurulum tarihi/u,
@@ -6293,7 +6318,7 @@
       ) ||
       (() => {
         const lab =
-          /orijinal\s+kurulum\s+tarihi|ilk\s+kurulum\s+tarihi|kurulum\s+tarihi|original\s+install|fecha\s+de\s+instalación\s+original/i;
+          /orijinal\s+kurulum\s+tarihi|ilk\s+kurulum\s+tarihi|kurulum\s+tarihi|original\s+install|fecha\s+de\s+instalación\s+original|date\s+d[\u2019']installation/i;
         for (const k of kvs) {
           if (!msinfoSummaryPathMatches(k.path)) continue;
           const it = (k.item || "").trim();
@@ -6445,9 +6470,10 @@
     const prNorm = String(platformRole || "").toLocaleLowerCase("tr-TR");
     const pr = prNorm;
     if (
-      /\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu|escritorio|sobremesa|equipo\s+de\s+escritorio|área\s+de\s+trabalho|area\s+de\s+trabalho|stationär\s+dator|stationar\s+dator|skrivbordsdator/i.test(
+      (/\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu|escritorio|sobremesa|equipo\s+de\s+escritorio|área\s+de\s+trabalho|area\s+de\s+trabalho|stationär\s+dator|stationar\s+dator|skrivbordsdator|poste\s+de\s+travail/i.test(
         pr
-      ) &&
+      ) ||
+        /^bureau$/i.test(String(platformRole || "").trim())) &&
       !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|computador\s+móvel|computador\s+movel|surfplatta/i.test(
         pr
       )
@@ -6970,7 +6996,7 @@
           /Paging Files?:\s*Location/i,
           /Auslagerungsdateiort/i,
           /Speicherort der Auslagerungsdatei/i,
-          /Emplacement du fichier d'échange/i,
+          /Emplacement du fichier d[\u2019']échange/i,
           /Ubicación del archivo de paginación/i,
           /Localização do arquivo de paginação/i,
           /Расположение файла подкачки/i,
@@ -7005,7 +7031,7 @@
         if (
           (/^page file$/i.test(it) ||
             /^auslagerungsdatei$/i.test(it) ||
-            /^fichier d'échange$/i.test(it) ||
+            /^fichier d[\u2019']échange$/i.test(it) ||
             /^archivo de paginación$/i.test(it) ||
             /^arquivo de paginação$/i.test(it) ||
             /^файл подкачки$/i.test(it) ||
@@ -7055,7 +7081,7 @@
           if (
             (/^page file$/i.test(kt) ||
               /^auslagerungsdatei$/i.test(kt) ||
-              /^fichier d'échange$/i.test(kt) ||
+              /^fichier d[\u2019']échange$/i.test(kt) ||
               /^archivo de paginación$/i.test(kt) ||
               /^файл подкачки$/i.test(kt) ||
               /^sayfalama\s+dosyası$/iu.test(kt) ||
@@ -7081,6 +7107,8 @@
         /^Installierter physischer Arbeitsspeicher/i,
         /Physischer Arbeitsspeicher.*RAM/i,
         /^Mémoire physique installée/i,
+        /** fr-FR: “(RAM)” appears in the label on some Windows builds. */
+        /^Mémoire physique \(RAM\) installée$/i,
         /^Memoria física instalada/i,
         /^Memória física instalada/i,
         /^Memória Física.*RAM/i,
@@ -7160,7 +7188,10 @@
         /Paging File Space/i,
         /Auslagerungsdateigröße/i,
         /Größe der Auslagerungsdatei/i,
-        /Espace du fichier d'échange/i,
+        /Espace du fichier d[\u2019']échange/i,
+        /Taille (du|maximale du) fichier d[\u2019']échange/i,
+        /Espace (actuel|maximum) du fichier d[\u2019']échange/i,
+        /Taille du fichier d[\u2019']échange/i,
         /Espacio del archivo de paginación/i,
         /Espaço do arquivo de paginação/i,
         /Размер файла подкачки/i,
@@ -8059,6 +8090,21 @@
   }
 
   /**
+   * French (fr-FR / fr-CA) MSInfo strings — “Résumé système”, “Bureau” (platform role = Desktop), “Mémoire…”, “Go” sizes.
+   * @param {string} s
+   */
+  function looksLikeFrenchWindowsLatinHint(s) {
+    const u = String(s || "");
+    return (
+      /\bR[ée]sum[ée]\s+syst[eè]me\b|\bM[ée]moire\s+physique\b|\bM[ée]moire\s+virtuelle\b|\bEnvironnement\s+logiciel\b|\bFuseaux?\s+horaires?\b|\bR[ôo]le\s+de\s+la\s+plateforme\b|\bBureau\b|\bNom\s+du\s+syst[eè]me\b|\bordinateur\s+.{0,20}processeur\b|\bprocesseur\(?s\)?\s+logique/i.test(
+        u
+      ) ||
+      /\b\d+[\d,.\s]*\s*Go\b/i.test(u) ||
+      /\bÉl[ée]ment\b.*\bValeur\b|Élément\s*=/is.test(u)
+    );
+  }
+
+  /**
    * Portuguese (pt-BR / pt) MSInfo strings — often ASCII + diacritics (“Resumo do sistema”, “Nome do sistema operacional”).
    * @param {string} s
    */
@@ -8116,6 +8162,7 @@
     if (/\buyumlu\b/i.test(t)) return true;
     if (looksLikeTurkishWindowsLatinHint(t)) return true;
     if (looksLikeSpanishWindowsLatinHint(t)) return true;
+    if (looksLikeFrenchWindowsLatinHint(t)) return true;
     if (looksLikePortugueseWindowsLatinHint(t)) return true;
     if (looksLikeSwedishWindowsLatinHint(t)) return true;
     /** Spanish GPU / display strings often ASCII-only (“compatible con”, “hercios”). */
@@ -8590,6 +8637,8 @@
     ["Byte)", "bytes)"],
     ["\nByte ", "\nbytes "],
     // --- French (fr + fr-CA overlap) ---
+    ["Résumé système", "System Summary"],
+    ["Fuseaux horaires", "Time Zone"],
     ["Environnement logiciel / Rapports d'erreurs Windows", "Software Environment / Windows Error Reporting"],
     ["Rapports d'erreurs Windows", "Windows Error Reporting"],
     ["Conteneur d'erreurs", "Error container"],
@@ -8615,7 +8664,10 @@
     [", type ", ", type "],
     ["Ordinateur à processeur x64", "x64-based PC"],
     ["Ordinateur à processeur x86", "x86-based PC"],
+    ["PC à base de x64", "x64-based PC"],
+    ["PC à base de x86", "x86-based PC"],
     ["Mémoire physique installée (RAM)", "Installed Physical Memory (RAM)"],
+    ["Mémoire physique (RAM) installée", "Installed Physical Memory (RAM)"],
     ["Mémoire physique installée", "Installed Physical Memory"],
     ["Mémoire physique totale", "Total Physical Memory"],
     ["Mémoire physique disponible", "Available Physical Memory"],
@@ -8637,6 +8689,8 @@
     ["Non", "No"],
     ["Indisponible", "Unavailable"],
     ["NVIDIA-compatible", "NVIDIA-compatible"],
+    /** fr-FR “Locale” (Input / regional) row; apostrophe is often the Unicode U+2019 form. */
+    ["Option régionale", "Locale"],
     // --- Spanish (es) ---
     ["Resumen del sistema", "System Summary"],
     ["Nombre del SO", "OS Name"],
@@ -10428,10 +10482,10 @@
   }
 
   /**
-   * Heuristic: Spanish {@code msinfo32} export (labels + values often ASCII; section Translate must still apply).
+   * Concatenate common MSInfo summary fields for locale heuristics (Spanish vs French vs default).
    * @param {NonNullable<ReturnType<typeof extractSystemSummary>>} sum
    */
-  function msinfoExportLooksSpanish(sum) {
+  function msinfoExportTextBlobForLocale(sum) {
     const mem = sum.memory || {};
     const drives = sum.storageDrives || [];
     const os = sum.os || {};
@@ -10456,21 +10510,38 @@
     for (const d of drives) {
       parts.push(d.title, d.fileSystem, d.totalSize, d.freeSpace, d.used, d.volumeName, d.serialNumber);
     }
-    const blob = parts.filter((p) => p && String(p).trim()).join(" | ");
-    return looksLikeSpanishWindowsLatinHint(blob);
+    return parts.filter((p) => p && String(p).trim()).join(" | ");
   }
 
   /**
-   * {@code <dt>} label: plain English unless the export looks Spanish; then Spanish text in {@link sumI18nSpan} so the section Translate control swaps labels with values.
+   * Heuristic: Spanish {@code msinfo32} export (labels + values often ASCII; section Translate must still apply).
+   * @param {NonNullable<ReturnType<typeof extractSystemSummary>>} sum
+   */
+  function msinfoExportLooksSpanish(sum) {
+    return looksLikeSpanishWindowsLatinHint(msinfoExportTextBlobForLocale(sum));
+  }
+
+  /**
+   * Heuristic: French {@code msinfo32} export (mixed Latin; takes precedence over Spanish when both match).
+   * @param {NonNullable<ReturnType<typeof extractSystemSummary>>} sum
+   */
+  function msinfoExportLooksFrench(sum) {
+    return looksLikeFrenchWindowsLatinHint(msinfoExportTextBlobForLocale(sum));
+  }
+
+  /**
+   * {@code <dt>} label: English by default; Spanish or French when the export looks localized.
    * @param {string} enLabel
    * @param {string} esLabel
+   * @param {string} frLabel
+   * @param {"es" | "fr" | null} summaryLoc
    * @param {(s: string) => string} escFn
-   * @param {boolean} spanishExport
-   * @param {{ forceI18nSpan?: boolean }} i18nOpts
+   * @param {{ forceI18nSpan?: boolean } | undefined} i18nOpts
    */
-  function summaryDlDtLabel(enLabel, esLabel, escFn, spanishExport, i18nOpts) {
-    if (!spanishExport) return `<dt>${escFn(enLabel)}</dt>`;
-    return `<dt>${sumI18nSpan(esLabel, escFn, undefined, i18nOpts)}</dt>`;
+  function summaryDlDtLabel(enLabel, esLabel, frLabel, summaryLoc, escFn, i18nOpts) {
+    if (summaryLoc === "fr") return `<dt>${sumI18nSpan(frLabel, escFn, undefined, i18nOpts)}</dt>`;
+    if (summaryLoc === "es") return `<dt>${sumI18nSpan(esLabel, escFn, undefined, i18nOpts)}</dt>`;
+    return `<dt>${escFn(enLabel)}</dt>`;
   }
 
   /**
@@ -10504,10 +10575,12 @@
       return;
     }
 
-    const spanishExport = msinfoExportLooksSpanish(sum);
-    /** When the export is Spanish, force {@code .sum-i18n} on values in these blocks so section Translate updates every cell together with Spanish {@code <dt>} labels. */
+    const frHit = msinfoExportLooksFrench(sum);
+    const spanishExport = !frHit && msinfoExportLooksSpanish(sum);
+    const summaryLoc = frHit ? "fr" : spanishExport ? "es" : null;
+    /** When the export is Spanish or French, force {@code .sum-i18n} on values so section Translate can update cells together with localized {@code <dt>} labels. */
     const summaryLblOpts = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
-    const sumI18nSummary = spanishExport ? summaryLblOpts : undefined;
+    const sumI18nSummary = summaryLoc ? summaryLblOpts : undefined;
 
     const mbBiosBody = renderMotherboardBiosBody(sum, esc, { forceI18nSpan: true });
     const mbBiosHtml = renderReportCategoryAccordion("Motherboard & BIOS", mbBiosBody, esc, {
@@ -10552,11 +10625,11 @@
     }
 
     const overviewBody = `<dl class="system-summary-dl">
-      ${summaryDlDtLabel("System Type", "Tipo de sistema", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.systemTypeRaw, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Processor", "Procesador", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(sum.processor, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Platform Role", "Rol de plataforma", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.platformRole, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Time Zone", "Zona horaria", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.timeZone, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Classification", "Clasificación", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(sum.systemForm, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("System Type", "Tipo de sistema", "Type du système", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(sum.systemTypeRaw, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Processor", "Procesador", "Processeur", summaryLoc, esc, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(sum.processor, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Platform Role", "Rol de plataforma", "Rôle de la plateforme", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(sum.platformRole, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Time Zone", "Zona horaria", "Fuseau horaire", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(sum.timeZone, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Classification", "Clasificación", "Catégorie d'appareil", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(sum.systemForm, esc, undefined, sumI18nSummary)}</dd>
     </dl>`;
     const overviewHtml = renderReportCategoryAccordion("System Overview", overviewBody, esc, {
       open: true,
@@ -10566,45 +10639,49 @@
 
     const mem = sum.memory || {};
     const memoryBody = `<dl class="system-summary-dl">
-      ${summaryDlDtLabel("Installed Physical Memory (RAM)", "Memoria física instalada (RAM)", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.installedRam, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Total Physical Memory", "Memoria física total", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.totalPhysical, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Available Physical Memory", "Memoria física disponible", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.availablePhysical, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Total Virtual Memory", "Memoria virtual total", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.totalVirtual, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Available Virtual Memory", "Memoria virtual disponible", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.availableVirtual, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Page File Space", "Espacio del archivo de paginación", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(mem.pageFileSpace, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Page File Location(s)", "Ubicación del archivo de paginación", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(mem.pageFileLocation, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Installed Physical Memory (RAM)", "Memoria física instalada (RAM)", "Mémoire physique (RAM) installée", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(mem.installedRam, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Total Physical Memory", "Memoria física total", "Mémoire physique totale", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(mem.totalPhysical, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Available Physical Memory", "Memoria física disponible", "Mémoire physique disponible", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(mem.availablePhysical, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Total Virtual Memory", "Memoria virtual total", "Mémoire virtuelle totale", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(mem.totalVirtual, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Available Virtual Memory", "Memoria virtual disponible", "Mémoire virtuelle disponible", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(mem.availableVirtual, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Page File Space", "Espacio del archivo de paginación", "Espace actuel du fichier d'échange", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(mem.pageFileSpace, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Page File Location(s)", "Ubicación del archivo de paginación", "Emplacement du fichier d'échange", summaryLoc, esc, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(mem.pageFileLocation, esc, undefined, sumI18nSummary)}</dd>
     </dl>`;
     const memoryHtml = renderReportCategoryAccordion("Memory Information", memoryBody, esc, {
       icon: "memory",
-      alwaysOfferTranslate: spanishExport,
+      alwaysOfferTranslate: !!summaryLoc,
     });
 
     const storageDrives = sum.storageDrives || [];
+    const storageEmpty = `<p class="summary-empty">No disk or volume details found in this export (look for <strong>Components → Storage → Disks</strong> in MSInfo).</p>`;
     const storageBody =
       storageDrives.length > 0
         ? `<div class="system-ext-stack">${storageDrives
             .map(
               (d) => `<article class="system-storage-card"><h4 class="system-storage-card__title">${sumI18nSpan(d.title, esc, undefined, sumI18nSummary)}</h4>
       <dl class="system-summary-dl system-summary-dl--compact">
-        ${summaryDlDtLabel("File System", "Sistema de archivos", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.fileSystem, esc, undefined, sumI18nSummary)}</dd>
-        ${summaryDlDtLabel("Total Size", "Tamaño total", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.totalSize, esc, undefined, sumI18nSummary)}</dd>
-        ${summaryDlDtLabel("Free Space", "Espacio libre", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.freeSpace, esc, undefined, sumI18nSummary)}</dd>
-        ${summaryDlDtLabel("Used", "Espacio usado", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.used, esc, undefined, sumI18nSummary)}</dd>
-        ${summaryDlDtLabel("Volume Name", "Nombre de volumen", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.volumeName, esc, undefined, sumI18nSummary)}</dd>
-        ${summaryDlDtLabel("Serial Number", "Número de serie", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(d.serialNumber, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("File System", "Sistema de archivos", "Système de fichiers", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(d.fileSystem, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Total Size", "Tamaño total", "Taille totale", summaryLoc, esc, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.totalSize, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Free Space", "Espacio libre", "Espace libre", summaryLoc, esc, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.freeSpace, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Used", "Espacio usado", "Espace utilisé", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(d.used, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Volume Name", "Nombre de volumen", "Nom du volume", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(d.volumeName, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Serial Number", "Número de serie", "Numéro de série", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(d.serialNumber, esc, undefined, sumI18nSummary)}</dd>
       </dl></article>`
             )
             .join("")}</div>`
-        : `<p class="summary-empty">No disk or volume details found in this export (look for <strong>Components → Storage → Disks</strong> in MSInfo).</p>`;
+        : storageEmpty;
     const storageHtml = renderReportCategoryAccordion("Storage Drives", storageBody, esc, {
       count: storageDrives.length || null,
       icon: "disk",
     });
 
     const startups = sum.startupPrograms || [];
+    const _startupHead = spanishExport
+      ? `<thead><tr><th scope="col">Nombre</th><th scope="col">Comando</th><th scope="col">Ubicación</th><th scope="col">Usuario</th></tr></thead>`
+      : `<thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead>`;
     const startupBody =
       startups.length > 0
-        ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Startup programs"><thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead><tbody>${startups
+        ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Startup programs">${_startupHead}<tbody>${startups
             .map(
               (s) =>
                 `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.command, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.location, esc)}</td><td>${sumI18nSpan(s.user, esc)}</td></tr>`
@@ -10637,16 +10714,15 @@
             )
             .join("")}</tbody></table></div>`
         : `<p class="summary-empty">No service rows found.</p>`;
-    const servicesBody = svcRows(svcAll);
+    const servicesEmpty = `<p class="summary-empty">No service rows found.</p>`;
+    const servicesBody = svcAll.length > 0 ? svcRows(svcAll) : servicesEmpty;
     const servicesHtml = renderReportCategoryAccordion("Services", servicesBody, esc, {
       count: svcAll.length || null,
       icon: "services",
       alwaysOfferTranslate: svcOfferTranslate,
     });
-    const runningBody =
-      runningList.length > 0
-        ? svcRows(runningList)
-        : `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Em execução</em>, <em>Çalışıyor</em>, <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
+    const servicesRunMsg = `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Em execução</em>, <em>Çalışıyor</em>, <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
+    const runningBody = runningList.length > 0 ? svcRows(runningList) : servicesRunMsg;
     const runningHtml = renderReportCategoryAccordion("Running Services", runningBody, esc, {
       count: runningList.length || null,
       icon: "running",
@@ -10668,10 +10744,10 @@
 
     const os = sum.os || { name: "", versionLine: "", build: "", installDate: "" };
     const osDl = `<dl class="system-summary-dl">
-      ${summaryDlDtLabel("OS Name", "Nombre del SO", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(os.name, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Version", "Versión", esc, spanishExport, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(os.versionLine, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Build", "Compilación", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(os.build, esc, undefined, sumI18nSummary)}</dd>
-      ${summaryDlDtLabel("Original Install Date", "Fecha de instalación original", esc, spanishExport, summaryLblOpts)}<dd>${sumI18nSpan(os.installDate, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("OS Name", "Nombre del SO", "Nom du système d'exploitation", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(os.name, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Version", "Versión", "Version", summaryLoc, esc, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(os.versionLine, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Build", "Compilación", "Build", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(os.build, esc, undefined, sumI18nSummary)}</dd>
+      ${summaryDlDtLabel("Original Install Date", "Fecha de instalación original", "Date d'installation d'origine", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(os.installDate, esc, undefined, sumI18nSummary)}</dd>
     </dl>`;
     const osBody = `${osDl}${renderWindowsUpdatesOsEmbed(sum, esc)}`;
     const osHtml = renderReportCategoryAccordion("OS Information", osBody, esc, {
@@ -12819,6 +12895,10 @@
     const loadLabel = panel.querySelector(".system-panel-load__label");
     const loadStatusRow = panel.querySelector(".system-panel-load__status");
     const loadPercentEl = panel.querySelector(".system-panel-load__percent");
+    const loadCheck = panel.querySelector("[data-system-load-check]");
+    const pendingAnalyzeEl = panel.querySelector("[data-system-pending-analyze]");
+    const pendingFnameEl = panel.querySelector("[data-pending-fname]");
+    const btnAnalyze = panel.querySelector("[data-system-analyze]");
     const systemCompare = document.getElementById("advanced-system-compare");
     const compareDrop1 = systemCompare?.querySelector(".dropzone--compare-1");
     const compareDrop2 = systemCompare?.querySelector(".dropzone--compare-2");
@@ -12834,10 +12914,22 @@
     const SYSTEM_COMPARE_MAX_CHARS = 200000;
     /** @type {AbortController | null} */
     let systemLoadAbort = null;
-    /** @type {{ name: string, buffer: ArrayBuffer, label: string, fileMetaBase: string, msiRepairedXml: string | null, msiOriginalDecoded: string, msiFixedRaw: string | null, msiViewOriginal: boolean } | null} */
+    /** @type {{ name: string, buffer: ArrayBuffer, label: string, fileMetaBase: string, msiRepairedXml: string | null, msiOriginalDecoded: string, msiFixedRaw: string | null, msiViewOriginal: boolean, analyzed?: boolean } | null} */
     let state = null;
     /** @type {ReturnType<typeof setTimeout> | null} */
     let searchDebounce = null;
+
+    function isSystemAdvanced() {
+      return document.documentElement.getAttribute("data-advanced") === "on";
+    }
+
+    function syncPendingAnalyzeUi() {
+      if (!pendingAnalyzeEl || !btnAnalyze) return;
+      const show = !!state && state.analyzed === false && !isSystemAdvanced();
+      pendingAnalyzeEl.hidden = !show;
+      btnAnalyze.disabled = !show;
+      if (pendingFnameEl && state) pendingFnameEl.textContent = state.name;
+    }
 
     function setVisible(loaded) {
       if (toolbarWrap) toolbarWrap.hidden = !loaded;
@@ -13072,10 +13164,103 @@
       }
       if (searchInput && searchInput.value.trim()) performRawSearch(searchInput.value);
       if (onStage) onStage(1, "done");
+      if (state) state.analyzed = true;
+      syncPendingAnalyzeUi();
+    }
+
+    /** @param {string} [lineLabel] */
+    function setSystemPanelLoadProgress(frac, lineLabel) {
+      const f = Math.max(0, Math.min(1, frac));
+      const p = Math.round(f * 100);
+      const line = lineLabel != null && lineLabel !== "" ? lineLabel : "Comparing";
+      if (loadProgress) {
+        loadProgress.value = p;
+        loadProgress.max = 100;
+      }
+      if (loadPercentEl) {
+        loadPercentEl.textContent = `${p}%`;
+        loadPercentEl.hidden = false;
+        loadPercentEl.setAttribute("aria-label", `${line}, ${p} percent complete`);
+      }
+      if (loadLabel) loadLabel.textContent = line;
+    }
+
+    /** @param {string} [initialLine] */
+    function startSystemPanelLoadJob(initialLine) {
+      if (!loadJobEl) return;
+      loadJobEl.hidden = false;
+      loadJobEl.classList.remove("panel-load-job--phase-read");
+      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+      setSystemPanelLoadProgress(0, initialLine);
+    }
+
+    async function finishSystemPanelLoadJobAsync() {
+      if (loadProgress) loadProgress.value = 100;
+      if (loadPercentEl) {
+        loadPercentEl.textContent = "100%";
+        loadPercentEl.hidden = false;
+        const doneLine = loadLabel?.textContent && loadLabel.textContent.startsWith("Analyzing") ? "Analyzing" : "Comparing";
+        loadPercentEl.setAttribute("aria-label", `${doneLine}, 100 percent, completed`);
+      }
+      if (loadStatusRow) loadStatusRow.classList.add("panel-load-job__status--done");
+      if (loadLabel) loadLabel.textContent = "Completed";
+      await new Promise((r) => setTimeout(r, 520));
+      if (loadJobEl) loadJobEl.hidden = true;
+      if (loadPercentEl) {
+        loadPercentEl.textContent = "";
+        loadPercentEl.hidden = true;
+        loadPercentEl.removeAttribute("aria-label");
+      }
+      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+      if (loadLabel) loadLabel.textContent = "Comparing";
+    }
+
+    function resetSystemPanelLoadJobOnError() {
+      if (loadJobEl) loadJobEl.hidden = true;
+      if (loadProgress) loadProgress.value = 0;
+      if (loadPercentEl) {
+        loadPercentEl.textContent = "";
+        loadPercentEl.hidden = true;
+        loadPercentEl.removeAttribute("aria-label");
+      }
+      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+      if (loadLabel) loadLabel.textContent = "Comparing";
+    }
+
+    async function runSystemAnalyze() {
+      if (!state || state.analyzed) return;
+      systemLoadAbort?.abort();
+      systemLoadAbort = new AbortController();
+      const signal = systemLoadAbort.signal;
+      if (pendingAnalyzeEl) pendingAnalyzeEl.hidden = true;
+      if (btnAnalyze) btnAnalyze.disabled = true;
+      startSystemPanelLoadJob("Analyzing · Preparing…");
+      try {
+        await applyDecode({
+          signal,
+          onStage(frac, msg) {
+            if (msg === "done") return;
+            setSystemPanelLoadProgress(frac, `Analyzing · ${msg}`);
+          },
+        });
+        await finishSystemPanelLoadJobAsync();
+      } catch (e) {
+        if (e && (/** @type {Error} */ (e).name === "AbortError" || /** @type {any} */ (e).code === 20)) {
+          /* cleared or new load */
+        } else {
+          console.error(e);
+          if (meta) meta.textContent = "Could not parse this file.";
+        }
+        resetSystemPanelLoadJobOnError();
+        if (state && !state.analyzed) {
+          if (pendingAnalyzeEl) pendingAnalyzeEl.hidden = false;
+          if (btnAnalyze) btnAnalyze.disabled = false;
+        }
+        syncPendingAnalyzeUi();
+      }
     }
 
     async function loadFile(file) {
-      /** Progress bar is only used for “Run comparison”; main load is silent. */
       systemLoadAbort?.abort();
       systemLoadAbort = new AbortController();
       const signal = systemLoadAbort.signal;
@@ -13097,6 +13282,7 @@
         clearCompareUi();
         const buffer = await file.arrayBuffer();
         signal.throwIfAborted();
+        const deferDecode = !isSystemAdvanced();
         state = {
           name: file.name,
           buffer,
@@ -13106,10 +13292,23 @@
           msiOriginalDecoded: "",
           msiFixedRaw: null,
           msiViewOriginal: false,
+          analyzed: false,
         };
         encodingSelect.value = "auto";
         setVisible(true);
-        await applyDecode(undefined);
+        if (deferDecode) {
+          if (pre) pre.textContent = "";
+          if (summaryEl) summaryEl.innerHTML = "";
+          if (btnCopyRepaired) btnCopyRepaired.hidden = true;
+          if (btnMsiRawToggle) btnMsiRawToggle.hidden = true;
+          if (meta) {
+            const kb = (buffer.byteLength / 1024).toFixed(1);
+            meta.textContent = `${file.name} · ${kb} KiB — click Analyze to parse.`;
+          }
+          syncPendingAnalyzeUi();
+        } else {
+          await applyDecode({ signal });
+        }
         signal.throwIfAborted();
         if (compareInput1 instanceof HTMLInputElement) {
           const dt = new DataTransfer();
@@ -13133,6 +13332,7 @@
           performRawSearch("");
           if (searchResults) searchResults.hidden = true;
           setVisible(false);
+          syncPendingAnalyzeUi();
         } else {
           console.error(e);
           if (meta) meta.textContent = "Could not load this file.";
@@ -13169,7 +13369,10 @@
         input.click();
       }
     });
-    encodingSelect.addEventListener("change", () => void applyDecode(undefined));
+    encodingSelect.addEventListener("change", () => {
+      if (!isSystemAdvanced() && state && !state.analyzed) return;
+      void applyDecode(undefined);
+    });
     panel.addEventListener(
       "click",
       (e) => {
@@ -13237,7 +13440,13 @@
       if (searchResults) searchResults.hidden = true;
       clearCompareUi();
       setVisible(false);
+      syncPendingAnalyzeUi();
     });
+    btnAnalyze?.addEventListener("click", () => void runSystemAnalyze());
+    const dataAdvancedObs = new MutationObserver(() => {
+      if (isSystemAdvanced() && state && !state.analyzed) void runSystemAnalyze();
+    });
+    dataAdvancedObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-advanced"] });
     btnCopy.addEventListener("click", async () => {
       const t = pre?.textContent || "";
       if (!t) return;
@@ -13346,62 +13555,6 @@
       }
     }
 
-    /** @param {number} frac 0..1 */
-    function setCompareJobVisual(frac) {
-      const f = Math.max(0, Math.min(1, frac));
-      const p = Math.round(f * 100);
-      if (loadProgress) {
-        loadProgress.value = p;
-        loadProgress.max = 100;
-      }
-      if (loadPercentEl) {
-        loadPercentEl.textContent = `${p}%`;
-        loadPercentEl.hidden = false;
-        loadPercentEl.setAttribute("aria-label", `Comparing, ${p} percent complete`);
-      }
-      if (loadLabel) loadLabel.textContent = "Comparing";
-    }
-
-    function startCompareJob() {
-      if (!loadJobEl) return;
-      loadJobEl.hidden = false;
-      loadJobEl.classList.remove("panel-load-job--phase-read");
-      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
-      setCompareJobVisual(0);
-    }
-
-    async function finishCompareJobAsync() {
-      if (loadProgress) loadProgress.value = 100;
-      if (loadPercentEl) {
-        loadPercentEl.textContent = "100%";
-        loadPercentEl.hidden = false;
-        loadPercentEl.setAttribute("aria-label", "Comparing, 100 percent, completed");
-      }
-      if (loadStatusRow) loadStatusRow.classList.add("panel-load-job__status--done");
-      if (loadLabel) loadLabel.textContent = "Completed";
-      await new Promise((r) => setTimeout(r, 520));
-      if (loadJobEl) loadJobEl.hidden = true;
-      if (loadPercentEl) {
-        loadPercentEl.textContent = "";
-        loadPercentEl.hidden = true;
-        loadPercentEl.removeAttribute("aria-label");
-      }
-      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
-      if (loadLabel) loadLabel.textContent = "Comparing";
-    }
-
-    function resetCompareJobOnError() {
-      if (loadJobEl) loadJobEl.hidden = true;
-      if (loadProgress) loadProgress.value = 0;
-      if (loadPercentEl) {
-        loadPercentEl.textContent = "";
-        loadPercentEl.hidden = true;
-        loadPercentEl.removeAttribute("aria-label");
-      }
-      if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
-      if (loadLabel) loadLabel.textContent = "Comparing";
-    }
-
     compareRun?.addEventListener("click", async () => {
       const f1 = compareInput1 instanceof HTMLInputElement && compareInput1.files?.[0] ? compareInput1.files[0] : null;
       const f2 = compareInput2 instanceof HTMLInputElement && compareInput2.files?.[0] ? compareInput2.files[0] : null;
@@ -13431,33 +13584,33 @@
       showAdvancedForCompare();
       if (compareStatus) compareStatus.textContent = "";
       if (compareRun instanceof HTMLButtonElement) compareRun.disabled = true;
-      startCompareJob();
+      startSystemPanelLoadJob("Comparing");
       const compareReadAbort = new AbortController();
       try {
         const enc = encodingSelect instanceof HTMLSelectElement ? encodingSelect.value : "auto";
-        setCompareJobVisual(0.02);
+        setSystemPanelLoadProgress(0.02, "Comparing");
         await yieldToMain();
         const bufA = await readFileAsArrayBufferWithProgress(f1, compareReadAbort.signal, (frac) => {
-          setCompareJobVisual(0.02 + 0.14 * frac);
+          setSystemPanelLoadProgress(0.02 + 0.14 * frac, "Comparing");
         });
-        setCompareJobVisual(0.16);
+        setSystemPanelLoadProgress(0.16, "Comparing");
         await yieldToMain();
         const bufB = await readFileAsArrayBufferWithProgress(f2, compareReadAbort.signal, (frac) => {
-          setCompareJobVisual(0.16 + 0.15 * frac);
+          setSystemPanelLoadProgress(0.16 + 0.15 * frac, "Comparing");
         });
-        setCompareJobVisual(0.32);
+        setSystemPanelLoadProgress(0.32, "Comparing");
         await yieldToMain();
         const { text: rawA } = decodeBuffer(bufA, "system", enc);
-        setCompareJobVisual(0.38);
+        setSystemPanelLoadProgress(0.38, "Comparing");
         await yieldToMain();
         const { text: rawB } = decodeBuffer(bufB, "system", enc);
-        setCompareJobVisual(0.45);
+        setSystemPanelLoadProgress(0.45, "Comparing");
         await yieldToMain();
         const recA = parseMsInfoDocumentWithRecovery(rawA);
-        setCompareJobVisual(0.55);
+        setSystemPanelLoadProgress(0.55, "Comparing");
         await yieldToMain();
         const recB = parseMsInfoDocumentWithRecovery(rawB);
-        setCompareJobVisual(0.6);
+        setSystemPanelLoadProgress(0.6, "Comparing");
         await yieldToMain();
         const dataA = getMsInfoStructuredDataFromRecovery(recA);
         const dataB = getMsInfoStructuredDataFromRecovery(recB);
@@ -13466,7 +13619,7 @@
         const diffKvs = canStructure
           ? diffMsInfoKvsData(/** @type {any} */ (dataA), /** @type {any} */ (dataB))
           : { onlyA: [], onlyB: [], changed: [], nA: 0, nB: 0 };
-        setCompareJobVisual(0.68);
+        setSystemPanelLoadProgress(0.68, "Comparing");
         await yieldToMain();
         const xmlRepA =
           recA.doc && Array.isArray(/** @type {any} */ (recA.doc)._msinfoRepairs)
@@ -13505,7 +13658,7 @@
             compareStructured.innerHTML = `<p class="system-compare-report__warn">The exports could not be parsed the same way as a normal report. Open Raw line diff, or re-save as .nfo and match Encoding.</p>`;
           }
         }
-        setCompareJobVisual(0.8);
+        setSystemPanelLoadProgress(0.8, "Comparing");
         await yieldToMain();
         if (compareRawDetails) {
           if (!canStructure) compareRawDetails.open = true;
@@ -13521,7 +13674,7 @@
         if (compareOut) {
           compareOut.textContent = lineDiffLines(sa.split("\n"), sb.split("\n"));
         }
-        setCompareJobVisual(0.94);
+        setSystemPanelLoadProgress(0.94, "Comparing");
         await yieldToMain();
         let msg = `Compared “${f1.name}” (1) vs “${f2.name}” (2).`;
         if (canStructure) {
@@ -13534,12 +13687,12 @@
         } else {
           msg += " See “Raw line diff” below to compare the raw text.";
         }
-        setCompareJobVisual(0.99);
-        await finishCompareJobAsync();
+        setSystemPanelLoadProgress(0.99, "Comparing");
+        await finishSystemPanelLoadJobAsync();
         if (compareStatus) compareStatus.textContent = msg;
       } catch (e) {
         console.error(e);
-        resetCompareJobOnError();
+        resetSystemPanelLoadJobOnError();
         if (compareStatus) compareStatus.textContent = "Could not compare these files.";
         if (compareOut) compareOut.textContent = "";
         if (compareStructured) {

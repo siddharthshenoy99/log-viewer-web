@@ -36,7 +36,7 @@
     -->
     <title>NVIDIA Report Viewer</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=loadui19" />
+    <link rel="stylesheet" href="styles.css?v=loadui20" />
     <script>
       (function () {
         try {
@@ -363,6 +363,16 @@
             <input type="file" class="file-input" accept=".nfo,.xml,text/*" />
           </div>
 
+          <div class="system-pending-analyze" data-system-pending-analyze hidden>
+            <p class="system-pending-analyze__lede">
+              <span class="system-pending-analyze__fname" data-pending-fname></span> loaded.
+              <span class="system-pending-analyze__hint"> Click <strong>Analyze</strong> to parse and build the report.</span>
+            </p>
+            <button type="button" class="btn btn--secondary system-btn-analyze" data-system-analyze disabled>
+              Analyze
+            </button>
+          </div>
+
           <section
             class="advanced-inline advanced-inline--in-system"
             id="advanced-inline"
@@ -472,6 +482,7 @@
             <div class="panel-load-job__meta">
               <div class="panel-load-job__status system-panel-load__status" role="status" aria-live="polite">
                 <span class="panel-load-job__spinner" aria-hidden="true"></span>
+                <span class="panel-load-job__check" aria-hidden="true" data-system-load-check>✓</span>
                 <span class="panel-load-job__label system-panel-load__label">Comparing</span>
                 <span class="system-panel-load__percent" hidden aria-label=""></span>
               </div>
@@ -1371,6 +1382,6 @@
     <script src="vendor/jspdf.umd.min.js" charset="utf-8"></script>
     <script src="vendor/html2canvas.min.js" charset="utf-8"></script>
     <!-- Plain script (not ES modules) so file:// works with no local server -->
-    <script src="app.js?v=adv11" charset="utf-8"></script>
+    <script src="app.js?v=adv16" charset="utf-8"></script>
   </body>
 </html>

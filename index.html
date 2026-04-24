@@ -29,14 +29,14 @@
     <!--
       Portable / offline: copy the entire log-viewer-web folder. No npm, Node, Python, build step, CDN,
       database, or remote API. Analysis runs in the browser from local files only.
-      Required: index.html, styles.css, app.js, nvidia-logo.png (same folder). Optional: favicon.svg (tab icon).
+      Required: index.html, styles.css, app.js, nvidia-logo.png (same folder), vendor/jspdf.umd.min.js, vendor/html2canvas.min.js (offline PDF). Optional: favicon.svg (tab icon).
       Optional: Open-Report-Viewer.bat, serve.ps1, PORTABLE-HANDOFF.txt (handoff notes).
-      app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu | #tool-panel-evtx.
+      app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu | #tool-panel-evtx | #tool-panel-dxdiag.
       Network: nothing is fetched for parsing; https:// and ms-settings: links run only when the user clicks them (docs, vendor sites, Windows Settings).
     -->
     <title>NVIDIA Report Viewer</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=evtx16" />
+    <link rel="stylesheet" href="styles.css?v=loadui5" />
     <script>
       (function () {
         try {
@@ -166,9 +166,10 @@
               "#bsod": "#tool-panel-bsod",
               "#gpu": "#tool-panel-gpu",
               "#evtx": "#tool-panel-evtx",
+              "#dxdiag": "#tool-panel-dxdiag",
             };
             if (map[h]) history.replaceState(null, "", map[h]);
-            else if (h && !/^#tool-panel-(system|bsod|gpu|evtx)$/.test(h))
+            else if (h && !/^#tool-panel-(system|bsod|gpu|evtx|dxdiag)$/.test(h))
               history.replaceState(null, "", location.pathname + location.search);
           } catch (e) {}
         })();
@@ -229,6 +230,20 @@
           <span class="tool-tab__title">Event Viewer</span>
           <span class="tool-tab__desc">EVTX / XML · GPU-related IDs</span>
           <span class="tool-tab__shortcut" aria-hidden="true">Shift+4</span>
+        </a>
+        <a
+          class="tool-tab tool-tab--dxdiag"
+          id="tab-dxdiag"
+          role="tab"
+          href="#tool-panel-dxdiag"
+          aria-controls="tool-panel-dxdiag"
+          aria-selected="false"
+          tabindex="-1"
+          title="Shortcut: Shift+5 (outside text fields)"
+        >
+          <span class="tool-tab__title">DxDiag</span>
+          <span class="tool-tab__desc">GPU / display / audio · text export</span>
+          <span class="tool-tab__shortcut" aria-hidden="true">Shift+5</span>
         </a>
       </nav>
 
@@ -329,6 +344,18 @@
               <p class="dropzone__sub">Same parsing as msinfo32 export; UTF-16 and UTF-8 handled automatically.</p>
             </div>
             <input type="file" class="file-input" accept=".nfo,.xml,text/*" />
+          </div>
+
+          <div class="panel-load-job panel-load-job--system" hidden>
+            <div class="panel-load-job__track">
+              <progress class="panel-load-job__progress system-panel-load__progress" max="100" value="0"></progress>
+            </div>
+            <div class="panel-load-job__meta">
+              <div class="panel-load-job__status system-panel-load__status" role="status" aria-live="polite">
+                <span class="panel-load-job__spinner" aria-hidden="true"></span>
+                <span class="panel-load-job__label system-panel-load__label">Analyzing…</span>
+              </div>
+            </div>
           </div>
 
           <div class="system-toolbar-wrap" hidden>
@@ -683,6 +710,17 @@
           <span class="file-meta evtx-file-meta"></span>
           <button type="button" class="btn btn--ghost btn-evtx-clear">Clear</button>
         </div>
+        <div class="panel-load-job panel-load-job--evtx" hidden>
+          <div class="panel-load-job__track">
+            <progress class="panel-load-job__progress evtx-panel-load__progress" max="100" value="0"></progress>
+          </div>
+          <div class="panel-load-job__meta">
+            <div class="panel-load-job__status evtx-panel-load__status" role="status" aria-live="polite">
+              <span class="panel-load-job__spinner" aria-hidden="true"></span>
+              <span class="panel-load-job__label evtx-panel-load__label">Analyzing…</span>
+            </div>
+          </div>
+        </div>
         <div
           class="dropzone dropzone--evtx"
           tabindex="0"
@@ -838,6 +876,85 @@
           </details>
         </div>
       </section>
+
+      <section
+        class="panel panel--dxdiag tool-panel"
+        id="tool-panel-dxdiag"
+        role="tabpanel"
+        aria-labelledby="tab-dxdiag"
+        data-panel="dxdiag"
+      >
+        <div class="panel__head">
+          <div class="panel__head-inner">
+            <div class="panel__icon-wrap" aria-hidden="true">
+              <svg class="panel-icon panel-icon--dxdiag" viewBox="0 0 40 40" focusable="false">
+                <rect
+                  x="5"
+                  y="7"
+                  width="30"
+                  height="22"
+                  rx="2.5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  opacity="0.92"
+                />
+                <path
+                  d="M9 28h22M14 31h10"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  opacity="0.85"
+                />
+                <path
+                  d="M12 14l4 4 8-10"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </div>
+            <div class="panel__head-text">
+              <h2>DxDiag export</h2>
+              <p class="panel__hint">
+                Load a <code>DxDiag.txt</code> from <strong>Run dxdiag → Save All Information</strong>. Summaries for
+                system, <strong>Display Devices</strong>, and sound are parsed locally (same offline rules as the rest of
+                this page).
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="dxdiag-toolbar toolbar" hidden>
+          <span class="file-meta dxdiag-file-meta"></span>
+          <button type="button" class="btn btn--ghost btn-dxdiag-clear">Clear</button>
+        </div>
+        <div
+          class="dropzone dropzone--dxdiag"
+          tabindex="0"
+          role="button"
+          aria-label="Drop DxDiag text file here"
+        >
+          <div class="dropzone__inner">
+            <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
+            <p><strong>Drop <code>DxDiag.txt</code></strong> or click to browse</p>
+            <p class="dropzone__sub">UTF-8 / UTF-16 auto-detect. Typical path: Desktop after saving from dxdiag.</p>
+          </div>
+          <input type="file" class="file-input file-input--dxdiag" accept=".txt,text/plain,text/*" />
+        </div>
+        <div class="dxdiag-body" hidden>
+          <p class="dxdiag-parse-note insight-disclaimer" aria-live="polite"></p>
+          <div class="dxdiag-summary" aria-live="polite"></div>
+          <details class="dxdiag-raw" open>
+            <summary class="dxdiag-raw__summary">Source text</summary>
+            <div class="dxdiag-raw__pre-wrap">
+              <pre class="content content--dxdiag" spellcheck="false"></pre>
+            </div>
+          </details>
+        </div>
+      </section>
       </div>
     </main>
 
@@ -857,8 +974,9 @@
             <h3 id="about-purpose">Purpose</h3>
             <p>
               Read-only helpers for support workflows: structured MSInfo summaries, quick parsing of BSOD / bugcheck
-              text, GPU-Z sensor log charts, and analysis helpers for exported Windows Event Viewer logs (including
-              <code>.evtx</code>), without sending customer data to a remote service from this page. The MSInfo path
+              text, GPU-Z sensor log charts, analysis helpers for exported Windows Event Viewer logs (including
+              <code>.evtx</code>), and <strong>DxDiag</strong> text summaries (display / system / sound blocks), without
+              sending customer data to a remote service from this page. The MSInfo path
               applies tolerant decoding and repair so a wide range of corrupted or partially damaged System Information
               exports can still be read when the underlying content is recoverable. Summaries and labels also support
               multilingual exports through local normalization and offline phrase mapping, with dedicated handling for
@@ -884,6 +1002,10 @@
                 and keyed events may be incomplete on very large logs or unusual providers compared to Event Viewer on a live
                 PC.
               </li>
+              <li>
+                DxDiag parsing expects the standard English section layout from <strong>Save All Information</strong>;
+                localized or older layouts may parse partially — use the source text panel to verify.
+              </li>
             </ul>
           </section>
           <section class="about-dialog__section" aria-labelledby="about-keys">
@@ -892,8 +1014,9 @@
               <li>
                 <strong>Tabs:</strong> <kbd>Shift</kbd>+<kbd>1</kbd> System Information, <kbd>Shift</kbd>+<kbd>2</kbd> BSOD
                 &amp; WinDbg, <kbd>Shift</kbd>+<kbd>3</kbd> GPU-Z logs, <kbd>Shift</kbd>+<kbd>4</kbd> Event Viewer (local
-                <code>.evtx</code>) (physical row keys; skipped in a text field and while this About dialog is open). With
-                focus on a tab, <kbd>Home</kbd> / <kbd>End</kbd> / arrow keys still move between tools.
+                <code>.evtx</code>), <kbd>Shift</kbd>+<kbd>5</kbd> DxDiag text (physical row keys; skipped in a text field
+                and while this About dialog is open). With focus on a tab, <kbd>Home</kbd> / <kbd>End</kbd> / arrow keys
+                still move between tools.
               </li>
               <li><strong>BSOD panel:</strong> <kbd>Ctrl</kbd>+<kbd>Enter</kbd> in the paste box runs analysis.</li>
               <li>
@@ -930,10 +1053,106 @@
       </div>
     </dialog>
 
+    <dialog
+      class="pdf-dialog"
+      id="pdf-export-dialog"
+      data-pdf-theme="system"
+      aria-labelledby="pdf-export-title"
+      aria-describedby="pdf-dialog-kicker"
+    >
+      <div class="pdf-dialog__inner">
+        <div class="pdf-dialog__rim" aria-hidden="true"></div>
+        <header class="pdf-dialog__head">
+          <div class="pdf-dialog__head-text">
+            <p class="pdf-dialog__kicker" id="pdf-dialog-kicker">System Information</p>
+            <h2 id="pdf-export-title">Export to PDF</h2>
+          </div>
+          <button type="button" class="pdf-dialog__close" data-pdf-close aria-label="Close">
+            <span class="pdf-dialog__close-glyph" aria-hidden="true">×</span>
+          </button>
+        </header>
+        <div class="pdf-dialog__body">
+          <p class="pdf-dialog__lead">
+            Build a <strong>local</strong> PDF to share (charts as images, tables as seen). All processing is in this
+            browser; nothing is sent online. The PDF is saved to your device when you pick a file location.
+          </p>
+          <p class="pdf-dialog__unavail" id="pdf-export-unavailable" hidden>
+            <strong>PDF not available</strong> — the bundled
+            <code>vendor/jspdf.umd.min.js</code> and <code>vendor/html2canvas.min.js</code> must sit next to this page
+            (same as for offline use, no download at runtime).
+          </p>
+          <fieldset class="pdf-dialog__field" id="pdf-export-fieldset" aria-label="Scope">
+            <legend>What to include</legend>
+            <label class="pdf-dialog__row">
+              <input type="radio" name="pdf-scope" value="all" checked />
+              <span><strong>All report tabs</strong> — one section per tool; empty tools show a short &ldquo;no data&rdquo; line.</span>
+            </label>
+            <label class="pdf-dialog__row">
+              <input type="radio" name="pdf-scope" value="current" />
+              <span><strong>Current tab only</strong> — the tab selected in the row above (hash link).</span>
+            </label>
+          </fieldset>
+          <label class="pdf-dialog__row pdf-dialog__row--check">
+            <input type="checkbox" id="pdf-light-bg" checked />
+            <span>Print-friendly background (white) for the PDF. Turn off to match the on-screen dark theme in captures.</span>
+          </label>
+        </div>
+        <div class="pdf-dialog__export-panel" id="pdf-export-panel" hidden>
+          <div class="pdf-dialog__export-row" id="pdf-export-state-row">
+            <span class="pdf-dialog__export-ico" aria-hidden="true">
+              <span class="pdf-dialog__spinner" id="pdf-export-spinner"></span>
+              <svg
+                class="pdf-dialog__check-ico"
+                id="pdf-export-check"
+                viewBox="0 0 24 24"
+                width="20"
+                height="20"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  d="M20 6.5L9.5 17.5L4 12"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span class="pdf-dialog__export-heading" id="pdf-export-heading">Exporting</span>
+          </div>
+          <div
+            class="pdf-dialog__bar"
+            id="pdf-export-bar"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            aria-label="PDF export progress"
+          >
+            <div class="pdf-dialog__bar-fill" id="pdf-export-bar-fill" style="width: 0%"></div>
+          </div>
+        </div>
+        <p class="pdf-dialog__status" id="pdf-export-status" role="status" aria-live="polite"></p>
+        <div class="pdf-dialog__foot">
+          <button type="button" class="btn btn--primary pdf-dialog__action pdf-dialog__action--go" id="pdf-export-go">
+            Create PDF&hellip;
+          </button>
+          <button type="button" class="btn btn--secondary pdf-dialog__action pdf-dialog__action--cancel" data-pdf-close>
+            Cancel
+          </button>
+        </div>
+      </div>
+    </dialog>
+
     <footer class="site-footer">
       <div class="site-footer__inner">
         <div class="site-footer__bar">
           <span class="site-footer__version" id="app-version" aria-live="polite"></span>
+          <button type="button" class="site-footer__export" id="pdf-export-open" title="Local PDF with charts and reports">
+            Export to PDF&hellip;
+          </button>
           <button type="button" class="site-footer__about" id="about-dialog-open">
             About · scope, limits &amp; shortcuts
           </button>
@@ -954,7 +1173,8 @@
             </span>
           </span>
           analysis does not upload your logs; only files in this folder are loaded (<code>index.html</code>,
-          <code>styles.css</code>, <code>app.js</code>, <code>nvidia-logo.png</code>). Damaged <code>.nfo</code> files are
+          <code>styles.css</code>, <code>app.js</code>, <code>nvidia-logo.png</code>, and for PDF export
+          <code>vendor/jspdf.umd.min.js</code> + <code>vendor/html2canvas.min.js</code>). Damaged <code>.nfo</code> files are
           repaired in memory when possible (see the recovery note in the summary). If you received a ZIP, use
           <strong>Extract All…</strong> first; opening or running files from inside the ZIP can fail (Windows uses a temp
           folder and may not place every file there). No CDN or npm. Optional <code>serve.ps1</code> only if a browser blocks
@@ -1011,7 +1231,10 @@
         }
       })();
     </script>
+    <!-- Off-line PDF: bundled UMD; no network at runtime. -->
+    <script src="vendor/jspdf.umd.min.js" charset="utf-8"></script>
+    <script src="vendor/html2canvas.min.js" charset="utf-8"></script>
     <!-- Plain script (not ES modules) so file:// works with no local server -->
-    <script src="app.js?v=evtx19" charset="utf-8"></script>
+    <script src="app.js?v=pdf1" charset="utf-8"></script>
   </body>
 </html>

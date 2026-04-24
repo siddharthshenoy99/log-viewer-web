@@ -14,6 +14,8 @@
   --gpu-accent: var(--nv-green);
   /* Event Viewer panel: match black + NVIDIA green in dark mode; light theme overrides below. */
   --evtx-accent: var(--nv-green);
+  /* DxDiag: match black + green in dark mode (see light overrides in panel--dxdiag block). */
+  --dxdiag-accent: var(--nv-green);
   --radius: 12px;
   /* Use wide viewports; cap so line length stays readable on ultrawide */
   --layout-max: min(96vw, 1560px);
@@ -474,6 +476,22 @@ code {
   color: rgba(165, 200, 150, 0.52);
 }
 
+.workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag {
+  opacity: 1;
+  color: #eef6e8;
+  background: rgba(0, 0, 0, 0.38);
+  border-color: rgba(118, 185, 0, 0.45);
+  box-shadow: 0 0 18px rgba(118, 185, 0, 0.12);
+}
+
+.workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag .tool-tab__desc {
+  color: rgba(190, 210, 175, 0.92);
+}
+
+.workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag .tool-tab__shortcut {
+  color: rgba(165, 200, 150, 0.52);
+}
+
 .tool-tab-panels {
   border: 1px solid var(--border);
   border-radius: 0 0 var(--radius) var(--radius);
@@ -845,6 +863,13 @@ details.sys-section:not([open]) .sys-section__chevron {
     0 0 32px rgba(118, 185, 0, 0.08);
 }
 
+.panel--dxdiag {
+  border-color: rgba(118, 185, 0, 0.4);
+  box-shadow:
+    0 0 0 1px var(--nv-green-soft) inset,
+    0 0 32px rgba(118, 185, 0, 0.08);
+}
+
 .panel--bsod {
   border-color: rgba(143, 214, 48, 0.35);
   box-shadow:
@@ -855,7 +880,8 @@ details.sys-section:not([open]) .sys-section__chevron {
 .workspace .tool-panel.panel--system,
 .workspace .tool-panel.panel--bsod,
 .workspace .tool-panel.panel--gpu,
-.workspace .tool-panel.panel--evtx {
+.workspace .tool-panel.panel--evtx,
+.workspace .tool-panel.panel--dxdiag {
   box-shadow: none;
 }
 
@@ -912,6 +938,12 @@ details.sys-section:not([open]) .sys-section__chevron {
   box-shadow: 0 0 22px rgba(118, 185, 0, 0.14);
 }
 
+.panel--dxdiag .panel__icon-wrap {
+  color: var(--dxdiag-accent);
+  border-color: rgba(118, 185, 0, 0.42);
+  box-shadow: 0 0 22px rgba(118, 185, 0, 0.14);
+}
+
 .panel--bsod .panel__icon-wrap {
   color: var(--system-accent);
   border-color: rgba(143, 214, 48, 0.38);
@@ -946,6 +978,10 @@ details.sys-section:not([open]) .sys-section__chevron {
 
 .panel--evtx .panel__head h2 {
   color: var(--evtx-accent);
+}
+
+.panel--dxdiag .panel__head h2 {
+  color: var(--dxdiag-accent);
 }
 
 /* Inline callout in panel hint: same green / weight / tracking as BSOD panel h2, font size from .panel__hint. */
@@ -1011,6 +1047,19 @@ details.sys-section:not([open]) .sys-section__chevron {
   border-color: var(--nv-green);
   background: rgba(118, 185, 0, 0.12);
   box-shadow: 0 0 24px rgba(118, 185, 0, 0.2);
+}
+
+.panel--dxdiag .dropzone--dxdiag.is-dragover {
+  border-color: var(--nv-green);
+  background: rgba(118, 185, 0, 0.12);
+  box-shadow: 0 0 24px rgba(118, 185, 0, 0.2);
+}
+
+.panel--dxdiag .dropzone--dxdiag code {
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(118, 185, 0, 0.32);
+  color: var(--dxdiag-accent);
+  font-weight: 600;
 }
 
 .evtx-edu {
@@ -1145,6 +1194,342 @@ details.sys-section:not([open]) .sys-section__chevron {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.panel-load-job {
+  margin: 0.5rem var(--panel-pad-x) 0;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 185, 0, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+
+.panel-load-job--system {
+  margin: 0.65rem var(--panel-pad-x) 0;
+}
+
+.panel-load-job__track {
+  width: 100%;
+  min-width: 0;
+}
+
+.panel-load-job__progress {
+  display: block;
+  width: 100%;
+  height: 0.55rem;
+  vertical-align: middle;
+  accent-color: var(--nv-green);
+  border-radius: 6px;
+}
+
+.panel-load-job__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.panel-load-job__status {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-height: 1.35rem;
+}
+
+.panel-load-job__spinner {
+  box-sizing: border-box;
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 2px solid rgba(118, 185, 0, 0.28);
+  border-top-color: var(--nv-green);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: panel-load-spin 0.72s linear infinite;
+}
+
+.panel-load-job--phase-read .panel-load-job__spinner {
+  display: none;
+  animation: none;
+}
+
+.panel-load-job__status--done .panel-load-job__spinner {
+  display: none;
+  animation: none;
+}
+
+@keyframes panel-load-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-load-job__spinner {
+    animation: none;
+    border-top-color: rgba(143, 214, 48, 0.75);
+  }
+}
+
+.panel-load-job__label {
+  font-size: 0.82rem;
+  color: #c8e6c2;
+  max-width: min(52vw, 520px);
+}
+
+html[data-theme="light"] .panel-load-job {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+html[data-theme="light"] .panel-load-job__label {
+  color: #334155;
+}
+
+html[data-theme="light"] .panel-load-job__spinner {
+  border-color: rgba(5, 150, 105, 0.22);
+  border-top-color: #059669;
+}
+
+.dxdiag-body {
+  padding: 0 var(--panel-pad-x) 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dxdiag-toolbar {
+  margin: 0.5rem var(--panel-pad-x) 0;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.dxdiag-toolbar .file-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.dxdiag-parse-note:empty {
+  display: none;
+}
+
+.dxdiag-summary {
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: #d4edc4;
+}
+
+.dxdiag-card {
+  margin-bottom: 0.85rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 185, 0, 0.3);
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 0 rgba(118, 185, 0, 0.1);
+}
+
+.dxdiag-card h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--dxdiag-accent);
+}
+
+.dxdiag-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(9rem, 34%) 1fr;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.dxdiag-dl dt {
+  margin: 0;
+  color: #9aac9f;
+  font-weight: 550;
+}
+
+.dxdiag-dl dd {
+  margin: 0;
+  color: #e8f0eb;
+  word-break: break-word;
+}
+
+.dxdiag-raw {
+  margin-top: 0.25rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.dxdiag-raw__summary {
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  font-weight: 600;
+  color: #c8e6c2;
+}
+
+.dxdiag-raw__pre-wrap {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  padding: 0.5rem 0.65rem;
+}
+
+.content--dxdiag {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* DxDiag light: charcoal panel head + warm accents on white. Dark default uses --dxdiag-accent (NVIDIA green). */
+html[data-theme="light"] .panel--dxdiag {
+  border-color: #e5e7eb;
+  background: #ffffff;
+}
+
+html[data-theme="light"] .panel--dxdiag .panel__head {
+  padding: 1rem var(--panel-pad-x) 1.05rem;
+  border-bottom: 1px solid #0f172a;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="light"] .panel--dxdiag .panel__head h2 {
+  color: #fdba74;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .panel--dxdiag .panel__hint {
+  color: #cbd5e1;
+  opacity: 1;
+}
+
+html[data-theme="light"] .panel--dxdiag .panel__hint strong {
+  color: #f8fafc;
+}
+
+html[data-theme="light"] .panel--dxdiag .panel__hint code {
+  background: rgba(120, 45, 10, 0.35);
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  color: #ffedd5;
+  box-shadow: none;
+}
+
+html[data-theme="light"] .panel--dxdiag .panel__icon-wrap {
+  color: #fff4e6;
+  background: linear-gradient(145deg, #ea580c 0%, #7c2d12 100%);
+  border: 1px solid rgba(253, 186, 116, 0.45);
+  box-shadow: 0 2px 10px rgba(120, 45, 10, 0.45);
+}
+
+html[data-theme="light"] .panel--dxdiag .panel-icon--dxdiag {
+  color: #ffffff;
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag {
+  border: 2px dashed #94a3b8;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag:hover,
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag:focus {
+  border-color: #c2410c;
+  background: #fff7ed;
+  box-shadow: 0 4px 20px rgba(194, 65, 12, 0.14);
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag.is-dragover {
+  border-color: #9a3412;
+  background: #ffedd5;
+  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.22);
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag .dropzone__icon {
+  color: #c2410c;
+  opacity: 1;
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag .dropzone__inner p {
+  color: #111827;
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag .dropzone__inner strong {
+  color: #9a3412;
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag code {
+  background: #ffedd5;
+  border: 1px solid rgba(194, 65, 12, 0.35);
+  color: #9a3412;
+  font-weight: 600;
+}
+
+html[data-theme="light"] .panel--dxdiag .dropzone--dxdiag .dropzone__sub {
+  color: #6b7280;
+}
+
+html[data-theme="light"] .dxdiag-card {
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] .dxdiag-card h3 {
+  color: #9a3412;
+  font-weight: 700;
+}
+
+html[data-theme="light"] .dxdiag-summary {
+  color: #334155;
+}
+
+html[data-theme="light"] .panel--dxdiag .dxdiag-toolbar {
+  background: #f8fafc;
+  border-bottom-color: #e2e8f0;
+}
+
+html[data-theme="light"] .panel--dxdiag .dxdiag-toolbar .file-meta {
+  color: #64748b;
+}
+
+html[data-theme="light"] .dxdiag-raw {
+  border-color: #e5e7eb;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] .dxdiag-raw__summary {
+  color: #9a3412;
+  background: linear-gradient(90deg, #fff7ed 0%, #ffffff 100%);
+}
+
+html[data-theme="light"] .dxdiag-raw__pre-wrap {
+  border-top-color: #e5e7eb;
+  background: #f8fafc;
+}
+
+html[data-theme="light"] .content--dxdiag {
+  color: #1e293b;
+  background: transparent;
+}
+
+html[data-theme="light"] .dxdiag-dl dt {
+  color: #64748b;
+}
+
+html[data-theme="light"] .dxdiag-dl dd {
+  color: #0f172a;
 }
 
 .evtx-toolbar {
@@ -4845,7 +5230,8 @@ details.report-category__details:not([open]) .report-category__chevron {
     0 4px 14px rgba(0, 0, 0, 0.2);
 }
 
-.site-footer__about {
+.site-footer__about,
+.site-footer__export {
   margin: 0;
   padding: 0.38rem 0.95rem;
   font: inherit;
@@ -4866,7 +5252,8 @@ details.report-category__details:not([open]) .report-category__chevron {
     box-shadow 0.2s var(--ease-out-expo);
 }
 
-.site-footer__about:hover {
+.site-footer__about:hover,
+.site-footer__export:hover {
   color: #f6fcf4;
   border-color: rgba(143, 214, 48, 0.58);
   background: linear-gradient(165deg, rgba(40, 58, 42, 0.95) 0%, rgba(118, 185, 0, 0.14) 100%);
@@ -4876,10 +5263,749 @@ details.report-category__details:not([open]) .report-category__chevron {
     0 8px 22px rgba(0, 0, 0, 0.32);
 }
 
-.site-footer__about:focus-visible {
+.site-footer__about:focus-visible,
+.site-footer__export:focus-visible {
   outline: none;
   border-color: rgba(143, 214, 48, 0.65);
   box-shadow: 0 0 0 2px rgba(143, 214, 48, 0.2);
+}
+
+/* PDF export: premium modal + accent matches active report tab (data-pdf-theme from JS) */
+.pdf-dialog {
+  /* Default until theme applies (matches System) */
+  --pdf-accent: #8b5cf6;
+  --pdf-accent-rgb: 139, 92, 246;
+  --pdf-accent-mid: rgba(139, 92, 246, 0.4);
+  --pdf-accent-dim: rgba(139, 92, 246, 0.1);
+  --pdf-accent-ghost: rgba(139, 92, 246, 0.2);
+  --pdf-kicker: #c4b5fd;
+  --pdf-h2-tint: #ede9fe;
+  --pdf-surface-veil: rgba(0, 0, 0, 0.34);
+  position: relative;
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: min(90vh, 32rem);
+  padding: 0;
+  border: 1px solid color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 28%, #1a1f1c);
+  border-radius: 14px;
+  color: var(--text);
+  background:
+    linear-gradient(165deg, color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 5%, #0e1411) 0%, #0a0e0c 42%, #060a08 100%),
+    radial-gradient(80% 55% at 8% 0%, rgba(var(--pdf-accent-rgb), 0.1), transparent 65%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 8%, #000) inset,
+    0 24px 70px rgba(0, 0, 0, 0.58);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* System Information — dark: violet (aligns with light .panel--system; PDF uses a stronger chroma) */
+.pdf-dialog[data-pdf-theme="system"] {
+  --pdf-accent: #8b5cf6;
+  --pdf-accent-rgb: 139, 92, 246;
+  --pdf-accent-mid: rgba(139, 92, 246, 0.5);
+  --pdf-accent-dim: rgba(139, 92, 246, 0.12);
+  --pdf-accent-ghost: rgba(167, 139, 250, 0.2);
+  --pdf-kicker: #c4b5fd;
+  --pdf-h2-tint: #f5f3ff;
+}
+
+/* BSOD: matches .tool-tab--bsod + .panel--bsod — #8fd630, rgba(143,214,48) */
+.pdf-dialog[data-pdf-theme="bsod"] {
+  --pdf-accent: #8fd630;
+  --pdf-accent-rgb: 143, 214, 48;
+  --pdf-accent-mid: rgba(143, 214, 48, 0.42);
+  --pdf-accent-dim: rgba(143, 214, 48, 0.1);
+  --pdf-accent-ghost: rgba(143, 214, 48, 0.16);
+  --pdf-kicker: #b0dd90;
+  --pdf-h2-tint: #e8f6e0;
+}
+
+/* GPU-Z: matches .tool-tab--gpu + .panel--gpu h2 (nv green) and tab border rgba(118,185,0) */
+.pdf-dialog[data-pdf-theme="gpu"] {
+  --pdf-accent: #76b900;
+  --pdf-accent-rgb: 118, 185, 0;
+  --pdf-accent-mid: rgba(118, 185, 0, 0.45);
+  --pdf-accent-dim: rgba(118, 185, 0, 0.12);
+  --pdf-accent-ghost: rgba(118, 185, 0, 0.2);
+  --pdf-kicker: #a3c949;
+  --pdf-h2-tint: #eef6e8;
+}
+
+/* Event Viewer: dark = same nvidia green as tab / --evtx-accent; light = cyan to match .panel--evtx (see light block) */
+.pdf-dialog[data-pdf-theme="evtx"] {
+  --pdf-accent: #76b900;
+  --pdf-accent-rgb: 118, 185, 0;
+  --pdf-accent-mid: rgba(118, 185, 0, 0.45);
+  --pdf-accent-dim: rgba(118, 185, 0, 0.12);
+  --pdf-accent-ghost: rgba(118, 185, 0, 0.2);
+  --pdf-kicker: #b8d978;
+  --pdf-h2-tint: #ecfccb;
+}
+
+/* DxDiag PDF theme: same NVIDIA green as .panel--dxdiag / other green tabs (export dialog on DxDiag) */
+.pdf-dialog[data-pdf-theme="dxdiag"] {
+  --pdf-accent: #76b900;
+  --pdf-accent-rgb: 118, 185, 0;
+  --pdf-accent-mid: rgba(118, 185, 0, 0.45);
+  --pdf-accent-dim: rgba(118, 185, 0, 0.12);
+  --pdf-accent-ghost: rgba(118, 185, 0, 0.2);
+  --pdf-kicker: #a3c949;
+  --pdf-h2-tint: #ecfccb;
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog {
+    border-color: rgba(120, 90, 180, 0.4);
+  }
+  .pdf-dialog[data-pdf-theme="bsod"],
+  .pdf-dialog[data-pdf-theme="gpu"],
+  .pdf-dialog[data-pdf-theme="evtx"],
+  .pdf-dialog[data-pdf-theme="dxdiag"] {
+    border-color: rgba(100, 150, 60, 0.38);
+  }
+}
+
+.pdf-dialog__rim {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, var(--pdf-accent) 15%, rgba(255, 255, 255, 0.45) 50%, var(--pdf-accent) 85%, transparent 100%);
+  opacity: 0.95;
+  pointer-events: none;
+  box-shadow: 0 0 22px rgba(var(--pdf-accent-rgb), 0.25);
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog__rim {
+    background: linear-gradient(90deg, transparent, var(--pdf-accent, #76b900), transparent);
+    box-shadow: 0 0 18px rgba(118, 185, 0, 0.2);
+  }
+}
+
+.pdf-dialog::backdrop {
+  background: rgba(3, 8, 5, 0.68);
+  backdrop-filter: blur(5px);
+}
+
+.pdf-dialog__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  padding: 0;
+}
+
+.pdf-dialog__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.85rem;
+  padding: 1.1rem 1.25rem 0.9rem 1.35rem;
+  border-bottom: 1px solid var(--pdf-accent-ghost);
+  background: var(--pdf-surface-veil);
+}
+
+.pdf-dialog__head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.pdf-dialog__kicker {
+  margin: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--pdf-kicker);
+  text-shadow: 0 0 24px var(--pdf-accent-dim);
+}
+
+.pdf-dialog__head h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--pdf-h2-tint);
+  line-height: 1.2;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+}
+
+.pdf-dialog__close {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex-shrink: 0;
+  font: inherit;
+  cursor: pointer;
+  color: var(--pdf-kicker);
+  border: 1px solid var(--pdf-accent-ghost);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  transition: background 0.2s var(--ease-soft), border-color 0.2s, color 0.2s, transform 0.12s var(--ease-spring);
+}
+
+.pdf-dialog__close-glyph {
+  display: block;
+  font-size: 1.35rem;
+  line-height: 1;
+  margin-top: -0.1rem;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.pdf-dialog__close:hover {
+  color: #fff;
+  background: var(--pdf-accent-mid);
+  border-color: color-mix(in srgb, var(--pdf-accent) 55%, #fff3);
+  transform: scale(1.04);
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog__close:hover {
+    border-color: var(--pdf-accent);
+  }
+}
+
+.pdf-dialog__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--pdf-accent-ghost);
+}
+
+.pdf-dialog__body {
+  padding: 1rem 1.35rem 0.65rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.pdf-dialog__lead {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: rgba(228, 242, 232, 0.9);
+  max-width: 38ch;
+  font-weight: 400;
+}
+
+.pdf-dialog__lead strong {
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 1.4em 0 0 var(--pdf-accent-ghost) inset;
+}
+
+.pdf-dialog__unavail {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  background: rgba(50, 24, 0, 0.35);
+  font-size: 0.86rem;
+  line-height: 1.5;
+  color: #ffedd4;
+}
+
+.pdf-dialog__unavail code {
+  font-size: 0.84em;
+  border-color: rgba(251, 180, 80, 0.35);
+}
+
+.pdf-dialog__field {
+  margin: 0;
+  padding: 0.75rem 0.9rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--pdf-accent-ghost);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.2) 0%, rgba(0, 0, 0, 0.1) 100%);
+  box-shadow: 0 0 0 1px color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 6%, transparent) inset, 0 4px 18px rgba(0, 0, 0, 0.15);
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog__field {
+    box-shadow: 0 0 0 1px rgba(118, 185, 0, 0.06) inset, 0 4px 18px rgba(0, 0, 0, 0.12);
+  }
+}
+
+.pdf-dialog__field legend {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 0 0.4rem;
+  color: var(--pdf-kicker);
+  opacity: 0.9;
+}
+
+.pdf-dialog__row {
+  display: flex;
+  gap: 0.55rem 0.7rem;
+  align-items: flex-start;
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: rgba(240, 250, 244, 0.94);
+  cursor: pointer;
+  margin: 0.4rem 0 0;
+}
+
+.pdf-dialog__row--check {
+  margin-top: 0.1rem;
+  padding: 0.4rem 0.15rem 0.15rem 0.15rem;
+  border-top: 1px dashed var(--pdf-accent-ghost);
+}
+
+.pdf-dialog__row input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  accent-color: var(--pdf-accent);
+}
+
+.pdf-dialog__status {
+  min-height: 1.2rem;
+  margin: 0.15rem 1.35rem 0;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--pdf-accent);
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.pdf-dialog__status.pdf-dialog__status--err {
+  color: #ff9a85;
+  opacity: 1;
+}
+
+/* PDF export progress (spinner + bar + "Exported" check) */
+.pdf-dialog__export-panel {
+  margin: 0.4rem 1.35rem 0.1rem;
+  padding: 0.65rem 0.75rem 0.75rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 4%, #080a09);
+  border: 1px solid var(--pdf-accent-ghost);
+}
+
+.pdf-dialog__export-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.pdf-dialog__export-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+}
+
+.pdf-dialog__spinner {
+  display: block;
+  width: 1.05rem;
+  height: 1.05rem;
+  box-sizing: border-box;
+  border: 2px solid var(--pdf-accent-ghost);
+  border-top-color: var(--pdf-accent);
+  border-radius: 50%;
+  animation: pdf-export-spin 0.7s linear infinite;
+}
+
+.pdf-dialog__export-panel.pdf-dialog__export-panel--success .pdf-dialog__spinner {
+  display: none;
+}
+
+.pdf-dialog__check-ico {
+  display: none;
+  color: var(--pdf-accent);
+}
+
+.pdf-dialog__export-panel.pdf-dialog__export-panel--success .pdf-dialog__check-ico {
+  display: block;
+}
+
+.pdf-dialog__export-panel.pdf-dialog__export-panel--success[hidden] .pdf-dialog__check-ico,
+.pdf-dialog__export-panel[hidden] .pdf-dialog__check-ico {
+  display: none;
+}
+
+.pdf-dialog__export-heading {
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--pdf-kicker);
+}
+
+.pdf-dialog__bar {
+  position: relative;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 6%, #121816);
+  overflow: hidden;
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog__export-panel {
+    background: rgba(10, 14, 12, 0.92);
+  }
+  .pdf-dialog__bar {
+    background: rgba(40, 55, 45, 0.45);
+  }
+}
+
+.pdf-dialog__bar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--pdf-accent) 50%, #1a2e20),
+    var(--pdf-accent) 100%
+  );
+  transition: width 0.22s var(--ease-out-expo);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--pdf-accent) 35%, transparent);
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog__bar-fill {
+    background: linear-gradient(90deg, #2d6a3e, #5cff8a);
+  }
+}
+
+@keyframes pdf-export-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pdf-dialog__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem 0.75rem;
+  padding: 0.7rem 1.35rem 1.05rem 1.35rem;
+  border-top: 1px solid var(--pdf-accent-ghost);
+  background: color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 2%, #080a09);
+  margin-top: 0.15rem;
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog__foot {
+    background: rgba(8, 12, 9, 0.96);
+  }
+}
+
+/* Flat, premium action buttons: accent follows tab; avoid heavy 3D gradients on global .btn */
+.pdf-dialog .pdf-dialog__action--go,
+.pdf-dialog .btn.pdf-dialog__action--go {
+  min-width: 9.5rem;
+  padding: 0.5rem 1.15rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #f0faf3 !important;
+  border: 1px solid var(--pdf-accent-mid) !important;
+  border-radius: 9px;
+  background: linear-gradient(175deg, color-mix(in srgb, var(--pdf-accent) 20%, #121a16) 0%, #080c0a 100%) !important;
+  box-shadow:
+    0 0 0 1px var(--pdf-accent-ghost) inset,
+    0 6px 22px var(--pdf-accent-dim) !important;
+  transition: transform 0.14s var(--ease-spring), box-shadow 0.2s var(--ease-out-expo), border-color 0.2s;
+  text-shadow: none;
+}
+
+@supports not (color: color-mix(in srgb, black, white)) {
+  .pdf-dialog .pdf-dialog__action--go,
+  .pdf-dialog .btn.pdf-dialog__action--go {
+    background: linear-gradient(175deg, #1a2218 0%, #050806 100%) !important;
+  }
+}
+
+.pdf-dialog .pdf-dialog__action--go:hover,
+.pdf-dialog .btn.pdf-dialog__action--go:hover {
+  box-shadow: 0 0 0 1px var(--pdf-accent) inset, 0 0 0 1px var(--pdf-accent-ghost) inset, 0 8px 28px var(--pdf-accent-dim) !important;
+  border-color: var(--pdf-accent) !important;
+  color: #fff !important;
+  transform: translateY(-1px);
+}
+
+.pdf-dialog .pdf-dialog__action--cancel,
+.pdf-dialog .btn.pdf-dialog__action--cancel {
+  min-width: 5.4rem;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--pdf-kicker) !important;
+  background: rgba(0, 0, 0, 0.15) !important;
+  border: 1px solid var(--pdf-accent-mid) !important;
+  border-radius: 9px;
+  box-shadow: none !important;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+
+.pdf-dialog .pdf-dialog__action--cancel:hover,
+.pdf-dialog .btn.pdf-dialog__action--cancel:hover {
+  color: #fff !important;
+  background: var(--pdf-accent-ghost) !important;
+  border-color: var(--pdf-accent) !important;
+}
+
+html[data-theme="light"] .pdf-dialog {
+  --pdf-surface-veil: rgba(255, 255, 255, 0.62);
+  color: #0f172a;
+  background: #fff;
+  border-color: color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 32%, #e2e8f0);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 8%, #fff) inset,
+    0 20px 55px rgba(15, 23, 42, 0.1);
+}
+
+html[data-theme="light"] .pdf-dialog__head h2,
+html[data-theme="light"] .pdf-dialog__head .pdf-dialog__kicker {
+  text-shadow: none;
+}
+
+html[data-theme="light"] .pdf-dialog__kicker {
+  color: color-mix(in srgb, var(--pdf-accent) 30%, #334155);
+  opacity: 1;
+}
+
+html[data-theme="light"] .pdf-dialog__head h2 {
+  color: #0f172a;
+  font-size: 1.22rem;
+  font-weight: 700;
+}
+
+/* Light: same palette as .panel--* .panel__head h2 / icon chrome in light mode */
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] {
+  --pdf-accent: #7c3aed;
+  --pdf-accent-rgb: 124, 58, 237;
+  --pdf-accent-mid: rgba(91, 33, 182, 0.35);
+  --pdf-accent-dim: rgba(124, 58, 237, 0.1);
+  --pdf-accent-ghost: rgba(124, 58, 237, 0.12);
+  --pdf-kicker: #6d28d9;
+  --pdf-h2-tint: #4c1d95;
+  border-color: color-mix(in srgb, #7c3aed 22%, #e2e8f0);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #7c3aed 6%, #fff) inset,
+    0 20px 55px rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__head h2,
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__head .pdf-dialog__kicker {
+  text-shadow: none;
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__kicker {
+  color: #6d28d9;
+  opacity: 1;
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__head h2 {
+  color: #4c1d95;
+}
+
+/* BSOD light: rose like .panel--bsod .panel__head h2 */
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="bsod"] {
+  --pdf-accent: #f43f5e;
+  --pdf-accent-rgb: 244, 63, 94;
+  --pdf-accent-mid: rgba(244, 63, 94, 0.35);
+  --pdf-accent-dim: rgba(244, 63, 94, 0.1);
+  --pdf-accent-ghost: rgba(251, 113, 133, 0.15);
+  --pdf-kicker: #e11d48;
+  --pdf-h2-tint: #9f1239;
+  border-color: color-mix(in srgb, #f43f5e 20%, #e2e8f0);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #f43f5e 5%, #fff) inset,
+    0 20px 55px rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="bsod"] .pdf-dialog__kicker {
+  color: #e11d48;
+  opacity: 1;
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="bsod"] .pdf-dialog__head h2 {
+  color: #9f1239;
+}
+
+/* GPU light: emerald like .panel--gpu .panel__head h2 */
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="gpu"] {
+  --pdf-accent: #10b981;
+  --pdf-accent-rgb: 16, 185, 129;
+  --pdf-accent-mid: rgba(16, 185, 129, 0.4);
+  --pdf-accent-dim: rgba(16, 185, 129, 0.1);
+  --pdf-accent-ghost: rgba(52, 211, 153, 0.12);
+  --pdf-kicker: #047857;
+  --pdf-h2-tint: #065f46;
+  border-color: color-mix(in srgb, #34d399 22%, #e2e8f0);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #10b981 5%, #fff) inset,
+    0 20px 55px rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="gpu"] .pdf-dialog__kicker {
+  color: #047857;
+  opacity: 1;
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="gpu"] .pdf-dialog__head h2 {
+  color: #047857;
+}
+
+/* EVTX light: cyan like .panel--evtx .panel__head h2 (distinct from GPU) */
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="evtx"] {
+  --pdf-accent: #22d3ee;
+  --pdf-accent-rgb: 34, 211, 238;
+  --pdf-accent-mid: rgba(6, 182, 212, 0.45);
+  --pdf-accent-dim: rgba(34, 211, 238, 0.1);
+  --pdf-accent-ghost: rgba(34, 211, 238, 0.12);
+  --pdf-kicker: #0891b2;
+  --pdf-h2-tint: #164e63;
+  border-color: color-mix(in srgb, #22d3ee 20%, #e2e8f0);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #22d3ee 5%, #fff) inset,
+    0 20px 55px rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="evtx"] .pdf-dialog__kicker {
+  color: #0891b2;
+  opacity: 1;
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="evtx"] .pdf-dialog__head h2 {
+  color: #0e7490;
+}
+
+/* DxDiag light PDF: warm accent (matches light .panel--dxdiag card / tab chrome). Dark = green via base .pdf-dialog[data-pdf-theme="dxdiag"]. */
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="dxdiag"] {
+  --pdf-accent: #ea580c;
+  --pdf-accent-rgb: 234, 88, 12;
+  --pdf-accent-mid: rgba(234, 88, 12, 0.4);
+  --pdf-accent-dim: rgba(234, 88, 12, 0.1);
+  --pdf-accent-ghost: rgba(251, 146, 60, 0.2);
+  --pdf-kicker: #c2410c;
+  --pdf-h2-tint: #9a3412;
+  border-color: color-mix(in srgb, #f97316 20%, #e2e8f0);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fb923c 4%, #fff) inset,
+    0 20px 55px rgba(15, 23, 42, 0.1);
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="dxdiag"] .pdf-dialog__kicker {
+  color: #c2410c;
+  opacity: 1;
+}
+html[data-theme="light"] .pdf-dialog[data-pdf-theme="dxdiag"] .pdf-dialog__head h2 {
+  color: #9a3412;
+}
+
+html[data-theme="light"] .pdf-dialog__head {
+  border-bottom-color: color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 20%, #e2e8f0);
+  background: linear-gradient(180deg, color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 4%, #fff) 0%, #fff 100%);
+}
+
+html[data-theme="light"] .pdf-dialog__close {
+  color: color-mix(in srgb, var(--pdf-accent) 5%, #475569);
+  border-color: #e2e8f0;
+  background: #f8fafc;
+}
+
+html[data-theme="light"] .pdf-dialog__close:hover {
+  color: #fff;
+  background: var(--pdf-accent, #76b900) !important;
+  border-color: var(--pdf-accent) !important;
+  box-shadow: 0 4px 12px var(--pdf-accent-dim) !important;
+}
+
+html[data-theme="light"] .pdf-dialog__lead,
+html[data-theme="light"] .pdf-dialog__row {
+  color: #475569;
+  max-width: 100%;
+}
+
+html[data-theme="light"] .pdf-dialog__field {
+  background: #f8fafc;
+  border-color: color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 22%, #e2e8f0);
+  box-shadow: none;
+}
+
+html[data-theme="light"] .pdf-dialog__row--check {
+  border-top-color: color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 22%, #e2e8f0);
+}
+
+html[data-theme="light"] .pdf-dialog__field legend {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .pdf-dialog__foot {
+  background: #fafbfc;
+  border-top: 1px solid color-mix(in srgb, rgb(var(--pdf-accent-rgb)) 20%, #e2e8f0);
+}
+
+html[data-theme="light"] .pdf-dialog__lead strong {
+  box-shadow: none;
+  color: #0f172a;
+  background: none;
+}
+
+html[data-theme="light"] .pdf-dialog .btn.pdf-dialog__action--go {
+  color: #fff !important;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.1);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--pdf-accent) 8%, #fff) 0%, var(--pdf-accent) 100%) !important;
+  box-shadow: 0 1px 0 color-mix(in srgb, #fff 20%, var(--pdf-accent)) inset, 0 4px 14px color-mix(in srgb, var(--pdf-accent) 35%, transparent) !important;
+  border: none !important;
+  border: 1px solid color-mix(in srgb, #fff 25%, var(--pdf-accent)) !important;
+}
+
+html[data-theme="light"] .pdf-dialog .btn.pdf-dialog__action--go:hover {
+  box-shadow: 0 0 0 1px #fff2 inset, 0 4px 18px color-mix(in srgb, var(--pdf-accent) 5%, #000) !important;
+  transform: translateY(-0.5px);
+}
+
+html[data-theme="light"] .pdf-dialog .btn.pdf-dialog__action--cancel {
+  background: #fff !important;
+  color: #64748b !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html[data-theme="light"] .pdf-dialog .btn.pdf-dialog__action--cancel:hover {
+  color: #0f172a !important;
+  border-color: var(--pdf-accent) !important;
+  background: color-mix(in srgb, var(--pdf-accent) 4%, #fff) !important;
+}
+
+html[data-theme="light"] .pdf-dialog__status {
+  color: color-mix(in srgb, var(--pdf-accent) 5%, #334155);
+  font-weight: 500;
+}
+
+html[data-theme="light"] .pdf-dialog__export-panel {
+  background: color-mix(in srgb, var(--pdf-accent) 3%, #f1f5f9);
+  border-color: color-mix(in srgb, var(--pdf-accent) 22%, #e2e8f0);
+}
+
+html[data-theme="light"] .pdf-dialog__export-heading {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .pdf-dialog__spinner {
+  border-color: color-mix(in srgb, var(--pdf-accent) 30%, #cbd5e1);
+  border-top-color: var(--pdf-accent);
+}
+
+html[data-theme="light"] .pdf-dialog__bar {
+  background: #e2e8f0;
+}
+
+html[data-theme="light"] .pdf-dialog__unavail {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #7c2d12;
 }
 
 .about-dialog {
@@ -5373,6 +6499,8 @@ html[data-theme="light"] {
   --system-accent: #5b21b6;
   --gpu-accent: #059669;
   --evtx-accent: #0891b2;
+  /* Light DxDiag panel keeps warm accents; use this where card headings share tokens. */
+  --dxdiag-accent: #9a3412;
   --lm-violet-deep: #4c1d95;
   --lm-violet: #5b21b6;
   --lm-violet-mid: #6d28d9;
@@ -5457,6 +6585,17 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-header::after {
   );
 }
 
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(154, 52, 18, 0.24) 22%,
+    rgba(194, 65, 12, 0.36) 50%,
+    rgba(154, 52, 18, 0.24) 78%,
+    transparent 100%
+  );
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .logo-wrap {
   background: linear-gradient(155deg, #ffffff 0%, #faf5ff 100%);
   border-color: rgba(226, 232, 240, 0.95);
@@ -5501,6 +6640,17 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .logo-wrap:hover {
   box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
 }
 
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .logo-wrap {
+  background: linear-gradient(155deg, #ffffff 0%, #fff7ed 100%);
+  border-color: #fed7aa;
+  box-shadow: var(--lm-shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .logo-wrap:hover {
+  border-color: #fdba74;
+  box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .brand-text h1 {
   filter: none;
   background: linear-gradient(108deg, #4c1d95 0%, #5b21b6 45%, #6d28d9 100%);
@@ -5533,6 +6683,14 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .brand-text h1 {
   color: transparent;
 }
 
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .brand-text h1 {
+  filter: none;
+  background: linear-gradient(108deg, #7c2d12 0%, #c2410c 40%, #d97706 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .hero-kicker {
   color: #6d28d9;
   text-shadow: none;
@@ -5553,6 +6711,12 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .hero-kicker {
 
 html[data-theme="light"] body:has(#tool-panel-evtx:target) .hero-kicker {
   color: #0891b2;
+  text-shadow: none;
+  letter-spacing: 0.14em;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .hero-kicker {
+  color: #b45309;
   text-shadow: none;
   letter-spacing: 0.14em;
 }
@@ -5578,6 +6742,10 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-header .tagline
   color: #0891b2;
 }
 
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-header .tagline-arrow__svg {
+  color: #c2410c;
+}
+
 html[data-theme="light"] .lede {
   color: #475569;
   text-shadow: none;
@@ -5597,6 +6765,10 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .lede strong {
 
 html[data-theme="light"] body:has(#tool-panel-evtx:target) .lede strong {
   color: #0e7490;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .lede strong {
+  color: #9a3412;
 }
 
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-header code {
@@ -5621,6 +6793,12 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-header code {
   color: #0e7490;
   background: #ecfeff;
   border-color: #a5f3fc;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-header code {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
 }
 
 html[data-theme="light"] .workspace-invite {
@@ -5651,6 +6829,11 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .workspace-invite {
   background: linear-gradient(180deg, #ffffff 0%, #ecfeff 100%);
 }
 
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .workspace-invite {
+  border-color: #fed7aa;
+  background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%);
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .workspace-invite strong {
   color: #5b21b6;
 }
@@ -5667,6 +6850,10 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .workspace-invite str
   color: #0891b2;
 }
 
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .workspace-invite strong {
+  color: #9a3412;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .workspace-invite .tagline-arrow__svg {
   color: #7c3aed;
 }
@@ -5681,6 +6868,10 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .workspace-invite .tag
 
 html[data-theme="light"] body:has(#tool-panel-evtx:target) .workspace-invite .tagline-arrow__svg {
   color: #0891b2;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .workspace-invite .tagline-arrow__svg {
+  color: #c2410c;
 }
 
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .privacy-badge {
@@ -5708,6 +6899,13 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .privacy-badge {
   color: #0e7490;
   border-color: rgba(165, 243, 252, 0.75);
   background: #ecfeff;
+  box-shadow: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .privacy-badge {
+  color: #9a3412;
+  border-color: rgba(253, 186, 116, 0.8);
+  background: #fff7ed;
   box-shadow: none;
 }
 
@@ -5832,6 +7030,29 @@ html[data-theme="light"] .workspace:has(#tool-panel-evtx:target) .tool-tab--evtx
   color: #67e8f9;
 }
 
+/* DxDiag: active tab = rusted orange bar (unselected = default gray tab styles) */
+html[data-theme="light"] .workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag {
+  position: relative;
+  z-index: 2;
+  color: #0f172a;
+  background: #ffffff;
+  border-color: #e2e8f0;
+  border-bottom-color: #ffffff;
+  box-shadow: 0 -3px 0 #c2410c inset, var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag .tool-tab__title {
+  color: #7c2d12;
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag .tool-tab__desc {
+  color: #64748b;
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag .tool-tab__shortcut {
+  color: #d97706;
+}
+
 html[data-theme="light"] .tool-tab-panels {
   position: relative;
   z-index: 1;
@@ -5876,21 +7097,24 @@ html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-pane
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about,
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__export {
   color: #334155;
   border-color: #e2e8f0;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about:hover {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about:hover,
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__export:hover {
   color: #5b21b6;
   border-color: #c4b5fd;
   background: linear-gradient(180deg, #faf5ff 0%, #f5f3ff 100%);
   box-shadow: var(--lm-shadow-md);
 }
 
-html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about:focus-visible {
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__about:focus-visible,
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__export:focus-visible {
   border-color: #a78bfa;
   box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.22);
 }
@@ -5924,21 +7148,24 @@ html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__version
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about,
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__export {
   color: #334155;
   border-color: #fecdd3;
   background: linear-gradient(180deg, #ffffff 0%, #fffbfb 100%);
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about:hover {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about:hover,
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__export:hover {
   color: #9f1239;
   border-color: #fda4af;
   background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%);
   box-shadow: var(--lm-shadow-md);
 }
 
-html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about:focus-visible {
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__about:focus-visible,
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .site-footer__export:focus-visible {
   border-color: #fb7185;
   box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.28);
 }
@@ -5972,21 +7199,24 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__version 
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about {
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about,
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__export {
   color: #334155;
   border-color: #a7f3d0;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about:hover {
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about:hover,
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__export:hover {
   color: #047857;
   border-color: #6ee7b7;
   background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
   box-shadow: var(--lm-shadow-md);
 }
 
-html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about:focus-visible {
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__about:focus-visible,
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .site-footer__export:focus-visible {
   border-color: #34d399;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.28);
 }
@@ -6020,21 +7250,24 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__version
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about {
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about,
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__export {
   color: #334155;
   border-color: #a5f3fc;
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   box-shadow: var(--lm-shadow-sm);
 }
 
-html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about:hover {
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about:hover,
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__export:hover {
   color: #0e7490;
   border-color: #67e8f9;
   background: linear-gradient(180deg, #ecfeff 0%, #cffafe 100%);
   box-shadow: var(--lm-shadow-md);
 }
 
-html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about:focus-visible {
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__about:focus-visible,
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer__export:focus-visible {
   border-color: #22d3ee;
   box-shadow: 0 0 0 2px rgba(8, 145, 178, 0.3);
 }
@@ -6047,6 +7280,57 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer code {
 
 html[data-theme="light"] body:has(#tool-panel-evtx:target) .site-footer .tagline-arrow__svg {
   color: #0891b2;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__inner {
+  border-color: #fed7aa;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-md);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__inner::before {
+  background: linear-gradient(180deg, #ea580c 0%, #9a3412 48%, #7c2d12 100%);
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__version {
+  color: #9a3412;
+  border-color: #fed7aa;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__about,
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__export {
+  color: #334155;
+  border-color: #fed7aa;
+  background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__about:hover,
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__export:hover {
+  color: #7c2d12;
+  border-color: #fdba74;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__about:focus-visible,
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer__export:focus-visible {
+  border-color: #fb923c;
+  box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.3);
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer code {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer .tagline-arrow__svg {
+  color: #c2410c;
 }
 
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .scroll-to-top {
@@ -6077,6 +7361,13 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .scroll-to-top {
   box-shadow: var(--lm-shadow-sm);
 }
 
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .scroll-to-top {
+  background: #ffffff;
+  border-color: #fed7aa;
+  color: #9a3412;
+  box-shadow: var(--lm-shadow-sm);
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .skip-link {
   background: #ffffff;
   border-color: #e9d5ff;
@@ -6099,6 +7390,12 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .skip-link {
   background: #ffffff;
   border-color: #a5f3fc;
   color: #0891b2;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .skip-link {
+  background: #ffffff;
+  border-color: #fed7aa;
+  color: #9a3412;
 }
 
 html[data-theme="light"] .summary-card {
@@ -6124,6 +7421,10 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog .tagline
 
 html[data-theme="light"] body:has(#tool-panel-evtx:target) .about-dialog .tagline-arrow__svg {
   color: #0891b2;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog .tagline-arrow__svg {
+  color: #c2410c;
 }
 
 html[data-theme="light"] .about-dialog {
@@ -6382,6 +7683,62 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .about-dialog__foot {
   border-top-color: #a5f3fc;
   background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
   padding: 0.85rem 1.25rem 1.05rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__head {
+  border-bottom-color: #fed7aa;
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 55%);
+  padding: 1.15rem 1.25rem 1rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__head h2 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: #7c2d12;
+  font-weight: 700;
+  filter: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__version {
+  color: #9a3412;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__close:focus-visible {
+  box-shadow: 0 0 0 2px rgba(194, 65, 12, 0.38);
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__section h3 {
+  color: #9a3412;
+  font-size: 0.74rem;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.5rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__body code {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__body kbd {
+  color: #9a3412;
+  background: #fff7ed;
+  border-color: #fed7aa;
+  box-shadow: 0 1px 0 #ffffff inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__foot {
+  border-top-color: #fed7aa;
+  background: linear-gradient(180deg, #fffdfb 0%, #ffffff 100%);
+  padding: 0.85rem 1.25rem 1.05rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__foot .btn--secondary:hover {
+  background: #fff7ed;
+  border-color: #fdba74;
+  color: #7c2d12;
+  box-shadow: var(--lm-shadow-md);
 }
 
 html[data-theme="light"] .about-dialog__foot .btn--secondary {

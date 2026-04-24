@@ -2,7 +2,46 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.3.0";
+  const APP_VERSION = "1.4.0";
+
+  /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
+  const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
+
+  function yieldToMain() {
+    return new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  }
+
+  /**
+   * @param {File} file
+   * @param {AbortSignal} signal
+   * @param {(fraction: number) => void} onProgress 0..1 while reading
+   */
+  async function readFileAsArrayBufferWithProgress(file, signal, onProgress) {
+    const size = file.size;
+    if (size <= LARGE_FILE_PROGRESS_THRESHOLD) {
+      onProgress(0.2);
+      const buf = await file.arrayBuffer();
+      signal.throwIfAborted();
+      onProgress(1);
+      return buf;
+    }
+    const chunkSize = 4 * 1024 * 1024;
+    const merged = new Uint8Array(size);
+    let offset = 0;
+    while (offset < size) {
+      signal.throwIfAborted();
+      const slice = file.slice(offset, Math.min(offset + chunkSize, size));
+      const part = await slice.arrayBuffer();
+      signal.throwIfAborted();
+      merged.set(new Uint8Array(part), offset);
+      offset += part.byteLength;
+      onProgress(offset / size);
+      await yieldToMain();
+    }
+    return merged.buffer;
+  }
 
   const CHART_COLORS = [
     "#76b900",
@@ -11887,6 +11926,7 @@
 
     const W = cssW;
     const H = cssH;
+    /* Plot is always the dark "black + green" canvas look; the panel chrome follows html[data-theme] in CSS. */
     ctx.fillStyle = "#0d1210";
     ctx.fillRect(0, 0, W, H);
 
@@ -12617,6 +12657,14 @@
     const rawPreWrap = panel.querySelector(".sys-section__content--raw .system-raw__pre-wrap");
     const btnCopyRepaired = panel.querySelector(".btn-copy-repaired");
     const btnMsiRawToggle = panel.querySelector(".btn-msi-raw-toggle");
+    const loadJobEl = panel.querySelector(".panel-load-job--system");
+    const loadProgress = panel.querySelector(".system-panel-load__progress");
+    const loadLabel = panel.querySelector(".system-panel-load__label");
+    const loadStatusRow = panel.querySelector(".system-panel-load__status");
+    /** @type {AbortController | null} */
+    let systemLoadAbort = null;
+    /** "read" = bytes still loading; "work" = parsed/analyzed. Spinner + "Analyzing…" only in "work". */
+    let systemLoadJobPhase = "read";
 
     /** @type {{ name: string, buffer: ArrayBuffer, label: string, fileMetaBase: string, msiRepairedXml: string | null, msiOriginalDecoded: string, msiFixedRaw: string | null, msiViewOriginal: boolean } | null} */
     let state = null;
@@ -12716,12 +12764,27 @@
       }
     }
 
-    function applyDecode() {
+    /**
+     * @param {{ signal?: AbortSignal, onStage?: (frac: number, msg: string) => void } | undefined} opts
+     */
+    async function applyDecode(opts) {
       if (!state || !pre || !summaryEl) return;
+      const signal = opts?.signal;
+      const onStage = opts?.onStage;
       const enc = encodingSelect.value;
+      if (onStage) {
+        await yieldToMain();
+        signal?.throwIfAborted();
+        onStage(0.08, "Decoding file…");
+      }
       const { text, label } = decodeBuffer(state.buffer, "system", enc);
       state.label = label;
       state.msiOriginalDecoded = text;
+      if (onStage) {
+        signal?.throwIfAborted();
+        onStage(0.38, "Parsing MSInfo…");
+        await yieldToMain();
+      }
       const recovery = parseMsInfoDocumentWithRecovery(text);
       const display = recovery.rawDisplayText != null ? recovery.rawDisplayText : text;
       state.msiFixedRaw = display !== text ? display : null;
@@ -12737,6 +12800,11 @@
 
       /** @type {{ kvs: { path: string, item: string, value: string }[], rows: { path: string, fields: Record<string, string> }[] } | null} */
       let data = null;
+      if (onStage) {
+        signal?.throwIfAborted();
+        onStage(0.72, "Building summary…");
+        await yieldToMain();
+      }
       if (recovery.doc) data = walkMsInfo(recovery.doc);
       else if (recovery.data && recovery.data.kvs.length) data = recovery.data;
 
@@ -12751,13 +12819,58 @@
         renderSystemSummary(summaryEl, null, false, recovery.notes, xmlRep);
       }
       if (searchInput && searchInput.value.trim()) performRawSearch(searchInput.value);
+      if (onStage) onStage(1, "done");
     }
 
-    function loadFile(file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const buffer = reader.result;
-        if (!(buffer instanceof ArrayBuffer)) return;
+    async function loadFile(file) {
+      const useProgressUi = file.size >= LARGE_FILE_PROGRESS_THRESHOLD;
+      let pauseForDoneUi = false;
+      systemLoadAbort?.abort();
+      systemLoadAbort = new AbortController();
+      const signal = systemLoadAbort.signal;
+
+      const showJob = () => {
+        if (loadJobEl && useProgressUi) {
+          systemLoadJobPhase = "read";
+          loadJobEl.classList.add("panel-load-job--phase-read");
+          loadJobEl.hidden = false;
+          if (loadProgress) {
+            loadProgress.value = 0;
+            loadProgress.max = 100;
+          }
+          if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+          if (loadLabel) loadLabel.textContent = "Loading file…";
+        }
+      };
+      const hideJob = () => {
+        if (loadJobEl) {
+          loadJobEl.hidden = true;
+          loadJobEl.classList.remove("panel-load-job--phase-read");
+        }
+      };
+      const setP = (/** @type {number} */ frac, /** @type {string} */ _msg) => {
+        if (loadProgress) loadProgress.value = Math.round(frac * 100);
+        const done = frac >= 1;
+        if (loadStatusRow) loadStatusRow.classList.toggle("panel-load-job__status--done", done);
+        if (loadLabel) {
+          if (done) loadLabel.textContent = "Completed";
+          else if (systemLoadJobPhase === "read") loadLabel.textContent = "Loading file…";
+          else loadLabel.textContent = "Analyzing…";
+        }
+      };
+
+      try {
+        showJob();
+        const buffer = useProgressUi
+          ? await readFileAsArrayBufferWithProgress(file, signal, (frac) => setP(frac * 0.32, ""))
+          : await file.arrayBuffer();
+        signal.throwIfAborted();
+        if (useProgressUi) {
+          systemLoadJobPhase = "work";
+          if (loadJobEl) loadJobEl.classList.remove("panel-load-job--phase-read");
+          if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+          if (loadLabel) loadLabel.textContent = "Analyzing…";
+        }
         state = {
           name: file.name,
           buffer,
@@ -12770,9 +12883,39 @@
         };
         encodingSelect.value = "auto";
         setVisible(true);
-        applyDecode();
-      };
-      reader.readAsArrayBuffer(file);
+        await applyDecode(
+          useProgressUi
+            ? {
+                signal,
+                onStage: (frac, _msg) => setP(0.32 + frac * 0.68, ""),
+              }
+            : undefined,
+        );
+        signal.throwIfAborted();
+        if (useProgressUi) pauseForDoneUi = true;
+      } catch (e) {
+        if (e && (/** @type {Error} */ (e).name === "AbortError" || /** @type {any} */ (e).code === 20)) {
+          state = null;
+          if (pre) pre.textContent = "";
+          if (summaryEl) summaryEl.innerHTML = "";
+          if (btnCopyRepaired) btnCopyRepaired.hidden = true;
+          if (btnMsiRawToggle) btnMsiRawToggle.hidden = true;
+          if (meta) meta.textContent = "Cancelled.";
+          if (searchInput) searchInput.value = "";
+          performRawSearch("");
+          if (searchResults) searchResults.hidden = true;
+          setVisible(false);
+        } else {
+          console.error(e);
+          if (meta) meta.textContent = "Could not load this file.";
+        }
+      } finally {
+        if (useProgressUi && pauseForDoneUi) {
+          setP(1, "");
+          await new Promise((r) => setTimeout(r, 520));
+        }
+        hideJob();
+      }
     }
 
     function preventDefaults(e) {
@@ -12789,11 +12932,11 @@
       dropzone.classList.remove("is-dragover");
       const dt = e.dataTransfer;
       if (!dt || !dt.files.length) return;
-      loadFile(dt.files[0]);
+      void loadFile(dt.files[0]);
     });
     input.addEventListener("change", () => {
       const f = input.files && input.files[0];
-      if (f) loadFile(f);
+      if (f) void loadFile(f);
       input.value = "";
     });
     dropzone.addEventListener("keydown", (e) => {
@@ -12802,7 +12945,7 @@
         input.click();
       }
     });
-    encodingSelect.addEventListener("change", () => applyDecode());
+    encodingSelect.addEventListener("change", () => void applyDecode(undefined));
     if (summaryEl) {
       summaryEl.addEventListener(
         "click",
@@ -12856,6 +12999,8 @@
       });
     }
     btnClear.addEventListener("click", () => {
+      systemLoadAbort?.abort();
+      if (loadJobEl) loadJobEl.hidden = true;
       state = null;
       if (pre) pre.textContent = "";
       if (summaryEl) summaryEl.innerHTML = "";
@@ -13461,6 +13606,59 @@
   ];
 
   /**
+   * @param {string} block single {@code <Event>…</Event>} slice
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function pushParsedXmlEventBlock(block, events) {
+    const idM = /<EventID[^>]*>(\d+)<\/EventID>/i.exec(block);
+    let provider = "";
+    const provOpen = /<Provider\b[^>]*>/i.exec(block);
+    if (provOpen) {
+      const tag = provOpen[0];
+      const p1 = /\bName\s*=\s*"([^"]*)"/i.exec(tag);
+      const p2 = p1 ? null : /\bName\s*=\s*'([^']*)'/i.exec(tag);
+      if (p1) provider = p1[1] || "";
+      else if (p2) provider = p2[1] || "";
+    }
+    let timeIso = "";
+    const tcOpen = /<TimeCreated\b[^>]*>/i.exec(block);
+    if (tcOpen) {
+      const tag = tcOpen[0];
+      const t1 = /\bSystemTime\s*=\s*"([^"]*)"/i.exec(tag);
+      const t2 = t1 ? null : /\bSystemTime\s*=\s*'([^']*)'/i.exec(tag);
+      if (t1) timeIso = t1[1] || "";
+      else if (t2) timeIso = t2[1] || "";
+    }
+    const channelM = /<Channel[^>]*>([^<]*)<\/Channel>/i.exec(block);
+    let message = "";
+    const msgBlock = /<RenderingInfo[^>]*>[\s\S]*?<Message[^>]*>([\s\S]*?)<\/Message>/i.exec(block);
+    if (msgBlock) message = stripHtmlToText(msgBlock[1]).slice(0, 900);
+    if (!message) {
+      const dataParts = [];
+      const dr = /<Data\b[^>]*>([\s\S]*?)<\/Data>/gi;
+      let dm;
+      while ((dm = dr.exec(block))) {
+        const t = stripHtmlToText(dm[1]).trim();
+        if (t) dataParts.push(t);
+      }
+      if (dataParts.length >= 2 && /^\\\\Device\\/i.test(dataParts[0]))
+        message = dataParts.slice(1).join(" · ").slice(0, 900);
+      else message = dataParts.slice(0, 8).join(" · ").slice(0, 900);
+    }
+    const eventId = idM ? Number.parseInt(idM[1], 10) : null;
+    if (eventId == null || Number.isNaN(eventId)) return;
+    const channel = channelM ? channelM[1].trim() : "";
+    events.push({
+      eventId,
+      provider,
+      channel,
+      timeIso,
+      message,
+      confidence: "high",
+    });
+  }
+
+  /**
    * @param {ArrayBuffer | Uint8Array} buffer
    * @returns {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]}
    */
@@ -13470,54 +13668,34 @@
     const re = /<Event\b[^>]*>([\s\S]*?)<\/Event>/gi;
     let m;
     while ((m = re.exec(text))) {
-      const block = m[0];
-      const idM = /<EventID[^>]*>(\d+)<\/EventID>/i.exec(block);
-      let provider = "";
-      const provOpen = /<Provider\b[^>]*>/i.exec(block);
-      if (provOpen) {
-        const tag = provOpen[0];
-        const p1 = /\bName\s*=\s*"([^"]*)"/i.exec(tag);
-        const p2 = p1 ? null : /\bName\s*=\s*'([^']*)'/i.exec(tag);
-        if (p1) provider = p1[1] || "";
-        else if (p2) provider = p2[1] || "";
-      }
-      let timeIso = "";
-      const tcOpen = /<TimeCreated\b[^>]*>/i.exec(block);
-      if (tcOpen) {
-        const tag = tcOpen[0];
-        const t1 = /\bSystemTime\s*=\s*"([^"]*)"/i.exec(tag);
-        const t2 = t1 ? null : /\bSystemTime\s*=\s*'([^']*)'/i.exec(tag);
-        if (t1) timeIso = t1[1] || "";
-        else if (t2) timeIso = t2[1] || "";
-      }
-      const channelM = /<Channel[^>]*>([^<]*)<\/Channel>/i.exec(block);
-      let message = "";
-      const msgBlock = /<RenderingInfo[^>]*>[\s\S]*?<Message[^>]*>([\s\S]*?)<\/Message>/i.exec(block);
-      if (msgBlock) message = stripHtmlToText(msgBlock[1]).slice(0, 900);
-      if (!message) {
-        const dataParts = [];
-        const dr = /<Data\b[^>]*>([\s\S]*?)<\/Data>/gi;
-        let dm;
-        while ((dm = dr.exec(block))) {
-          const t = stripHtmlToText(dm[1]).trim();
-          if (t) dataParts.push(t);
-        }
-        if (dataParts.length >= 2 && /^\\\\Device\\/i.test(dataParts[0]))
-          message = dataParts.slice(1).join(" · ").slice(0, 900);
-        else message = dataParts.slice(0, 8).join(" · ").slice(0, 900);
-      }
-      const eventId = idM ? Number.parseInt(idM[1], 10) : null;
-      if (eventId == null || Number.isNaN(eventId)) continue;
-      const channel = channelM ? channelM[1].trim() : "";
-      events.push({
-        eventId,
-        provider,
-        channel,
-        timeIso,
-        message,
-        confidence: "high",
-      });
+      pushParsedXmlEventBlock(m[0], events);
     }
+    return events;
+  }
+
+  /**
+   * Same rows as {@link parseWindowsEventXmlExport} but yields so the tab stays responsive on huge XML exports.
+   * @param {string} text
+   * @param {AbortSignal} signal
+   * @param {(fraction: number) => void} onProgress
+   */
+  async function parseWindowsEventXmlExportAsync(text, signal, onProgress) {
+    /** @type {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} */
+    const events = [];
+    const re = /<Event\b[^>]*>([\s\S]*?)<\/Event>/gi;
+    const len = text.length || 1;
+    let m;
+    let n = 0;
+    while ((m = re.exec(text))) {
+      signal.throwIfAborted();
+      pushParsedXmlEventBlock(m[0], events);
+      n++;
+      if (n % 80 === 0) {
+        onProgress(Math.min(0.98, re.lastIndex / len));
+        await yieldToMain();
+      }
+    }
+    onProgress(1);
     return events;
   }
 
@@ -14369,6 +14547,188 @@
   const EVTX_CHUNK_RECORD_BASE = 0x200;
 
   /**
+   * @param {Uint8Array} u8
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   * @param {number} off
+   * @param {number} sz
+   */
+  function evtxTryPushRecord(u8, events, off, sz) {
+    if (sz < 48 || sz > EVTX_CHUNK_BYTES || off + sz > u8.length) return;
+    const tail = readU32le(u8, off + sz - 4);
+    if (tail !== sz) return;
+    const ft = readU64le(u8, off + 0x10);
+    const payload = u8.subarray(off + 0x18, off + sz - 4);
+    const recordEnvelope = u8.subarray(off, off + sz);
+    let timeIso = extractSystemTimeCreatedIso(payload, recordEnvelope);
+    if (!timeIso.trim()) timeIso = filetimeToIsoString(ft);
+    const meta = extractWindowsEventFromBinPayload(payload, recordEnvelope);
+    events.push({
+      eventId: meta.eventId,
+      provider: meta.provider,
+      channel: meta.channel,
+      timeIso,
+      message: meta.message,
+      confidence: meta.confidence,
+    });
+  }
+
+  /**
+   * Walk the record chain starting at {@code 0x200} like python-evtx; advance by {@code size} after each valid record.
+   * @param {Uint8Array} u8
+   * @param {number} chunkAbs Absolute file offset of chunk start
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function evtxParseRecordsInChunkStatic(u8, chunkAbs, events) {
+    const chunkTail = chunkAbs + EVTX_CHUNK_BYTES;
+    let off = chunkAbs + EVTX_CHUNK_RECORD_BASE;
+    while (off + 48 <= chunkTail && off + 48 <= u8.length) {
+      if (readU32le(u8, off) !== EVTX_RECORD_MAGIC) {
+        off += 1;
+        continue;
+      }
+      const sz = readU32le(u8, off + 4);
+      if (sz < 48 || sz > EVTX_CHUNK_BYTES || off + sz > chunkTail || off + sz > u8.length) {
+        off += 1;
+        continue;
+      }
+      if (readU32le(u8, off + sz - 4) !== sz) {
+        off += 1;
+        continue;
+      }
+      evtxTryPushRecord(u8, events, off, sz);
+      off += sz;
+    }
+  }
+
+  /** @param {Uint8Array} u8 @returns {number | null} first chunk byte offset, or null if not ElfFile */
+  function evtxResolveFirstChunkOffset(u8) {
+    if (u8.length < 0x1000 || readAsciiFixed(u8, 0, 8) !== "ElfFile\x00") return null;
+    /**
+     * python-evtx places the first chunk at {@code header_chunk_size} (WORD {@code 0x28}), not the dword at {@code 0x20}
+     * ({@code header_size}) — those often match ({@code 0x1000}) but differ on some builds.
+     */
+    let firstChunk = readU16le(u8, 0x28);
+    if (
+      !firstChunk ||
+      firstChunk < 0x100 ||
+      firstChunk >= u8.length ||
+      firstChunk + EVTX_CHUNK_BYTES > u8.length
+    )
+      firstChunk = readU32le(u8, 0x20);
+    if (
+      !firstChunk ||
+      firstChunk < 0x100 ||
+      firstChunk >= u8.length ||
+      firstChunk + EVTX_CHUNK_BYTES > u8.length
+    )
+      firstChunk = 0x1000;
+    return firstChunk;
+  }
+
+  /**
+   * @param {Uint8Array} u8
+   * @param {number} abs0
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function evtxWalkChunksFromSync(u8, abs0, events) {
+    const maxChunkIndex = Math.ceil(Math.max(0, u8.length - abs0) / EVTX_CHUNK_BYTES);
+    for (let i = 0; i < maxChunkIndex; i++) {
+      const chunkAbs = abs0 + i * EVTX_CHUNK_BYTES;
+      if (chunkAbs + EVTX_CHUNK_BYTES > u8.length) break;
+      if (readAsciiFixed(u8, chunkAbs, 8) !== "ElfChnk\x00") continue;
+      evtxParseRecordsInChunkStatic(u8, chunkAbs, events);
+    }
+  }
+
+  /**
+   * @param {Uint8Array} u8
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   */
+  function evtxLinearScanRecordsSync(u8, events) {
+    let off = 0;
+    while (off + 48 <= u8.length) {
+      if (readU32le(u8, off) === EVTX_RECORD_MAGIC) {
+        const sz = readU32le(u8, off + 4);
+        if (sz >= 48 && sz <= EVTX_CHUNK_BYTES && off + sz <= u8.length) {
+          const tail = readU32le(u8, off + sz - 4);
+          if (tail === sz) {
+            evtxTryPushRecord(u8, events, off, sz);
+            off += sz;
+            continue;
+          }
+        }
+      }
+      off++;
+    }
+  }
+
+  /**
+   * @param {Uint8Array} u8
+   * @param {number} abs0
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   * @param {AbortSignal} signal
+   * @param {(n: number) => void} onProgress 0..1 within {@code p0}..{@code p1}
+   * @param {number} p0
+   * @param {number} p1
+   */
+  async function evtxWalkChunksFromAsync(u8, abs0, events, signal, onProgress, p0, p1) {
+    const maxChunkIndex = Math.ceil(Math.max(0, u8.length - abs0) / EVTX_CHUNK_BYTES);
+    const yieldEvery = Math.max(1, Math.floor(maxChunkIndex / 120));
+    for (let i = 0; i < maxChunkIndex; i++) {
+      signal.throwIfAborted();
+      const chunkAbs = abs0 + i * EVTX_CHUNK_BYTES;
+      if (chunkAbs + EVTX_CHUNK_BYTES > u8.length) break;
+      if (readAsciiFixed(u8, chunkAbs, 8) === "ElfChnk\x00") {
+        evtxParseRecordsInChunkStatic(u8, chunkAbs, events);
+      }
+      if (i % yieldEvery === 0 || i === maxChunkIndex - 1) {
+        onProgress(p0 + ((i + 1) / maxChunkIndex) * (p1 - p0));
+        await yieldToMain();
+      }
+    }
+  }
+
+  /**
+   * @param {Uint8Array} u8
+   * @param {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} events
+   * @param {AbortSignal} signal
+   * @param {(n: number) => void} onProgress
+   * @param {number} progressLo
+   * @param {number} progressHi
+   */
+  async function evtxLinearScanRecordsAsync(u8, events, signal, onProgress, progressLo, progressHi) {
+    const len = u8.length || 1;
+    let off = 0;
+    let steps = 0;
+    const STRIDE = 14000;
+    while (off + 48 <= u8.length) {
+      signal.throwIfAborted();
+      if (readU32le(u8, off) === EVTX_RECORD_MAGIC) {
+        const sz = readU32le(u8, off + 4);
+        if (sz >= 48 && sz <= EVTX_CHUNK_BYTES && off + sz <= u8.length) {
+          const tail = readU32le(u8, off + sz - 4);
+          if (tail === sz) {
+            evtxTryPushRecord(u8, events, off, sz);
+            off += sz;
+            steps++;
+            if (steps % STRIDE === 0) {
+              onProgress(progressLo + (off / len) * (progressHi - progressLo));
+              await yieldToMain();
+            }
+            continue;
+          }
+        }
+      }
+      off++;
+      steps++;
+      if (steps % STRIDE === 0) {
+        onProgress(progressLo + (off / len) * (progressHi - progressLo));
+        await yieldToMain();
+      }
+    }
+  }
+
+  /**
    * Parse binary Windows Event Log (.evtx): {@code ElfFile} header, {@code ElfChnk} chunks,
    * records with signature {@link EVTX_RECORD_MAGIC}. Falls back to a linear scan only if
    * structured parsing yields no rows (damaged or unusual exports).
@@ -14378,88 +14738,9 @@
     const u8 = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
     /** @type {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} */
     const events = [];
-
-    /** @param {number} off @param {number} sz */
-    function pushRecord(off, sz) {
-      if (sz < 48 || sz > EVTX_CHUNK_BYTES || off + sz > u8.length) return;
-      const tail = readU32le(u8, off + sz - 4);
-      if (tail !== sz) return;
-      const ft = readU64le(u8, off + 0x10);
-      const payload = u8.subarray(off + 0x18, off + sz - 4);
-      const recordEnvelope = u8.subarray(off, off + sz);
-      let timeIso = extractSystemTimeCreatedIso(payload, recordEnvelope);
-      if (!timeIso.trim()) timeIso = filetimeToIsoString(ft);
-      const meta = extractWindowsEventFromBinPayload(payload, recordEnvelope);
-      events.push({
-        eventId: meta.eventId,
-        provider: meta.provider,
-        channel: meta.channel,
-        timeIso,
-        message: meta.message,
-        confidence: meta.confidence,
-      });
-    }
-
-    /**
-     * Walk the record chain starting at {@code 0x200} like python-evtx; advance by {@code size} after each valid record.
-     * On magic/size failure, step forward one byte until the next valid header (handles gaps / rare padding).
-     * @param {number} chunkAbs Absolute file offset of chunk start
-     */
-    function parseRecordsInChunk(chunkAbs) {
-      const chunkTail = chunkAbs + EVTX_CHUNK_BYTES;
-      let off = chunkAbs + EVTX_CHUNK_RECORD_BASE;
-      while (off + 48 <= chunkTail && off + 48 <= u8.length) {
-        if (readU32le(u8, off) !== EVTX_RECORD_MAGIC) {
-          off += 1;
-          continue;
-        }
-        const sz = readU32le(u8, off + 4);
-        if (sz < 48 || sz > EVTX_CHUNK_BYTES || off + sz > chunkTail || off + sz > u8.length) {
-          off += 1;
-          continue;
-        }
-        if (readU32le(u8, off + sz - 4) !== sz) {
-          off += 1;
-          continue;
-        }
-        pushRecord(off, sz);
-        off += sz;
-      }
-    }
-
-    if (u8.length >= 0x1000 && readAsciiFixed(u8, 0, 8) === "ElfFile\x00") {
-      /**
-       * python-evtx places the first chunk at {@code header_chunk_size} (WORD {@code 0x28}), not the dword at {@code 0x20}
-       * ({@code header_size}) — those often match ({@code 0x1000}) but differ on some builds.
-       */
-      let firstChunk = readU16le(u8, 0x28);
-      if (
-        !firstChunk ||
-        firstChunk < 0x100 ||
-        firstChunk >= u8.length ||
-        firstChunk + EVTX_CHUNK_BYTES > u8.length
-      )
-        firstChunk = readU32le(u8, 0x20);
-      if (
-        !firstChunk ||
-        firstChunk < 0x100 ||
-        firstChunk >= u8.length ||
-        firstChunk + EVTX_CHUNK_BYTES > u8.length
-      )
-        firstChunk = 0x1000;
-
-      function walkChunksFrom(abs0) {
-        const maxChunkIndex = Math.ceil(Math.max(0, u8.length - abs0) / EVTX_CHUNK_BYTES);
-        for (let i = 0; i < maxChunkIndex; i++) {
-          const chunkAbs = abs0 + i * EVTX_CHUNK_BYTES;
-          if (chunkAbs + EVTX_CHUNK_BYTES > u8.length) break;
-          if (readAsciiFixed(u8, chunkAbs, 8) !== "ElfChnk\x00") continue;
-          parseRecordsInChunk(chunkAbs);
-        }
-      }
-
-      walkChunksFrom(firstChunk);
-
+    const firstChunk = evtxResolveFirstChunkOffset(u8);
+    if (firstChunk != null) {
+      evtxWalkChunksFromSync(u8, firstChunk, events);
       /** Rare exports: first chunk offset matches {@code header_size} dword (0x20) instead of {@code header_chunk_size}. */
       if (events.length === 0) {
         const alt = readU32le(u8, 0x20);
@@ -14468,29 +14749,46 @@
           alt + EVTX_CHUNK_BYTES <= u8.length &&
           alt !== firstChunk
         ) {
-          walkChunksFrom(alt);
+          evtxWalkChunksFromSync(u8, alt, events);
         }
       }
     }
-
     if (events.length === 0) {
-      let off = 0;
-      while (off + 48 <= u8.length) {
-        if (readU32le(u8, off) === EVTX_RECORD_MAGIC) {
-          const sz = readU32le(u8, off + 4);
-          if (sz >= 48 && sz <= EVTX_CHUNK_BYTES && off + sz <= u8.length) {
-            const tail = readU32le(u8, off + sz - 4);
-            if (tail === sz) {
-              pushRecord(off, sz);
-              off += sz;
-              continue;
-            }
-          }
+      evtxLinearScanRecordsSync(u8, events);
+    }
+    return events;
+  }
+
+  /**
+   * Same decode as {@link parseEvtxBinaryRecords} with periodic yields for UI progress / {@link AbortSignal}.
+   * @param {ArrayBuffer | Uint8Array} buffer
+   * @param {AbortSignal} signal
+   * @param {(fraction: number) => void} onProgress
+   */
+  async function parseEvtxBinaryRecordsAsync(buffer, signal, onProgress) {
+    const u8 = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
+    /** @type {{ eventId: number | null, provider: string, channel: string, timeIso: string, message: string, confidence: string }[]} */
+    const events = [];
+    onProgress(0.02);
+    await yieldToMain();
+    const firstChunk = evtxResolveFirstChunkOffset(u8);
+    if (firstChunk != null) {
+      await evtxWalkChunksFromAsync(u8, firstChunk, events, signal, onProgress, 0.06, 0.88);
+      if (events.length === 0) {
+        const alt = readU32le(u8, 0x20);
+        if (
+          alt >= EVTX_CHUNK_RECORD_BASE &&
+          alt + EVTX_CHUNK_BYTES <= u8.length &&
+          alt !== firstChunk
+        ) {
+          await evtxWalkChunksFromAsync(u8, alt, events, signal, onProgress, 0.88, 0.93);
         }
-        off++;
       }
     }
-
+    if (events.length === 0) {
+      await evtxLinearScanRecordsAsync(u8, events, signal, onProgress, 0.1, 0.97);
+    }
+    onProgress(1);
     return events;
   }
 
@@ -14661,6 +14959,216 @@
     return `<div class="evtx-msg-hint">${esc(line)}</div>`;
   }
 
+  /** @param {string} full @param {string} title */
+  function extractDxDiagSection(full, title) {
+    const escRe = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(
+      "^\\s*-{10,}\\s*\\r?\\n\\s*" +
+        escRe +
+        "\\s*\\r?\\n\\s*-{10,}\\s*\\r?\\n([\\s\\S]*?)(?=^\\s*-{10,}\\s*$)",
+      "im",
+    );
+    const m = full.match(re);
+    return m ? m[1].trim() : "";
+  }
+
+  /** @param {string} body */
+  function parseDxDiagKeyValueBlock(body) {
+    /** @type {Record<string, string>} */
+    const o = {};
+    if (!body) return o;
+    for (const line of body.split(/\r?\n/)) {
+      const m = line.match(/^\s{2,}([^:[\]]+):\s*(.*)$/);
+      if (m) {
+        const k = m[1].trim();
+        const v = m[2].trim();
+        if (k && v) o[k] = v;
+      }
+    }
+    return o;
+  }
+
+  /** @param {string} text */
+  function looksLikeDxDiagExport(text) {
+    const head = text.slice(0, 14000).toLowerCase();
+    if (!/dxdiag|directx diagnostic/i.test(head)) return false;
+    return (
+      /system information/i.test(head) ||
+      /display devices/i.test(head) ||
+      /time of this report/i.test(head)
+    );
+  }
+
+  /**
+   * @param {string} fullText
+   * @returns {{
+   *   ok: boolean,
+   *   system: Record<string, string>,
+   *   displays: Record<string, string>[],
+   *   sounds: Record<string, string>[],
+   * }}
+   */
+  function parseDxDiagText(fullText) {
+    const text = String(fullText ?? "").replace(/^\uFEFF/, "");
+    const systemBody = extractDxDiagSection(text, "System Information");
+    const system = systemBody
+      ? parseDxDiagKeyValueBlock(systemBody)
+      : parseDxDiagKeyValueBlock(text.slice(0, 12000));
+
+    const displayBody = extractDxDiagSection(text, "Display Devices");
+    /** @type {Record<string, string>[]} */
+    const displays = [];
+    if (displayBody) {
+      const parts = displayBody
+        .split(/\n(?=\s*Card name\s*:)/i)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      for (const p of parts) {
+        const fields = parseDxDiagKeyValueBlock(p);
+        if (Object.keys(fields).length) displays.push(fields);
+      }
+    }
+
+    const soundBody = extractDxDiagSection(text, "Sound Devices");
+    /** @type {Record<string, string>[]} */
+    const sounds = [];
+    if (soundBody) {
+      const parts = soundBody
+        .split(/\n(?=\s*Description\s*:)/i)
+        .map((p) => p.trim())
+        .filter(Boolean);
+      for (const p of parts) {
+        const f = parseDxDiagKeyValueBlock(p);
+        if (Object.keys(f).length) sounds.push(f);
+      }
+      if (!sounds.length) {
+        const one = parseDxDiagKeyValueBlock(soundBody);
+        if (Object.keys(one).length) sounds.push(one);
+      }
+    }
+
+    const ok = looksLikeDxDiagExport(text) && (Object.keys(system).length > 0 || displays.length > 0);
+    return { ok, system, displays, sounds };
+  }
+
+  /**
+   * @param {{ ok: boolean, system: Record<string, string>, displays: Record<string, string>[], sounds: Record<string, string>[] }} parsed
+   * @param {string} fileName
+   */
+  function renderDxDiagSummaryHtml(parsed, fileName) {
+    const { ok, system, displays, sounds } = parsed;
+    if (!ok) {
+      return `<p class="insight-disclaimer"><strong>${esc(
+        fileName,
+      )}</strong> does not look like a DxDiag text export. Run <code>dxdiag</code>, then use <strong>Save All Information…</strong> and load the resulting <code>.txt</code> here.</p>`;
+    }
+
+    const sysEntries = Object.entries(system).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 32);
+    const sysDl = sysEntries.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+
+    const displayHtml = displays
+      .map((d, i) => {
+        const title = d["Card name"] || `Display ${i + 1}`;
+        const pairs = Object.entries(d).slice(0, 22);
+        const dl = pairs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+        return `<article class="dxdiag-card"><h3>${esc(title)}</h3><dl class="dxdiag-dl">${dl}</dl></article>`;
+      })
+      .join("");
+
+    const soundHtml = sounds
+      .map((s, i) => {
+        const title = s["Description"] || s["Name"] || `Sound ${i + 1}`;
+        const pairs = Object.entries(s).slice(0, 14);
+        const dl = pairs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+        return `<article class="dxdiag-card"><h3>${esc(title)}</h3><dl class="dxdiag-dl">${dl}</dl></article>`;
+      })
+      .join("");
+
+    return `<div class="dxdiag-summary-inner">
+      <p class="insight-disclaimer">Parsed locally from <strong>${esc(fileName)}</strong>. Field names follow the DxDiag export; compare with the source block below if anything looks off.</p>
+      <article class="dxdiag-card"><h3>System Information</h3><dl class="dxdiag-dl">${sysDl || "<dt>Note</dt><dd>No key:value rows found in the System Information section.</dd>"}</dl></article>
+      ${displayHtml ? `<h3 class="evtx-section-title" style="margin-top:1rem">Display Devices (${displays.length})</h3>${displayHtml}` : "<p class=\"insight-disclaimer\">No Display Devices section detected.</p>"}
+      ${soundHtml ? `<h3 class="evtx-section-title" style="margin-top:1rem">Sound Devices (${sounds.length})</h3>${soundHtml}` : ""}
+    </div>`;
+  }
+
+  function setupDxDiagPanel(panel) {
+    const dropzone = panel.querySelector(".dropzone--dxdiag");
+    const input = panel.querySelector(".file-input--dxdiag");
+    const toolbar = panel.querySelector(".dxdiag-toolbar");
+    const metaEl = panel.querySelector(".dxdiag-file-meta");
+    const btnClear = panel.querySelector(".btn-dxdiag-clear");
+    const body = panel.querySelector(".dxdiag-body");
+    const parseNoteEl = panel.querySelector(".dxdiag-parse-note");
+    const summaryEl = panel.querySelector(".dxdiag-summary");
+    const pre = panel.querySelector(".content--dxdiag");
+
+    function clearAll() {
+      if (toolbar) toolbar.hidden = true;
+      if (body) body.hidden = true;
+      if (metaEl) metaEl.textContent = "";
+      if (parseNoteEl) parseNoteEl.textContent = "";
+      if (summaryEl) summaryEl.innerHTML = "";
+      if (pre) pre.textContent = "";
+      if (input) input.value = "";
+    }
+
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onerror = () => {
+        if (parseNoteEl) parseNoteEl.textContent = "Could not read this file in the browser.";
+        if (toolbar) toolbar.hidden = false;
+        if (body) body.hidden = false;
+      };
+      reader.onload = () => {
+        const buf = reader.result;
+        if (!(buf instanceof ArrayBuffer)) return;
+        const name = file.name || "DxDiag.txt";
+        const { text, label } = decodeBuffer(buf, "gpu", "auto");
+        const parsed = parseDxDiagText(text);
+        if (pre) pre.textContent = text;
+        if (summaryEl) summaryEl.innerHTML = renderDxDiagSummaryHtml(parsed, name);
+        if (parseNoteEl) parseNoteEl.textContent = "";
+        if (metaEl) metaEl.textContent = `${name} · ${(buf.byteLength / 1024).toFixed(1)} KiB · ${label}`;
+        if (toolbar) toolbar.hidden = false;
+        if (body) body.hidden = false;
+        dropzone.style.display = "none";
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) => {
+      dropzone?.addEventListener(ev, preventDefaults);
+    });
+    dropzone?.addEventListener("dragenter", () => dropzone.classList.add("is-dragover"));
+    dropzone?.addEventListener("dragleave", () => dropzone.classList.remove("is-dragover"));
+    dropzone?.addEventListener("dragover", () => dropzone.classList.add("is-dragover"));
+    dropzone?.addEventListener("drop", (e) => {
+      dropzone.classList.remove("is-dragover");
+      const f = e.dataTransfer?.files?.[0];
+      if (f) loadFile(f);
+    });
+    input?.addEventListener("change", () => {
+      const f = input.files?.[0];
+      if (f) loadFile(f);
+      if (input) input.value = "";
+    });
+    dropzone?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        input?.click();
+      }
+    });
+    btnClear?.addEventListener("click", () => {
+      clearAll();
+      dropzone.style.display = "";
+    });
+  }
+
   function setupEvtxPanel(panel) {
     const dropzone = panel.querySelector(".dropzone--evtx");
     const input = panel.querySelector(".file-input--evtx");
@@ -14672,8 +15180,21 @@
     const summaryEl = panel.querySelector(".evtx-summary");
     const cardsEl = panel.querySelector(".evtx-watch-cards");
     const tbody = panel.querySelector(".evtx-table-body");
+    const loadJobEl = panel.querySelector(".panel-load-job--evtx");
+    const loadProgress = panel.querySelector(".evtx-panel-load__progress");
+    const loadLabel = panel.querySelector(".evtx-panel-load__label");
+    const loadStatusRow = panel.querySelector(".evtx-panel-load__status");
+    /** @type {AbortController | null} */
+    let evtxLoadAbort = null;
+    /** "read" while file bytes load; spinner + "Analyzing…" only after buffer is ready. */
+    let evtxLoadJobPhase = "read";
 
     function clearAll() {
+      evtxLoadAbort?.abort();
+      if (loadJobEl) {
+        loadJobEl.hidden = true;
+        loadJobEl.classList.remove("panel-load-job--phase-read");
+      }
       if (toolbar) toolbar.hidden = true;
       if (body) body.hidden = true;
       if (metaEl) metaEl.textContent = "";
@@ -14760,62 +15281,144 @@
       if (body) body.hidden = false;
     }
 
-    function loadFile(file) {
-      const reader = new FileReader();
-      reader.onerror = () => {
-        if (parseNoteEl) {
-          parseNoteEl.textContent =
-            "Could not read this file in the browser. Check permissions, or try an XML export from Event Viewer.";
+    async function loadFile(file) {
+      const wantProgress =
+        file.size >= LARGE_FILE_PROGRESS_THRESHOLD ||
+        /\.evtx$/i.test(file.name) ||
+        /\.xml$/i.test(file.name);
+      let pauseForDoneUi = false;
+      evtxLoadAbort?.abort();
+      evtxLoadAbort = new AbortController();
+      const signal = evtxLoadAbort.signal;
+
+      const showJob = () => {
+        if (loadJobEl && wantProgress) {
+          evtxLoadJobPhase = "read";
+          loadJobEl.classList.add("panel-load-job--phase-read");
+          loadJobEl.hidden = false;
+          if (loadProgress) {
+            loadProgress.value = 0;
+            loadProgress.max = 100;
+          }
+          if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+          if (loadLabel) loadLabel.textContent = "Loading file…";
         }
-        if (toolbar) toolbar.hidden = false;
-        if (body) body.hidden = false;
       };
-      reader.onload = () => {
-        const buf = reader.result;
-        if (!(buf instanceof ArrayBuffer)) return;
+      const hideJob = () => {
+        if (loadJobEl) {
+          loadJobEl.hidden = true;
+          loadJobEl.classList.remove("panel-load-job--phase-read");
+        }
+      };
+      const setP = (/** @type {number} */ frac, /** @type {string} */ _msg) => {
+        if (loadProgress) loadProgress.value = Math.round(frac * 100);
+        const done = frac >= 1;
+        if (loadStatusRow) loadStatusRow.classList.toggle("panel-load-job__status--done", done);
+        if (loadLabel) {
+          if (done) loadLabel.textContent = "Completed";
+          else if (evtxLoadJobPhase === "read") loadLabel.textContent = "Loading file…";
+          else loadLabel.textContent = "Analyzing…";
+        }
+      };
+
+      try {
+        showJob();
+        const buf = wantProgress
+          ? await readFileAsArrayBufferWithProgress(file, signal, (frac) => setP(frac * 0.26, ""))
+          : await file.arrayBuffer();
+        signal.throwIfAborted();
+        if (wantProgress) {
+          evtxLoadJobPhase = "work";
+          if (loadJobEl) loadJobEl.classList.remove("panel-load-job--phase-read");
+          if (loadStatusRow) loadStatusRow.classList.remove("panel-load-job__status--done");
+          if (loadLabel) loadLabel.textContent = "Analyzing…";
+        }
         const name = file.name || "event-log";
         let parseNote = "";
         /** @type {ReturnType<typeof parseWindowsEventXmlExport>} */
         let events;
 
         if (isLikelyEvtxXmlName(name)) {
+          setP(0.3, "");
+          await yieldToMain();
+          signal.throwIfAborted();
           const { text } = decodeBuffer(buf, "gpu", "auto");
-          events = parseWindowsEventXmlExport(text);
+          events =
+            wantProgress && text.length > LARGE_FILE_PROGRESS_THRESHOLD
+              ? await parseWindowsEventXmlExportAsync(text, signal, (f) => setP(0.3 + f * 0.7, ""))
+              : parseWindowsEventXmlExport(text);
           if (!events.length)
             parseNote =
               "No <Event> blocks parsed. Confirm this is an Event Viewer XML export (not plain text).";
           renderEvtxResults(name, events, parseNote, "xml");
           if (metaEl) metaEl.textContent = `${name} · XML`;
+          setP(1, "");
+          pauseForDoneUi = true;
           return;
         }
 
         const decodedProbe = decodeBuffer(buf, "gpu", "auto");
         const head = decodedProbe.text.slice(0, 600).trimStart();
         if (/^<\?xml/i.test(head) || /<Events\b/i.test(head) || /<Event\b/i.test(head)) {
-          events = parseWindowsEventXmlExport(decodedProbe.text);
+          setP(0.3, "");
+          await yieldToMain();
+          signal.throwIfAborted();
+          events =
+            wantProgress && decodedProbe.text.length > LARGE_FILE_PROGRESS_THRESHOLD
+              ? await parseWindowsEventXmlExportAsync(decodedProbe.text, signal, (f) => setP(0.3 + f * 0.7, ""))
+              : parseWindowsEventXmlExport(decodedProbe.text);
           if (!events.length)
             parseNote =
               "XML-like head found but no <Event> blocks parsed; file may be truncated or not an Event Viewer export.";
           renderEvtxResults(name, events, parseNote, "xml");
           if (metaEl) metaEl.textContent = `${name} · XML (detected)`;
+          setP(1, "");
+          pauseForDoneUi = true;
           return;
         }
 
-        events = parseEvtxBinaryRecords(buf);
+        setP(0.28, "");
+        await yieldToMain();
+        signal.throwIfAborted();
+        events =
+          wantProgress && file.size > 64 * 1024
+            ? await parseEvtxBinaryRecordsAsync(buf, signal, (f) => setP(0.28 + f * 0.72, ""))
+            : parseEvtxBinaryRecords(buf);
         if (!events.length) {
           parseNote =
             "No EVTX records could be decoded from this binary. Open the log in Event Viewer and use Save All Events As… → XML, then load the .xml here.";
         } else {
           const missed = events.filter((e) => e.eventId == null).length;
-          /** Only warn when a large majority of rows still lack IDs after BinXml extraction (avoid noisy hints). */
           if (missed > 0 && events.length >= 16 && missed / events.length > 0.82)
             parseNote =
               "Some EVTX rows still lack a decoded Event ID (heavy template compression or damaged chunk). XML export may list every ID and message.";
         }
         renderEvtxResults(name, events, parseNote, "evtx");
         if (metaEl) metaEl.textContent = `${name} · EVTX (binary)`;
-      };
-      reader.readAsArrayBuffer(file);
+        setP(1, "");
+        pauseForDoneUi = true;
+      } catch (e) {
+        if (e && (/** @type {Error} */ (e).name === "AbortError" || /** @type {any} */ (e).code === 20)) {
+          clearAll();
+          if (body) body.hidden = false;
+          if (toolbar) toolbar.hidden = false;
+          if (parseNoteEl) parseNoteEl.textContent = "Load interrupted.";
+        } else {
+          console.error(e);
+          if (parseNoteEl) {
+            parseNoteEl.textContent =
+              "Could not read or parse this file. Check permissions, or try an XML export from Event Viewer.";
+          }
+          if (toolbar) toolbar.hidden = false;
+          if (body) body.hidden = false;
+        }
+      } finally {
+        if (wantProgress && pauseForDoneUi) {
+          setP(1, "");
+          await new Promise((r) => setTimeout(r, 520));
+        }
+        hideJob();
+      }
     }
 
     function preventDefaults(e) {
@@ -14832,11 +15435,11 @@
       dropzone.classList.remove("is-dragover");
       const dt = e.dataTransfer;
       const f = dt?.files?.[0];
-      if (f) loadFile(f);
+      if (f) void loadFile(f);
     });
     input?.addEventListener("change", () => {
       const f = input.files?.[0];
-      if (f) loadFile(f);
+      if (f) void loadFile(f);
       input.value = "";
     });
     dropzone?.addEventListener("keydown", (e) => {
@@ -14852,12 +15455,19 @@
   function setupWorkspaceTabs() {
     const root = document.getElementById("workspace");
     if (!root) return;
-    const TAB_HREFS = ["#tool-panel-system", "#tool-panel-bsod", "#tool-panel-gpu", "#tool-panel-evtx"];
+    const TAB_HREFS = [
+      "#tool-panel-system",
+      "#tool-panel-bsod",
+      "#tool-panel-gpu",
+      "#tool-panel-evtx",
+      "#tool-panel-dxdiag",
+    ];
     const LEGACY = {
       "#system": "#tool-panel-system",
       "#bsod": "#tool-panel-bsod",
       "#gpu": "#tool-panel-gpu",
       "#evtx": "#tool-panel-evtx",
+      "#dxdiag": "#tool-panel-dxdiag",
     };
 
     /** @returns {string} */
@@ -14931,11 +15541,21 @@
     }
     preserveScrollForTabClicks();
 
-    /** <kbd>Shift</kbd>+1 … 4 — switch tools (uses <code>code</code> so symbol layouts still map to digits; skipped in fields and while About dialog is open). */
+    /** <kbd>Shift</kbd>+1 … 5 — switch tools (uses <code>code</code> so symbol layouts still map to digits; skipped in fields and while About dialog is open). */
     document.addEventListener("keydown", (e) => {
       if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
       const digit =
-        e.code === "Digit1" ? 1 : e.code === "Digit2" ? 2 : e.code === "Digit3" ? 3 : e.code === "Digit4" ? 4 : 0;
+        e.code === "Digit1"
+          ? 1
+          : e.code === "Digit2"
+            ? 2
+            : e.code === "Digit3"
+              ? 3
+              : e.code === "Digit4"
+                ? 4
+                : e.code === "Digit5"
+                  ? 5
+                  : 0;
       if (!digit) return;
       const t = /** @type {HTMLElement | null} */ (e.target);
       if (t?.closest("input, textarea, select, [contenteditable=true]")) return;
@@ -15049,6 +15669,1006 @@
     });
   }
 
+  const PDF_EXPORT_SECTIONS = [
+    { hash: "#tool-panel-system", title: "System Information" },
+    { hash: "#tool-panel-bsod", title: "BSOD & WinDbg" },
+    { hash: "#tool-panel-gpu", title: "GPU-Z logs" },
+    { hash: "#tool-panel-evtx", title: "Event Viewer" },
+    { hash: "#tool-panel-dxdiag", title: "DxDiag" },
+  ];
+  const LEGACY_TAB_HASH = {
+    "#system": "#tool-panel-system",
+    "#bsod": "#tool-panel-bsod",
+    "#gpu": "#tool-panel-gpu",
+    "#evtx": "#tool-panel-evtx",
+    "#dxdiag": "#tool-panel-dxdiag",
+  };
+  const TAB_HREFS = PDF_EXPORT_SECTIONS.map((s) => s.hash);
+
+  function canonicalPdfHash() {
+    const raw = (location.hash || "").split("?")[0].toLowerCase();
+    if (!raw) return "#tool-panel-system";
+    const mapped = LEGACY_TAB_HASH[raw] || raw;
+    return TAB_HREFS.includes(mapped) ? mapped : "#tool-panel-system";
+  }
+
+  const PDF_DIALOG_TAB_LABELS = {
+    system: "System Information",
+    bsod: "BSOD & WinDbg",
+    gpu: "GPU-Z logs",
+    evtx: "Event Viewer",
+    dxdiag: "DxDiag",
+  };
+
+  /** @returns {keyof typeof PDF_DIALOG_TAB_LABELS} */
+  function getPdfDialogTheme() {
+    const m = {
+      "#tool-panel-system": "system",
+      "#tool-panel-bsod": "bsod",
+      "#tool-panel-gpu": "gpu",
+      "#tool-panel-evtx": "evtx",
+      "#tool-panel-dxdiag": "dxdiag",
+    };
+    const h = canonicalPdfHash();
+    return m[h] || "system";
+  }
+
+  function syncPdfDialogTheme() {
+    const d = document.getElementById("pdf-export-dialog");
+    const kicker = document.getElementById("pdf-dialog-kicker");
+    if (!d) return;
+    const key = getPdfDialogTheme();
+    d.setAttribute("data-pdf-theme", key);
+    if (kicker) {
+      kicker.textContent = PDF_DIALOG_TAB_LABELS[key] || "Report tools";
+    }
+  }
+
+  function panelHasPdfContent(panel) {
+    if (!panel) return false;
+    const h = (panel.getAttribute("id") || "").replace("tool-panel-", "");
+    if (h === "system")
+      return !!(function () {
+        const b = panel.querySelector(".system-body");
+        return b && !b.hidden;
+      })();
+    if (h === "bsod")
+      return !!(function () {
+        const b = panel.querySelector(".bsod-body");
+        return b && !b.hidden;
+      })();
+    if (h === "gpu") {
+      const w = panel.querySelector(".analyzer-chart-wrap");
+      if (w && !w.hidden) return true;
+      return !!(panel.querySelector(".analyzer-charts")?.querySelector("canvas"));
+    }
+    if (h === "evtx")
+      return !!(function () {
+        const b = panel.querySelector(".evtx-body");
+        return b && !b.hidden;
+      })();
+    if (h === "dxdiag")
+      return !!(function () {
+        const b = panel.querySelector(".dxdiag-body");
+        return b && !b.hidden;
+      })();
+    return false;
+  }
+
+  /**
+   * @param {HTMLCanvasElement} c
+   * @param {HTMLCanvasElement} src
+   */
+  function copyCanvasForPdfClone(c, src) {
+    if (!c || !src || !src.getContext) return;
+    c.width = src.width;
+    c.height = src.height;
+    c.getContext("2d")?.drawImage(src, 0, 0);
+  }
+
+  /**
+   * @param {HTMLElement} clone
+   * @param {HTMLElement} source
+   */
+  function syncAllCanvasesInCloneForPdf(clone, source) {
+    const srcC = source.querySelectorAll("canvas");
+    const dstC = clone.querySelectorAll("canvas");
+    for (let i = 0; i < srcC.length && i < dstC.length; i++) {
+      const s = srcC[i];
+      const d = dstC[i];
+      if (s instanceof HTMLCanvasElement && d instanceof HTMLCanvasElement) copyCanvasForPdfClone(d, s);
+    }
+  }
+
+  /**
+   * @param {HTMLElement} root
+   */
+  function scrubForPdfClone(root) {
+    root.querySelectorAll("input[type=file], input.file-input, .file-input--multi").forEach((el) => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    root.querySelectorAll(".dropzone").forEach((el) => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    root.querySelectorAll(".panel-load-job, .bsod-paste, .bsod-paste__actions, .bsod-or-divider").forEach((el) => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    root
+      .querySelectorAll("button, .system-toolbar, .bsod-toolbar, .analyzer-toolbar, .evtx-toolbar, .dxdiag-toolbar")
+      .forEach((el) => {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      });
+    root.querySelectorAll("nav, .site-header, .site-footer, .tool-tabs, .theme-toggle, .scroll-to-top").forEach(
+      (el) => {
+        if (el.parentNode) el.parentNode.removeChild(el);
+      }
+    );
+    root.querySelectorAll("[id]").forEach((el) => {
+      if (el.hasAttribute("id")) el.removeAttribute("id");
+    });
+    root.querySelectorAll("details").forEach((d) => {
+      d.setAttribute("open", "");
+    });
+  }
+
+  const PDF_PNG_COMP = undefined;
+  const PDF_H2C_SCALE = 2.9;
+  const PDF_H2C_SCALE_WIDE = 3.35;
+  const PDF_H2C_MONOLITH = 2.9;
+  const PDF_MIN_LAST_SLICE_PX = 100;
+  /** @see styles.css --bg-deep / light body (must match on-screen + html2canvas) */
+  const PDF_H2C_BG_DARK = "#0a0e0c";
+  const PDF_H2C_BG_LIGHT = "#f8fafc";
+
+  /**
+   * Fills the **current** PDF page to match the export theme (paper behind screenshots).
+   * @param {import("jspdf").jsPDF} pdf
+   * @param {boolean} useLight
+   */
+  function pdfFillPageBackground(/** @type {import("jspdf").jsPDF} */ pdf, useLight) {
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    if (useLight) {
+      pdf.setFillColor(248, 250, 252);
+    } else {
+      pdf.setFillColor(10, 14, 12);
+    }
+    pdf.rect(0, 0, pageW, pageH, "F");
+  }
+
+  /**
+   * @param {import("jspdf").jsPDF} pdf
+   * @param {"p"|"l"} orientation
+   * @param {boolean} [fillTheme] If set, fills the new page with the export background (avoids white margins in dark mode).
+   */
+  function pdfAddContentPageA4(/** @type {import("jspdf").jsPDF} */ pdf, orientation, fillTheme) {
+    try {
+      // @ts-ignore
+      pdf.addPage("a4", orientation);
+    } catch {
+      pdf.addPage();
+    }
+    if (typeof fillTheme === "boolean") {
+      pdfFillPageBackground(pdf, fillTheme);
+    }
+  }
+
+  function pdfAddOrphanPage(/** @type {import("jspdf").jsPDF} */ pdf, useLight) {
+    pdf.addPage();
+    pdfFillPageBackground(pdf, useLight);
+  }
+
+  function addSlicedCanvasToPdf(/** @type {import("jspdf").jsPDF} */ pdf, source, useLight) {
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const m = 24;
+    const maxW = pageW - 2 * m;
+    const maxH = pageH - 2 * m;
+    const scale = maxW / source.width;
+    const fullH = source.height * scale;
+    if (fullH <= maxH) {
+      pdfFillPageBackground(pdf, useLight);
+      pdf.addImage(source, "PNG", m, m, maxW, fullH, undefined, PDF_PNG_COMP, 0);
+      return;
+    }
+    const pxPerPage = maxH / scale;
+    /** @type {{ y0: number, hPx: number }[]} */
+    const rows = [];
+    let y = 0;
+    while (y < source.height) {
+      const hPx = Math.min(pxPerPage, source.height - y);
+      rows.push({ y0: y, hPx });
+      y += hPx;
+    }
+    if (rows.length >= 2) {
+      const last = rows[rows.length - 1];
+      const prev = rows[rows.length - 2];
+      if (last.hPx < PDF_MIN_LAST_SLICE_PX && (prev.hPx + last.hPx) * scale <= maxH * 1.01) {
+        prev.hPx += last.hPx;
+        rows.pop();
+      }
+    }
+    let isFirst = true;
+    const contOrient = pageW > pageH ? "l" : "p";
+    for (const row of rows) {
+      if (!isFirst) {
+        pdfAddContentPageA4(pdf, contOrient, useLight);
+      } else {
+        pdfFillPageBackground(pdf, useLight);
+      }
+      isFirst = false;
+      const s = document.createElement("canvas");
+      s.width = source.width;
+      s.height = Math.max(1, Math.ceil(row.hPx));
+      s.getContext("2d")?.drawImage(source, 0, row.y0, source.width, row.hPx, 0, 0, s.width, s.height);
+      const hDraw = s.height * scale;
+      pdf.addImage(s, "PNG", m, m, maxW, hDraw, undefined, PDF_PNG_COMP, 0);
+    }
+  }
+
+  /**
+   * Scale the entire image onto one page (no mid-block cuts). If very tall, it shrinks to fit the printable area.
+   * @param {import("jspdf").jsPDF} pdf
+   * @param {HTMLCanvasElement} source
+   * @param {boolean} useLight
+   */
+  function addCanvasFittedToOnePage(pdf, source, useLight) {
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const m = 24;
+    const maxW = pageW - 2 * m;
+    const maxH = pageH - 2 * m;
+    const s = Math.min(maxW / source.width, maxH / source.height);
+    const drawW = source.width * s;
+    const drawH = source.height * s;
+    pdfFillPageBackground(pdf, useLight);
+    pdf.addImage(source, "PNG", m, m, drawW, drawH, undefined, PDF_PNG_COMP, 0);
+  }
+
+  /**
+   * Stack block captures; prefer full page width (no narrow “letterbox” on the right).
+   * @param {import("jspdf").jsPDF} pdf
+   * @param {HTMLCanvasElement} cnv
+   * @param {{ y: number, m?: number, gap?: number, pageO?: "l" | "p", needsNewPage?: boolean, useLight?: boolean }} state
+   * @param {{ noSlice?: boolean }} [opts] If noSlice, tall blocks scale to one page (used for .analyzer-chart-block so the plot is not split into axis-only slivers).
+   */
+  function addCanvasPackedToPdf(pdf, cnv, state, opts) {
+    const noSlice = Boolean(opts && opts.noSlice);
+    const useLight = state.useLight !== false;
+    const pageH = pdf.internal.pageSize.getHeight();
+    const pageW = pdf.internal.pageSize.getWidth();
+    const m = state.m == null ? 24 : state.m;
+    const gap = state.gap == null ? 2 : state.gap;
+    const maxW = pageW - 2 * m;
+    const maxH = pageH - 2 * m;
+    const bottom = pageH - m;
+
+    if (state.needsNewPage) {
+      if (state.pageO === "l") {
+        pdfAddContentPageA4(pdf, "l", useLight);
+      } else if (state.pageO === "p") {
+        pdfAddContentPageA4(pdf, "p", useLight);
+      } else {
+        pdfAddOrphanPage(pdf, useLight);
+      }
+      state.y = m;
+      state.needsNewPage = false;
+    }
+
+    const hAtMaxW = (cnv.height * maxW) / cnv.width;
+
+    if (hAtMaxW > maxH && noSlice) {
+      if (state.y > m) {
+        if (state.pageO === "l") {
+          pdfAddContentPageA4(pdf, "l", useLight);
+        } else if (state.pageO === "p") {
+          pdfAddContentPageA4(pdf, "p", useLight);
+        } else {
+          pdfAddOrphanPage(pdf, useLight);
+        }
+        state.y = m;
+      }
+      addCanvasFittedToOnePage(pdf, cnv, useLight);
+      state.needsNewPage = true;
+      return;
+    }
+
+    if (hAtMaxW > maxH) {
+      if (state.y > m) {
+        if (state.pageO === "l") {
+          pdfAddContentPageA4(pdf, "l", useLight);
+        } else if (state.pageO === "p") {
+          pdfAddContentPageA4(pdf, "p", useLight);
+        } else {
+          pdfAddOrphanPage(pdf, useLight);
+        }
+        state.y = m;
+      }
+      addSlicedCanvasToPdf(pdf, cnv, useLight);
+      state.needsNewPage = true;
+      return;
+    }
+
+    const drawW = maxW;
+    const drawH = hAtMaxW;
+    if (state.y + drawH > bottom) {
+      if (state.pageO === "l") {
+        pdfAddContentPageA4(pdf, "l", useLight);
+      } else if (state.pageO === "p") {
+        pdfAddContentPageA4(pdf, "p", useLight);
+      } else {
+        pdfAddOrphanPage(pdf, useLight);
+      }
+      state.y = m;
+    }
+    if (state.y === m) {
+      pdfFillPageBackground(pdf, useLight);
+    }
+    pdf.addImage(cnv, "PNG", m, state.y, drawW, drawH, undefined, PDF_PNG_COMP, 0);
+    state.y += drawH + gap;
+  }
+
+  /** @param {Element | null} el */
+  function pdfBlockIsUsable(/** @type {Element} */ el) {
+    if (!el || !(el instanceof HTMLElement)) return false;
+    if (el.hasAttribute("hidden") && el.getAttribute("hidden") !== "false") return false;
+    if (el.hidden) return false;
+    if (el.getAttribute("aria-hidden") === "true") return false;
+    const st = getComputedStyle(el);
+    if (st.display === "none" || st.visibility === "hidden") return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 2 && r.height > 2;
+  }
+
+  /**
+   * GPU-Z: one capture per block so charts/insights are never cut across a page (whole block scaled to fit each page).
+   * @param {HTMLElement} panel
+   * @returns {HTMLElement[]}
+   */
+  function getGpuPanelPdfBlockElements(panel) {
+    /** @type {HTMLElement[]} */
+    const out = [];
+    for (const sel of [".panel__head", ".analyzer-chips", ".analyzer-controls", ".analyzer-alerts", ".analyzer-insights--dashboard"]) {
+      const el = panel.querySelector(sel);
+      if (pdfBlockIsUsable(/** @type {HTMLElement} */ (el))) out.push(/** @type {HTMLElement} */ (el));
+    }
+    panel.querySelectorAll(".analyzer-chart-block").forEach((el) => {
+      if (el instanceof HTMLElement && pdfBlockIsUsable(el)) out.push(el);
+    });
+    const stats = panel.querySelector(".analyzer-stats");
+    if (stats instanceof HTMLElement && pdfBlockIsUsable(stats)) {
+      out.push(stats);
+    }
+    return out;
+  }
+
+  /**
+   * DxDiag: one capture per card / section / source block so borders are not cut mid-card (avoids monolithic canvas slice).
+   * @param {HTMLElement} panel
+   * @returns {HTMLElement[]}
+   */
+  function getDxDiagPanelPdfBlockElements(panel) {
+    /** @type {HTMLElement[]} */
+    const out = [];
+    for (const sel of [".panel__head", ".dxdiag-toolbar"]) {
+      const el = panel.querySelector(sel);
+      if (el instanceof HTMLElement && pdfBlockIsUsable(/** @type {HTMLElement} */(el))) {
+        out.push(el);
+      }
+    }
+    const parseNote = panel.querySelector(".dxdiag-parse-note");
+    if (
+      parseNote instanceof HTMLElement &&
+      (parseNote.textContent || "").trim() &&
+      pdfBlockIsUsable(parseNote)
+    ) {
+      out.push(parseNote);
+    }
+    const inner = panel.querySelector(".dxdiag-summary-inner");
+    const sum = panel.querySelector(".dxdiag-summary");
+    const walkRoot = inner || sum;
+    if (walkRoot) {
+      walkRoot.querySelectorAll(":scope > *").forEach((el) => {
+        if (el instanceof HTMLElement && pdfBlockIsUsable(el)) {
+          out.push(el);
+        }
+      });
+    } else {
+      panel.querySelectorAll(".dxdiag-summary .dxdiag-card").forEach((el) => {
+        if (el instanceof HTMLElement && pdfBlockIsUsable(el)) {
+          out.push(el);
+        }
+      });
+    }
+    const raw = panel.querySelector("details.dxdiag-raw");
+    if (raw instanceof HTMLElement && pdfBlockIsUsable(raw)) {
+      out.push(raw);
+    }
+    return out;
+  }
+
+  /**
+   * Cloned block fragments (e.g. .analyzer-controls) are not under .panel--* so theme selectors miss.
+   * Re-wrap in the same panel shell as the source tab so html[data-theme] + .panel--* CSS applies in html2canvas.
+   * @param {HTMLElement} panel
+   * @param {HTMLElement} clone
+   * @returns {HTMLElement}
+   */
+  function wrapPdfBlockCloneInPanelShell(panel, clone) {
+    if (!clone || !(panel instanceof HTMLElement)) {
+      return clone;
+    }
+    if (clone.classList && clone.classList.contains("panel") && clone.classList.contains("tool-panel")) {
+      return clone;
+    }
+    const skin = document.createElement("div");
+    skin.setAttribute("class", panel.getAttribute("class") || "panel");
+    Object.assign(skin.style, {
+      display: "block",
+      boxShadow: "none",
+      border: "none",
+      borderRadius: "0",
+      minHeight: "0",
+      maxWidth: "100%",
+      margin: "0",
+      padding: "0",
+      background: "transparent",
+    });
+    skin.appendChild(clone);
+    return skin;
+  }
+
+  /**
+   * @param {HTMLElement} live
+   * @param {HTMLElement} _panelContext
+   * @param {boolean} useLight
+   * @param {boolean} includeReportSectionTitle
+   * @param {string} sectionTitle
+   * @param {function(Element, *): Promise<HTMLCanvasElement>} h2c
+   * @param {{ wide?: boolean }} [blockOpts] — wide: wider capture for landscape GPU pages
+   */
+  async function captureOnePdfBlockToCanvas(
+    live,
+    _panelContext,
+    useLight,
+    includeReportSectionTitle,
+    sectionTitle,
+    h2c,
+    blockOpts
+  ) {
+    const wide = Boolean(blockOpts && blockOpts.wide);
+    const docScale = wide ? PDF_H2C_SCALE_WIDE : PDF_H2C_SCALE;
+    const wrap = document.createElement("div");
+    wrap.className = "pdf-export-fragment";
+    if (includeReportSectionTitle) {
+      const h1 = document.createElement("h1");
+      h1.textContent = sectionTitle;
+      h1.style.margin = "0 0 0.2rem 0";
+      h1.style.font = '600 0.95rem/1.25 system-ui, "Segoe UI", sans-serif';
+      h1.style.letterSpacing = "0.02em";
+      h1.style.color = useLight ? "#0f172a" : "#e8f0eb";
+      wrap.appendChild(h1);
+    }
+    const clone = live.cloneNode(true);
+    if (clone instanceof HTMLElement) {
+      if (live instanceof HTMLElement) {
+        syncAllCanvasesInCloneForPdf(clone, live);
+        scrubForPdfClone(clone);
+        clone.removeAttribute("hidden");
+        if (clone.classList && clone.classList.contains("dxdiag-raw")) {
+          const preWrap = clone.querySelector(".dxdiag-raw__pre-wrap");
+          if (preWrap instanceof HTMLElement) {
+            preWrap.style.setProperty("max-height", "none", "important");
+            preWrap.style.setProperty("overflow", "visible", "important");
+            preWrap.style.setProperty("height", "auto", "important");
+          }
+          const pre = clone.querySelector(".content--dxdiag");
+          if (pre instanceof HTMLElement) {
+            pre.style.setProperty("max-height", "none", "important");
+          }
+        }
+        /* Do not set !important color/background on the fragment: it breaks .panel--* [data-theme] rules (metrics, matrix). */
+      }
+      clone.style.maxWidth = "100%";
+    }
+    const toMount =
+      _panelContext instanceof HTMLElement && clone instanceof HTMLElement
+        ? wrapPdfBlockCloneInPanelShell(_panelContext, clone)
+        : clone;
+    if (toMount) {
+      wrap.appendChild(toMount);
+    }
+    wrap.style.setProperty("background", useLight ? PDF_H2C_BG_LIGHT : PDF_H2C_BG_DARK, "important");
+    if (!useLight) {
+      wrap.style.setProperty("color", "inherit", "important");
+    }
+    Object.assign(wrap.style, {
+      position: "absolute",
+      left: "-12000px",
+      top: "0",
+      zIndex: "2147483600",
+      width: wide ? "1100px" : "920px",
+      boxSizing: "border-box",
+      padding: wide ? "4px 12px 8px" : "4px 10px 8px",
+    });
+    document.body.appendChild(wrap);
+    await new Promise((r) => setTimeout(r, 40));
+    // @ts-ignore
+    const cnv = await h2c(wrap, {
+      scale: docScale,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: useLight ? PDF_H2C_BG_LIGHT : PDF_H2C_BG_DARK,
+      logging: false,
+      onclone(/** @type {Document} */ doc, /** @type {HTMLElement} */ el) {
+        if (doc && doc.documentElement) {
+          doc.documentElement.setAttribute("data-theme", useLight ? "light" : "dark");
+        }
+        if (doc && doc.body) {
+          if (useLight) {
+            doc.body.style.setProperty("background", PDF_H2C_BG_LIGHT, "important");
+            doc.body.style.setProperty("color", "#0f172a", "important");
+          } else {
+            doc.body.style.setProperty("background", PDF_H2C_BG_DARK, "important");
+            doc.body.style.setProperty("color", "#e8f0eb", "important");
+          }
+        }
+        if (useLight) {
+          el.querySelectorAll("pre, .content, code").forEach((n) => {
+            if (n instanceof HTMLElement) {
+              n.style.setProperty("background", "#f1f5f9", "important");
+              n.style.setProperty("color", "#0f172a", "important");
+            }
+          });
+        }
+      },
+    });
+    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    if (!(cnv instanceof HTMLCanvasElement) || cnv.width < 2 || cnv.height < 2) {
+      throw new Error("Empty block capture");
+    }
+    return cnv;
+  }
+
+  function setupPdfExport() {
+    const openBtn = document.getElementById("pdf-export-open");
+    const dlg = document.getElementById("pdf-export-dialog");
+    const goBtn = document.getElementById("pdf-export-go");
+    const status = document.getElementById("pdf-export-status");
+    const unav = document.getElementById("pdf-export-unavailable");
+    const fieldset = document.getElementById("pdf-export-fieldset");
+    const lightChk = document.getElementById("pdf-light-bg");
+    const exportPanel = document.getElementById("pdf-export-panel");
+    const exportBar = document.getElementById("pdf-export-bar");
+    const exportBarFill = document.getElementById("pdf-export-bar-fill");
+    const exportHeading = document.getElementById("pdf-export-heading");
+
+    // @ts-ignore
+    const JsPDF = window.jspdf && window.jspdf.jsPDF;
+    // @ts-ignore
+    const h2c = typeof window !== "undefined" && window.html2canvas;
+    const libsOk = Boolean(JsPDF && h2c);
+    if (unav) unav.hidden = libsOk;
+    if (fieldset) fieldset.disabled = !libsOk;
+    if (goBtn) goBtn.disabled = !libsOk;
+    if (!libsOk) {
+      if (openBtn) {
+        openBtn.setAttribute("title", "Add vendor/jspdf.umd.min.js and vendor/html2canvas.min.js next to index.html (offline, no network).");
+      }
+    }
+
+    function setStatus(msg, isErr) {
+      if (status) {
+        status.textContent = msg;
+        status.classList.toggle("pdf-dialog__status--err", Boolean(isErr));
+      }
+    }
+
+    function resetPdfExportPanel() {
+      if (exportPanel) {
+        exportPanel.hidden = true;
+        exportPanel.classList.remove("pdf-dialog__export-panel--success");
+      }
+      if (exportBarFill) exportBarFill.style.width = "0%";
+      if (exportBar) {
+        exportBar.setAttribute("aria-valuenow", "0");
+        exportBar.removeAttribute("aria-valuetext");
+      }
+      if (exportHeading) exportHeading.textContent = "Exporting";
+    }
+
+    /** @param {number} pct 0–100 */
+    function setPdfExportBarPct(pct) {
+      const n = Math.max(0, Math.min(100, Math.round(pct)));
+      if (exportBarFill) exportBarFill.style.width = `${n}%`;
+      if (exportBar) {
+        exportBar.setAttribute("aria-valuenow", String(n));
+        exportBar.setAttribute("aria-valuetext", `${n} percent`);
+      }
+    }
+
+    function showPdfExportProgressUI() {
+      if (exportPanel) {
+        exportPanel.hidden = false;
+        exportPanel.classList.remove("pdf-dialog__export-panel--success");
+      }
+      if (exportHeading) exportHeading.textContent = "Exporting";
+      setPdfExportBarPct(0);
+    }
+
+    function showPdfExportDoneUI() {
+      if (exportPanel) {
+        exportPanel.hidden = false;
+        exportPanel.classList.add("pdf-dialog__export-panel--success");
+      }
+      if (exportHeading) exportHeading.textContent = "Exported";
+      setPdfExportBarPct(100);
+    }
+
+    /* <dialog> does not fire a reliable "open" event in all browsers; sync on this click, before showModal, so data-pdf-theme matches location.hash. */
+    openBtn?.addEventListener("click", () => {
+      if (dlg instanceof HTMLDialogElement) {
+        setStatus("");
+        resetPdfExportPanel();
+        if (lightChk) {
+          const siteLight = (document.documentElement.getAttribute("data-theme") || "dark") === "light";
+          lightChk.checked = siteLight;
+        }
+        syncPdfDialogTheme();
+        dlg.showModal();
+      }
+    });
+
+    window.addEventListener("hashchange", () => {
+      if (dlg instanceof HTMLDialogElement && dlg.open) {
+        syncPdfDialogTheme();
+      }
+    });
+
+    dlg?.addEventListener("click", (e) => {
+      if ((/** @type {HTMLElement} */ (e.target)).closest("[data-pdf-close]")) {
+        if (dlg instanceof HTMLDialogElement) dlg.close();
+      }
+    });
+
+    dlg?.addEventListener("close", () => {
+      if (goBtn) goBtn.disabled = !libsOk;
+      if (fieldset) fieldset.disabled = !libsOk;
+      if (lightChk) lightChk.disabled = !libsOk;
+      resetPdfExportPanel();
+      if (dlg) dlg.removeAttribute("aria-busy");
+    });
+
+    goBtn?.addEventListener("click", async () => {
+      if (!libsOk) return;
+      if (!(JsPDF && h2c) || !dlg) return;
+      const scopeInp = document.querySelector('input[name="pdf-scope"]:checked');
+      const allTabs = !scopeInp || (/** @type {HTMLInputElement} */ (scopeInp).value || "all") === "all";
+      const useLight = !lightChk || /** @type {HTMLInputElement} */ (lightChk).checked;
+      const startHash = location.hash || "";
+      // @ts-ignore
+      const jsPDF = JsPDF;
+      if (!jsPDF) return;
+      let exportFinishedOk = false;
+      if (goBtn) goBtn.disabled = true;
+      if (fieldset) fieldset.disabled = true;
+      if (lightChk) lightChk.disabled = true;
+      if (dlg) dlg.setAttribute("aria-busy", "true");
+      showPdfExportProgressUI();
+      setPdfExportBarPct(2);
+      setStatus("Preparing…");
+
+      try {
+        const pdf = new jsPDF({ unit: "pt", format: "a4", orientation: "p" });
+        const w = pdf.internal.pageSize.getWidth();
+        const h0 = pdf.internal.pageSize.getHeight();
+        pdfFillPageBackground(pdf, useLight);
+        if (useLight) {
+          pdf.setTextColor(20, 40, 20);
+        } else {
+          pdf.setTextColor(120, 196, 80);
+        }
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(20);
+        pdf.text("NVIDIA Report Viewer", w / 2, 88, { align: "center" });
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(10.5);
+        if (useLight) {
+          pdf.setTextColor(55, 60, 65);
+        } else {
+          pdf.setTextColor(200, 220, 210);
+        }
+        pdf.text(`v${APP_VERSION} · local export (offline) · no cloud`, w / 2, 115, { align: "center" });
+        pdf.text(new Date().toLocaleString(), w / 2, 132, { align: "center" });
+        pdf.setFontSize(8.5);
+        if (useLight) {
+          pdf.setTextColor(0, 0, 0);
+        } else {
+          pdf.setTextColor(150, 168, 158);
+        }
+        pdf.text(
+          "This PDF is generated entirely in the browser. Files and parsed text are not sent to a server. Share this document with the customer on your own channels.",
+          40,
+          h0 - 44,
+          { maxWidth: w - 80, align: "left" }
+        );
+        if (useLight) {
+          pdf.setTextColor(0, 0, 0);
+        } else {
+          pdf.setTextColor(232, 240, 235);
+        }
+        const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+        const sections = allTabs ? PDF_EXPORT_SECTIONS.slice() : PDF_EXPORT_SECTIONS.filter((s) => s.hash === canonicalPdfHash());
+        const totalSections = Math.max(1, sections.length);
+        setPdfExportBarPct(4);
+
+        for (let si = 0; si < sections.length; si++) {
+          setPdfExportBarPct(4 + (si / totalSections) * 90);
+          const { hash, title } = sections[si];
+          setStatus(`Capturing: ${title}…`);
+          try {
+            history.replaceState(null, "", hash);
+            await delay(200);
+            const p = document.getElementById(hash.slice(1));
+
+            if (!p) {
+              pdfAddContentPageA4(pdf, "p", useLight);
+              if (useLight) {
+                pdf.setTextColor(20, 40, 20);
+              } else {
+                pdf.setTextColor(232, 240, 235);
+              }
+              pdf.setFont("helvetica", "bold");
+              pdf.setFontSize(12);
+              pdf.text(title, 40, 56);
+              pdf.setFont("helvetica", "normal");
+              pdf.setFontSize(10);
+              if (useLight) {
+                pdf.setTextColor(0, 0, 0);
+              } else {
+                pdf.setTextColor(200, 215, 205);
+              }
+              pdf.text("This section could not be found.", 40, 80);
+              continue;
+            }
+            if (!panelHasPdfContent(/** @type {HTMLElement} */ (p))) {
+              pdfAddContentPageA4(pdf, "p", useLight);
+              if (useLight) {
+                pdf.setTextColor(20, 40, 20);
+              } else {
+                pdf.setTextColor(232, 240, 235);
+              }
+              pdf.setFont("helvetica", "bold");
+              pdf.setFontSize(12);
+              pdf.text(title, 40, 56);
+              pdf.setFont("helvetica", "normal");
+              pdf.setFontSize(10);
+              if (useLight) {
+                pdf.setTextColor(0, 0, 0);
+              } else {
+                pdf.setTextColor(200, 215, 205);
+              }
+              pdf.text(
+                "No analysis in this section yet. Load a file in this tool, then export the PDF again.",
+                40,
+                80,
+                { maxWidth: w - 80 }
+              );
+              continue;
+            }
+
+            if (hash === "#tool-panel-gpu" && p.classList.contains("panel--gpu")) {
+              const blocks = getGpuPanelPdfBlockElements(/** @type {HTMLElement} */ (p));
+              if (blocks.length > 0) {
+                const appTheme = document.documentElement.getAttribute("data-theme") || "dark";
+                try {
+                  const targetT = useLight ? "light" : "dark";
+                  document.documentElement.setAttribute("data-theme", targetT);
+                  p.dispatchEvent(new CustomEvent("gpuresize", { bubbles: false }));
+                  await delay(320);
+                  pdfAddContentPageA4(pdf, "l", useLight);
+                  const pack = {
+                    y: 24,
+                    gap: 2,
+                    m: 24,
+                    pageO: /** @type {"l"} */ ("l"),
+                    useLight,
+                  };
+                  for (let bi = 0; bi < blocks.length; bi++) {
+                    const cnv = await captureOnePdfBlockToCanvas(
+                      blocks[bi],
+                      /** @type {HTMLElement} */ (p),
+                      useLight,
+                      bi === 0,
+                      title,
+                      h2c,
+                      { wide: true }
+                    );
+                    const isChartBlock = blocks[bi].classList?.contains("analyzer-chart-block");
+                    addCanvasPackedToPdf(pdf, cnv, pack, { noSlice: isChartBlock });
+                  }
+                } finally {
+                  document.documentElement.setAttribute("data-theme", appTheme);
+                  p.dispatchEvent(new CustomEvent("gpuresize", { bubbles: false }));
+                  await delay(120);
+                }
+                await delay(0);
+                await yieldToMain();
+                continue;
+              }
+            }
+
+            if (hash === "#tool-panel-dxdiag" && p.classList.contains("panel--dxdiag")) {
+              p.querySelectorAll("details.dxdiag-raw").forEach((d) => {
+                if (d instanceof HTMLDetailsElement) d.open = true;
+              });
+              await delay(80);
+              const dxBlocks = getDxDiagPanelPdfBlockElements(/** @type {HTMLElement} */(p));
+              if (dxBlocks.length > 0) {
+                pdfAddContentPageA4(pdf, "p", useLight);
+                const pack = {
+                  y: 24,
+                  gap: 2,
+                  m: 24,
+                  pageO: /** @type {"p"} */ ("p"),
+                  useLight,
+                };
+                for (let bi = 0; bi < dxBlocks.length; bi++) {
+                  const cnv = await captureOnePdfBlockToCanvas(
+                    dxBlocks[bi],
+                    /** @type {HTMLElement} */(p),
+                    useLight,
+                    bi === 0,
+                    title,
+                    h2c
+                  );
+                    if (dxBlocks[bi].classList?.contains("dxdiag-raw")) {
+                    const mTop = pack.m == null ? 24 : pack.m;
+                    if (pack.y > mTop) {
+                      pdfAddContentPageA4(pdf, "p", useLight);
+                    }
+                    addSlicedCanvasToPdf(pdf, cnv, useLight);
+                  } else {
+                    addCanvasPackedToPdf(pdf, cnv, pack);
+                  }
+                }
+                await delay(0);
+                await yieldToMain();
+                continue;
+              }
+            }
+
+            const wrap = document.createElement("div");
+            wrap.className = "pdf-export-wrapper";
+            const h = document.createElement("h1");
+            h.style.margin = "0 0 0.4rem 0";
+            h.style.font = '600 16px/1.2 system-ui, "Segoe UI", sans-serif';
+            h.style.letterSpacing = "0.02em";
+            h.textContent = title;
+            const inner = p.cloneNode(true);
+            if (p instanceof HTMLElement && inner instanceof HTMLElement) {
+              inner.style.maxWidth = "880px";
+              inner.style.position = "relative";
+              inner.style.left = "0";
+              inner.style.top = "0";
+              inner.style.display = "block";
+              inner.removeAttribute("hidden");
+              inner.style.padding = "8px 12px 14px";
+            }
+            syncAllCanvasesInCloneForPdf(/** @type {HTMLElement} */ (inner), /** @type {HTMLElement} */ (p));
+            scrubForPdfClone(/** @type {HTMLElement} */ (inner));
+            wrap.style.setProperty("background", useLight ? PDF_H2C_BG_LIGHT : PDF_H2C_BG_DARK, "important");
+            wrap.appendChild(h);
+            wrap.appendChild(inner);
+            document.body.appendChild(wrap);
+            Object.assign(wrap.style, {
+              position: "absolute",
+              left: "-12000px",
+              top: "0",
+              zIndex: "2147483500",
+              width: "900px",
+              boxSizing: "border-box",
+            });
+            if (h instanceof HTMLElement) {
+              h.style.setProperty("color", useLight ? "#0f172a" : "#e8f0eb", "important");
+            }
+            await delay(40);
+            // @ts-ignore
+            const cnv = await h2c(wrap, {
+              scale: PDF_H2C_MONOLITH,
+              useCORS: true,
+              allowTaint: true,
+              backgroundColor: useLight ? PDF_H2C_BG_LIGHT : PDF_H2C_BG_DARK,
+              logging: false,
+              onclone(/** @type {Document} */ doc, /** @type {HTMLElement} */ el) {
+                if (doc && doc.documentElement) {
+                  doc.documentElement.setAttribute("data-theme", useLight ? "light" : "dark");
+                }
+                if (doc && doc.body) {
+                  if (useLight) {
+                    doc.body.style.setProperty("background", PDF_H2C_BG_LIGHT, "important");
+                    doc.body.style.setProperty("color", "#0f172a", "important");
+                  } else {
+                    doc.body.style.setProperty("background", PDF_H2C_BG_DARK, "important");
+                    doc.body.style.setProperty("color", "#e8f0eb", "important");
+                  }
+                }
+                if (useLight) {
+                  el.querySelectorAll("pre, .content, code").forEach((n) => {
+                    if (n instanceof HTMLElement) {
+                      n.style.setProperty("background", "#f1f5f9", "important");
+                      n.style.setProperty("color", "#0f172a", "important");
+                    }
+                  });
+                }
+              },
+            });
+            if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+            if (!(cnv instanceof HTMLCanvasElement)) {
+              throw new Error("html2canvas did not return a canvas.");
+            }
+            if (cnv.width < 2 || cnv.height < 2) {
+              throw new Error("Empty capture. Try a smaller file or a different tab.");
+            }
+            pdfAddContentPageA4(pdf, "p", useLight);
+            addSlicedCanvasToPdf(pdf, cnv, useLight);
+            await delay(0);
+            await yieldToMain();
+          } catch (e) {
+            console.error("PDF section failed:", title, e);
+            pdfAddContentPageA4(pdf, "p", useLight);
+            if (useLight) {
+              pdf.setTextColor(20, 40, 20);
+            } else {
+              pdf.setTextColor(232, 240, 235);
+            }
+            pdf.setFont("helvetica", "bold");
+            pdf.setFontSize(12);
+            pdf.text(title, 40, 56);
+            pdf.setFont("helvetica", "normal");
+            pdf.setFontSize(10);
+            if (useLight) {
+              pdf.setTextColor(0, 0, 0);
+            } else {
+              pdf.setTextColor(200, 215, 205);
+            }
+            const msg = e && /** @type {any} */ (e).message ? String(/** @type {any} */ (e).message) : String(e);
+            pdf.text("Could not capture this section. " + msg, 40, 80, { maxWidth: w - 80 });
+          }
+        }
+
+        setPdfExportBarPct(95);
+        const ymd = new Date();
+        const name = `NVIDIA-Report-Viewer-v${APP_VERSION}-${
+          ymd.getFullYear()
+        }-${String(ymd.getMonth() + 1).padStart(2, "0")}-${String(ymd.getDate()).padStart(2, "0")}.pdf`;
+        pdf.save(name);
+        exportFinishedOk = true;
+        setStatus("Saved: " + name);
+        showPdfExportDoneUI();
+        if (dlg instanceof HTMLDialogElement) setTimeout(() => dlg.close(), 600);
+      } catch (e) {
+        console.error("PDF export failed", e);
+        resetPdfExportPanel();
+        setStatus("Export failed. " + (e && /** @type {any} */ (e).message ? String(/** @type {any} */ (e).message) : String(e)), true);
+      } finally {
+        if (!exportFinishedOk) {
+          if (goBtn) goBtn.disabled = !libsOk;
+          if (fieldset) fieldset.disabled = !libsOk;
+          if (lightChk) lightChk.disabled = !libsOk;
+        }
+        if (dlg) dlg.removeAttribute("aria-busy");
+        try {
+          if (startHash) history.replaceState(null, "", startHash);
+        } catch {
+          /* */
+        }
+      }
+    });
+
+    syncPdfDialogTheme();
+  }
+
   document.querySelectorAll(".panel--system").forEach((p) => {
     try {
       setupSystemPanel(p);
@@ -15077,8 +16697,16 @@
       console.error("Event Viewer panel init failed:", err);
     }
   });
+  document.querySelectorAll(".panel--dxdiag").forEach((p) => {
+    try {
+      setupDxDiagPanel(p);
+    } catch (err) {
+      console.error("DxDiag panel init failed:", err);
+    }
+  });
   setupWorkspaceTabs();
   setupSkipLinkFocus();
   setupScrollToTop();
   setupAboutDialog();
+  setupPdfExport();
 })();

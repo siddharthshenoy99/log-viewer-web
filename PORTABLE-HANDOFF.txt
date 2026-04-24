@@ -23,7 +23,7 @@ WHAT THIS IS
   rest of the tool (nothing uploaded for parsing).
 
   Tabs (physical row keys): Shift+1 System Information · Shift+2 BSOD / WinDbg
-  · Shift+3 GPU-Z logs · Shift+4 Event Viewer (.evtx). Skipped while typing in a
+  · Shift+3 GPU-Z logs · Shift+4 Event Viewer (.evtx) · Shift+5 DxDiag text. Skipped while typing in a
   field or when the About dialog is open — see footer “About · scope, limits &
   shortcuts”.
 
@@ -97,6 +97,6 @@ WHAT THIS IS
 
 QUESTIONS
   In the app: footer → “About · scope, limits & shortcuts”, or Shift+? outside
-  a text field. Tab shortcuts: Shift+1 … Shift+4 as listed above.
+  a text field. Tab shortcuts: Shift+1 … Shift+5 as listed above.
 
 ================================================================================

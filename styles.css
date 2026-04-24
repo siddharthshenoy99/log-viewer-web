@@ -9880,6 +9880,29 @@ html[data-theme="light"] .panel--system .system-toolbar .btn--secondary:hover {
   box-shadow: 0 4px 14px rgba(91, 33, 182, 0.3);
 }
 
+/* Run comparison: same purple CTA as Pretty XML / Copy raw in the system toolbar (button lives in Advanced, not in .system-toolbar). */
+html[data-theme="light"] .panel--system .system-compare-run.btn--secondary {
+  border-color: #5b21b6;
+  background: linear-gradient(180deg, #7c3aed 0%, #6d28d9 55%, #5b21b6 100%);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+html[data-theme="light"] .panel--system .system-compare-run.btn--secondary:hover {
+  border-color: #6d28d9;
+  background: linear-gradient(180deg, #8b5cf6 0%, #7c3aed 55%, #6d28d9 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(91, 33, 182, 0.3);
+}
+
+html[data-theme="light"] .panel--system .system-compare-run.btn--secondary:disabled,
+html[data-theme="light"] .panel--system .system-compare-run.btn--secondary[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 html[data-theme="light"] .panel--system .system-toolbar .btn--ghost {
   background: #ffffff;
   color: #1f2937;

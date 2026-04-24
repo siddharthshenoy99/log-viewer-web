@@ -16677,6 +16677,461 @@
     syncPdfDialogTheme();
   }
 
+  function setupAdvancedHub() {
+    const ADVANCED_LS = "log-viewer-advanced";
+    const PRESET_LS = "log-viewer-advanced-presets";
+    const toggle = document.getElementById("advanced-toggle");
+    const inline = document.getElementById("advanced-inline");
+    const palette = document.getElementById("command-palette-dialog");
+    const caseInput = document.getElementById("advanced-case-dir");
+    const caseRun = document.getElementById("advanced-case-run");
+    const caseStatus = document.getElementById("advanced-case-status");
+    const timelineOut = document.getElementById("advanced-timeline-out");
+    const timelineRebuild = document.getElementById("advanced-timeline-rebuild");
+    const timelineDl = document.getElementById("advanced-timeline-dl");
+    const snapDl = document.getElementById("advanced-snapshot-dl");
+    const presetName = document.getElementById("advanced-preset-name");
+    const presetSave = document.getElementById("advanced-preset-save");
+    const presetExport = document.getElementById("advanced-preset-export");
+    const presetImport = document.getElementById("advanced-preset-import");
+    const presetList = document.getElementById("advanced-preset-list");
+    const diffA = document.getElementById("advanced-diff-a");
+    const diffB = document.getElementById("advanced-diff-b");
+    const diffRun = document.getElementById("advanced-diff-run");
+    const diffOut = document.getElementById("advanced-diff-out");
+    const redactHost = document.getElementById("advanced-redact-host");
+    const redactEmail = document.getElementById("advanced-redact-email");
+    const redactPath = document.getElementById("advanced-redact-path");
+    const redactRun = document.getElementById("advanced-redact-run");
+    const modeOff = document.getElementById("advanced-mode-off");
+    const paletteFilter = document.getElementById("command-palette-filter");
+    const paletteList = document.getElementById("command-palette-list");
+
+    function isAdvanced() {
+      return document.documentElement.getAttribute("data-advanced") === "on";
+    }
+
+    function setAdvanced(on) {
+      if (on) {
+        document.documentElement.setAttribute("data-advanced", "on");
+        try {
+          localStorage.setItem(ADVANCED_LS, "1");
+        } catch {
+          /* */
+        }
+      } else {
+        document.documentElement.removeAttribute("data-advanced");
+        try {
+          localStorage.removeItem(ADVANCED_LS);
+        } catch {
+          /* */
+        }
+      }
+      syncToggleUi();
+    }
+
+    function syncToggleUi() {
+      const on = isAdvanced();
+      if (toggle) {
+        toggle.setAttribute("aria-expanded", on ? "true" : "false");
+        toggle.textContent = on ? "Advanced · on" : "Advanced";
+      }
+      if (inline) inline.hidden = !on;
+    }
+
+    function readPresets() {
+      try {
+        const raw = localStorage.getItem(PRESET_LS);
+        const arr = raw ? JSON.parse(raw) : [];
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function writePresets(arr) {
+      try {
+        localStorage.setItem(PRESET_LS, JSON.stringify(arr));
+      } catch {
+        /* */
+      }
+    }
+
+    function renderPresetList() {
+      if (!presetList) return;
+      presetList.innerHTML = "";
+      readPresets().forEach((p, i) => {
+        const li = document.createElement("li");
+        const name = p && p.name ? String(p.name) : `Preset ${i + 1}`;
+        const applyBtn = document.createElement("button");
+        applyBtn.type = "button";
+        applyBtn.className = "btn btn--ghost";
+        applyBtn.textContent = "Apply";
+        applyBtn.addEventListener("click", () => {
+          if (p && p.theme) {
+            document.documentElement.setAttribute("data-theme", p.theme === "light" ? "light" : "dark");
+            try {
+              localStorage.setItem("log-viewer-theme", p.theme === "light" ? "light" : "dark");
+            } catch {
+              /* */
+            }
+          }
+          if (p && p.hash) {
+            try {
+              location.hash = p.hash;
+            } catch {
+              /* */
+            }
+          }
+        });
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn btn--ghost";
+        delBtn.textContent = "Delete";
+        delBtn.addEventListener("click", () => {
+          const next = readPresets().filter((_, j) => j !== i);
+          writePresets(next);
+          renderPresetList();
+        });
+        li.appendChild(document.createTextNode(`${name} · `));
+        li.appendChild(applyBtn);
+        li.appendChild(document.createTextNode(" "));
+        li.appendChild(delBtn);
+        presetList.appendChild(li);
+      });
+    }
+
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    async function readHeadText(file, max) {
+      return new Promise((resolve) => {
+        const slice = file.slice(0, max);
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result || ""));
+        r.onerror = () => resolve("");
+        r.readAsText(slice);
+      });
+    }
+
+    async function classifyCaseFile(file) {
+      const n = file.name.toLowerCase();
+      if (n.endsWith(".evtx")) return "evtx";
+      if (n.endsWith(".nfo")) return "system";
+      if (n.endsWith(".xml")) return /evtx|elf/i.test(n) ? "evtx" : "system";
+      if (n.includes("dxdiag") && (n.endsWith(".txt") || n.endsWith(".log"))) return "dxdiag";
+      if (n.endsWith(".txt") || n.endsWith(".log")) {
+        const head = await readHeadText(file, 6000);
+        const t = head.trim();
+        if (/^={3,}\s*dxdiag|^-{5,}\s*dxdiag|^dxdiag\s+version/i.test(t)) return "dxdiag";
+        if (/^date,|^time,|sensor|gpu-z|gpu clock|memory clock/i.test(t)) return "gpu";
+        if (/microsoft windows|system information|^\s*<?\?xml/i.test(t)) return "system";
+        return "bsod";
+      }
+      return "bsod";
+    }
+
+    async function assignFilesToInput(selector, files, /** @type {string | null} */ navHash) {
+      if (navHash) {
+        try {
+          location.hash = navHash;
+        } catch {
+          /* */
+        }
+        await new Promise((r) => setTimeout(r, 80));
+      }
+      const input = document.querySelector(selector);
+      if (!(input instanceof HTMLInputElement) || !files.length) return;
+      const dt = new DataTransfer();
+      for (const f of files) dt.items.add(f);
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+
+    toggle?.addEventListener("click", () => {
+      if (!inline) return;
+      if (!isAdvanced()) {
+        setAdvanced(true);
+        requestAnimationFrame(() => {
+          try {
+            inline.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          } catch {
+            /* */
+          }
+        });
+        return;
+      }
+      setAdvanced(false);
+      if (palette instanceof HTMLDialogElement) palette.close();
+    });
+
+    modeOff?.addEventListener("click", () => {
+      setAdvanced(false);
+      if (palette instanceof HTMLDialogElement) palette.close();
+    });
+
+    caseRun?.addEventListener("click", async () => {
+      if (!(caseInput instanceof HTMLInputElement) || !caseInput.files?.length) {
+        if (caseStatus) caseStatus.textContent = "Choose a folder first.";
+        return;
+      }
+      if (caseStatus) caseStatus.textContent = "Routing files…";
+      const files = [...caseInput.files];
+      /** @type {Record<string, File[]>} */
+      const buckets = { system: [], bsod: [], gpu: [], evtx: [], dxdiag: [] };
+      for (const f of files) {
+        const tab = await classifyCaseFile(f);
+        if (buckets[tab]) buckets[tab].push(f);
+        else buckets.bsod.push(f);
+      }
+      try {
+        for (const f of buckets.system) await assignFilesToInput("#tool-panel-system .file-input", [f], "#tool-panel-system");
+        for (const f of buckets.bsod) await assignFilesToInput("#tool-panel-bsod .file-input--bsod", [f], "#tool-panel-bsod");
+        if (buckets.gpu.length) await assignFilesToInput("#tool-panel-gpu .file-input--multi", buckets.gpu, "#tool-panel-gpu");
+        for (const f of buckets.evtx) await assignFilesToInput("#tool-panel-evtx .file-input--evtx", [f], "#tool-panel-evtx");
+        for (const f of buckets.dxdiag) await assignFilesToInput("#tool-panel-dxdiag .file-input--dxdiag", [f], "#tool-panel-dxdiag");
+        if (caseStatus) {
+          caseStatus.textContent = `Queued ${files.length} file(s): system ${buckets.system.length}, bsod ${buckets.bsod.length}, gpu ${buckets.gpu.length}, evtx ${buckets.evtx.length}, dxdiag ${buckets.dxdiag.length}.`;
+        }
+      } catch (err) {
+        console.error(err);
+        if (caseStatus) caseStatus.textContent = "Some files could not be routed. See console.";
+      }
+    });
+
+    function collectTimelineText() {
+      const parts = [];
+      document.querySelectorAll("pre.content, .analyzer-meta, .file-meta, .bsod-file-meta").forEach((el) => {
+        if (el instanceof HTMLElement && el.textContent) parts.push(el.textContent);
+      });
+      return parts.join("\n");
+    }
+
+    function extractIsoLikeDates(text) {
+      const re = /\b20\d{2}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?|\b\d{1,2}\/\d{1,2}\/20\d{2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? 20\d{2}\b/gi;
+      const found = text.match(re);
+      return found ? [...new Set(found)] : [];
+    }
+
+    timelineRebuild?.addEventListener("click", () => {
+      if (!timelineOut) return;
+      const dates = extractIsoLikeDates(collectTimelineText());
+      const lines = [`# Timeline (Advanced) · ${new Date().toISOString()}`, `Active tab: ${location.hash || "(default)"}`, ""];
+      lines.push(...dates.map((d) => `- ${d}`));
+      lines.push("", "# Raw excerpts (trimmed)", collectTimelineText().slice(0, 12000));
+      timelineOut.value = lines.join("\n");
+      timelineOut.removeAttribute("readonly");
+    });
+
+    timelineDl?.addEventListener("click", () => {
+      if (!timelineOut) return;
+      const blob = new Blob([timelineOut.value], { type: "text/plain;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `report-timeline-${Date.now()}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    snapDl?.addEventListener("click", () => {
+      const chunks = [];
+      chunks.push(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><title>Report snapshot</title></head><body>`);
+      chunks.push(`<h1>Report snapshot</h1><p>Generated locally · ${escHtml(new Date().toLocaleString())}</p>`);
+      chunks.push(`<p>Tab: <code>${escHtml(location.hash || "")}</code></p>`);
+      document.querySelectorAll(".tool-panel.panel").forEach((panel) => {
+        const id = panel.id || "";
+        const h2 = panel.querySelector(".panel__head h2");
+        const title = h2 ? h2.textContent : id;
+        chunks.push(`<h2>${escHtml(title || id)}</h2>`);
+        panel.querySelectorAll("pre.content").forEach((pre) => {
+          if (pre instanceof HTMLElement && pre.textContent && pre.textContent.trim()) {
+            chunks.push(`<pre style="white-space:pre-wrap;max-height:24rem;overflow:auto;border:1px solid #ccc;padding:8px">`);
+            chunks.push(escHtml(pre.textContent.slice(0, 12000)));
+            chunks.push(`</pre>`);
+          }
+        });
+      });
+      chunks.push(`</body></html>`);
+      const blob = new Blob(chunks, { type: "text/html;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `report-snapshot-${Date.now()}.html`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    presetSave?.addEventListener("click", () => {
+      const name = presetName && "value" in presetName ? String(/** @type {HTMLInputElement} */ (presetName).value).trim() : "";
+      if (!name) {
+        alert("Enter a preset name.");
+        return;
+      }
+      const arr = readPresets();
+      arr.push({
+        name,
+        hash: location.hash || "#tool-panel-system",
+        theme: document.documentElement.getAttribute("data-theme") || "dark",
+      });
+      writePresets(arr);
+      renderPresetList();
+      if (presetName instanceof HTMLInputElement) presetName.value = "";
+    });
+
+    presetExport?.addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(readPresets(), null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `report-presets-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    presetImport?.addEventListener("change", () => {
+      const inp = presetImport;
+      if (!(inp instanceof HTMLInputElement) || !inp.files?.[0]) return;
+      const r = new FileReader();
+      r.onload = () => {
+        try {
+          const data = JSON.parse(String(r.result || "[]"));
+          if (!Array.isArray(data)) throw new Error("not array");
+          writePresets(readPresets().concat(data));
+          renderPresetList();
+        } catch {
+          alert("Invalid presets JSON.");
+        }
+        inp.value = "";
+      };
+      r.readAsText(inp.files[0]);
+    });
+
+    diffRun?.addEventListener("click", () => {
+      if (!(diffA instanceof HTMLTextAreaElement) || !(diffB instanceof HTMLTextAreaElement) || !diffOut) return;
+      const la = diffA.value.slice(0, 8000).split("\n");
+      const lb = diffB.value.slice(0, 8000).split("\n");
+      const max = Math.max(la.length, lb.length);
+      const out = [];
+      for (let i = 0; i < max; i++) {
+        const A = la[i];
+        const B = lb[i];
+        if (A === B) out.push(`  ${A ?? ""}`);
+        else {
+          if (A !== undefined) out.push(`- ${A}`);
+          if (B !== undefined) out.push(`+ ${B}`);
+        }
+      }
+      diffOut.textContent = out.join("\n");
+    });
+
+    redactRun?.addEventListener("click", () => {
+      const apply = (txt) => {
+        let s = txt;
+        if (redactHost instanceof HTMLInputElement && redactHost.checked) {
+          s = s.replace(/\b(?:DESKTOP|WIN|LAPTOP)-[A-Z0-9]{4,}\b/gi, "[HOST]");
+        }
+        if (redactEmail instanceof HTMLInputElement && redactEmail.checked) {
+          s = s.replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[EMAIL]");
+        }
+        if (redactPath instanceof HTMLInputElement && redactPath.checked) {
+          s = s.replace(/\\Users\\[^\\]+\\/gi, "\\Users\\[user]\\");
+        }
+        return s;
+      };
+      document.querySelectorAll("textarea.bsod-paste__textarea").forEach((el) => {
+        if (el instanceof HTMLTextAreaElement) el.value = apply(el.value);
+      });
+      document.querySelectorAll("pre.content--bsod, pre.content--system, pre.content--dxdiag").forEach((el) => {
+        if (el instanceof HTMLElement) el.textContent = apply(el.textContent || "");
+      });
+      alert("Redaction applied to in-memory text in those fields.");
+    });
+
+    const PALETTE_CMDS = [
+      { label: "Go: System Information", run: () => { location.hash = "#tool-panel-system"; } },
+      { label: "Go: BSOD & WinDbg", run: () => { location.hash = "#tool-panel-bsod"; } },
+      { label: "Go: GPU-Z logs", run: () => { location.hash = "#tool-panel-gpu"; } },
+      { label: "Go: Event Viewer", run: () => { location.hash = "#tool-panel-evtx"; } },
+      { label: "Go: DxDiag", run: () => { location.hash = "#tool-panel-dxdiag"; } },
+      {
+        label: "Toggle light / dark theme",
+        run: () => {
+          const next = document.documentElement.getAttribute("data-theme") === "light" ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", next);
+          try {
+            localStorage.setItem("log-viewer-theme", next);
+          } catch {
+            /* */
+          }
+          const tt = document.getElementById("theme-toggle");
+          if (tt) tt.setAttribute("aria-label", next === "light" ? "Switch to dark mode" : "Switch to light mode");
+        },
+      },
+      {
+        label: "Open Advanced tools",
+        run: () => {
+          setAdvanced(true);
+          if (inline) {
+            requestAnimationFrame(() => {
+              try {
+                inline.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              } catch {
+                /* */
+              }
+            });
+          }
+        },
+      },
+    ];
+
+    function renderPaletteList(filter) {
+      if (!paletteList) return;
+      const q = (filter || "").toLowerCase();
+      paletteList.innerHTML = "";
+      PALETTE_CMDS.filter((c) => !q || c.label.toLowerCase().includes(q)).forEach((cmd) => {
+        const li = document.createElement("li");
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = cmd.label;
+        b.addEventListener("click", () => {
+          cmd.run();
+          if (palette instanceof HTMLDialogElement) palette.close();
+        });
+        li.appendChild(b);
+        paletteList.appendChild(li);
+      });
+    }
+
+    paletteFilter?.addEventListener("input", () => {
+      if (paletteFilter instanceof HTMLInputElement) renderPaletteList(paletteFilter.value);
+    });
+
+    palette?.addEventListener("click", (e) => {
+      if ((/** @type {HTMLElement} */ (e.target)).closest("[data-palette-close]")) {
+        if (palette instanceof HTMLDialogElement) palette.close();
+      }
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (!isAdvanced()) return;
+      const t = /** @type {HTMLElement | null} */ (e.target);
+      if (t?.closest("input, textarea, select, [contenteditable=true]") && !(e.ctrlKey && e.code === "KeyK")) return;
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyK" && !e.altKey) {
+        e.preventDefault();
+        if (!(palette instanceof HTMLDialogElement)) return;
+        renderPaletteList("");
+        palette.showModal();
+        setTimeout(() => paletteFilter?.focus(), 30);
+      }
+    });
+
+    syncToggleUi();
+    renderPresetList();
+  }
+
   document.querySelectorAll(".panel--system").forEach((p) => {
     try {
       setupSystemPanel(p);
@@ -16717,4 +17172,5 @@
   setupScrollToTop();
   setupAboutDialog();
   setupPdfExport();
+  setupAdvancedHub();
 })();

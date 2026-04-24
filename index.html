@@ -36,7 +36,7 @@
     -->
     <title>NVIDIA Report Viewer</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=loadui5" />
+    <link rel="stylesheet" href="styles.css?v=loadui8" />
     <script>
       (function () {
         try {
@@ -45,11 +45,28 @@
         } catch (e) {
           document.documentElement.setAttribute("data-theme", "dark");
         }
+        try {
+          if (localStorage.getItem("log-viewer-advanced") === "1") {
+            document.documentElement.setAttribute("data-advanced", "on");
+          }
+        } catch (e2) {
+          /* */
+        }
       })();
     </script>
   </head>
   <body>
     <a class="skip-link" href="#workspace">Skip to tools</a>
+    <button
+      type="button"
+      class="advanced-toggle"
+      id="advanced-toggle"
+      aria-expanded="false"
+      aria-controls="advanced-inline"
+      title="Power-user tools: bundle load, timeline, export, presets, diff, glossary, command palette, redaction"
+    >
+      Advanced
+    </button>
     <button
       type="button"
       class="theme-toggle"
@@ -246,6 +263,105 @@
           <span class="tool-tab__shortcut" aria-hidden="true">Shift+5</span>
         </a>
       </nav>
+
+      <section
+        class="advanced-inline"
+        id="advanced-inline"
+        hidden
+        aria-labelledby="advanced-inline-title"
+      >
+        <header class="advanced-inline__head">
+          <div class="advanced-inline__head-text">
+            <p class="advanced-inline__kicker">Power tools</p>
+            <h2 id="advanced-inline-title" class="advanced-inline__title">Advanced</h2>
+          </div>
+          <button type="button" class="btn btn--ghost" id="advanced-mode-off">Turn off Advanced</button>
+        </header>
+        <div class="advanced-inline__body">
+          <p class="advanced-inline__lead">
+            Same tabs and theme as the rest of the viewer. Nothing is uploaded; processing stays in this tab. Press
+            <kbd>Ctrl</kbd>+<kbd>K</kbd> for the command palette.
+          </p>
+
+          <article class="advanced-inline__card" aria-labelledby="adv-case">
+            <h3 id="adv-case" class="advanced-inline__h">Case bundle (folder)</h3>
+            <p class="advanced-inline__p">
+              Pick a folder of exports; files are routed to tabs by name and a quick text sniff (<code>.evtx</code>,
+              <code>.nfo</code>, DxDiag <code>.txt</code>, GPU-Z logs, other <code>.txt</code> to BSOD or GPU heuristics).
+            </p>
+            <input type="file" id="advanced-case-dir" webkitdirectory multiple class="advanced-inline__file" />
+            <button type="button" class="btn btn--secondary" id="advanced-case-run">Load folder into tabs</button>
+            <p class="advanced-inline__status" id="advanced-case-status" role="status"></p>
+          </article>
+
+          <article class="advanced-inline__card" aria-labelledby="adv-time">
+            <h3 id="adv-time" class="advanced-inline__h">Cross-tab timeline</h3>
+            <p class="advanced-inline__p">Scans visible raw text for ISO-like dates and panel hints. Edit the list, then export as plain text.</p>
+            <textarea id="advanced-timeline-out" class="advanced-inline__ta" rows="6" spellcheck="false" readonly></textarea>
+            <div class="advanced-inline__row">
+              <button type="button" class="btn btn--secondary" id="advanced-timeline-rebuild">Rebuild from open tabs</button>
+              <button type="button" class="btn btn--ghost" id="advanced-timeline-dl">Download timeline.txt</button>
+            </div>
+          </article>
+
+          <article class="advanced-inline__card" aria-labelledby="adv-snap">
+            <h3 id="adv-snap" class="advanced-inline__h">Static report snapshot</h3>
+            <p class="advanced-inline__p">Downloads a single offline HTML file with titles and excerpts from loaded raw views (no scripts).</p>
+            <button type="button" class="btn btn--secondary" id="advanced-snapshot-dl">Download snapshot.html</button>
+          </article>
+
+          <article class="advanced-inline__card" aria-labelledby="adv-pres">
+            <h3 id="adv-pres" class="advanced-inline__h">Saved views (presets)</h3>
+            <p class="advanced-inline__p">Stores active tab hash and theme in this browser (<code>localStorage</code>).</p>
+            <label class="advanced-inline__label">Preset name <input type="text" id="advanced-preset-name" class="advanced-inline__input" maxlength="80" /></label>
+            <div class="advanced-inline__row">
+              <button type="button" class="btn btn--secondary" id="advanced-preset-save">Save current view</button>
+              <button type="button" class="btn btn--ghost" id="advanced-preset-export">Export presets.json</button>
+              <input type="file" id="advanced-preset-import" accept=".json,application/json" class="advanced-inline__file" />
+            </div>
+            <ul class="advanced-inline__list" id="advanced-preset-list"></ul>
+          </article>
+
+          <article class="advanced-inline__card" aria-labelledby="adv-diff">
+            <h3 id="adv-diff" class="advanced-inline__h">Text diff (two pastes)</h3>
+            <p class="advanced-inline__p">Line-by-line compare (first 8000 chars each).</p>
+            <div class="advanced-inline__diffgrid">
+              <label class="advanced-inline__difflab">A<textarea id="advanced-diff-a" class="advanced-inline__ta" rows="5" spellcheck="false"></textarea></label>
+              <label class="advanced-inline__difflab">B<textarea id="advanced-diff-b" class="advanced-inline__ta" rows="5" spellcheck="false"></textarea></label>
+            </div>
+            <button type="button" class="btn btn--secondary" id="advanced-diff-run">Run diff</button>
+            <pre class="advanced-inline__pre" id="advanced-diff-out" spellcheck="false"></pre>
+          </article>
+
+          <article class="advanced-inline__card" aria-labelledby="adv-gloss">
+            <h3 id="adv-gloss" class="advanced-inline__h">Glossary</h3>
+            <dl class="advanced-inline__dl">
+              <dt>Bugcheck / STOP</dt>
+              <dd>Hex code from a bugcheck; use Microsoft docs and WinDbg for definitive analysis.</dd>
+              <dt>GPU-Z sensor log</dt>
+              <dd>Time-stamped CSV-style readings; charts here are interpretive, not a lab certification.</dd>
+              <dt>EVTX</dt>
+              <dd>Windows Event Log export; message text depends on provider DLLs on the machine that created it.</dd>
+              <dt>DxDiag</dt>
+              <dd>DirectX diagnostics text; parser expects common English section headers.</dd>
+              <dt>MSInfo / NFO</dt>
+              <dd>System Information XML; repair handles common corruption patterns only.</dd>
+            </dl>
+          </article>
+
+          <article class="advanced-inline__card" aria-labelledby="adv-redact">
+            <h3 id="adv-redact" class="advanced-inline__h">Privacy redaction</h3>
+            <p class="advanced-inline__p">
+              Applies patterns to BSOD paste, BSOD raw <code>pre</code>, system raw <code>pre</code>, and DxDiag raw
+              <code>pre</code> (in-memory only).
+            </p>
+            <label class="advanced-inline__check"><input type="checkbox" id="advanced-redact-host" checked /> PC names (<code>DESKTOP-…</code>, <code>WIN-…</code>)</label>
+            <label class="advanced-inline__check"><input type="checkbox" id="advanced-redact-email" checked /> Email addresses</label>
+            <label class="advanced-inline__check"><input type="checkbox" id="advanced-redact-path" checked /> User profile path segments under <code>\\Users\\</code></label>
+            <button type="button" class="btn btn--secondary" id="advanced-redact-run">Apply redaction</button>
+          </article>
+        </div>
+      </section>
 
       <div class="tool-tab-panels">
       <section
@@ -1053,6 +1169,22 @@
       </div>
     </dialog>
 
+    <dialog class="about-dialog advanced-palette" id="command-palette-dialog" aria-labelledby="command-palette-title">
+      <div class="about-dialog__inner">
+        <header class="about-dialog__head">
+          <h2 id="command-palette-title">Command palette</h2>
+          <button type="button" class="about-dialog__close" data-palette-close aria-label="Close">&times;</button>
+        </header>
+        <div class="about-dialog__body">
+          <input type="search" id="command-palette-filter" class="advanced-inline__input advanced-inline__input--wide" placeholder="Filter commands…" autocomplete="off" />
+          <ul class="advanced-inline__cmdlist" id="command-palette-list" role="listbox"></ul>
+        </div>
+        <div class="about-dialog__foot">
+          <button type="button" class="btn btn--secondary" data-palette-close>Close</button>
+        </div>
+      </div>
+    </dialog>
+
     <dialog
       class="pdf-dialog"
       id="pdf-export-dialog"
@@ -1235,6 +1367,6 @@
     <script src="vendor/jspdf.umd.min.js" charset="utf-8"></script>
     <script src="vendor/html2canvas.min.js" charset="utf-8"></script>
     <!-- Plain script (not ES modules) so file:// works with no local server -->
-    <script src="app.js?v=pdf1" charset="utf-8"></script>
+    <script src="app.js?v=adv3" charset="utf-8"></script>
   </body>
 </html>

@@ -5276,6 +5276,308 @@ body:has(#tool-panel-bsod:target) .site-footer__export {
   display: none !important;
 }
 
+/* Advanced mode: fixed top-left (mirror theme toggle). Styling follows global dark green; light tab accents below. */
+.advanced-toggle {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 200;
+  margin: 0;
+  padding: 0.42rem 0.85rem;
+  font: inherit;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 999px;
+  color: #dff0e4;
+  border: 1px solid rgba(118, 185, 0, 0.42);
+  background: linear-gradient(165deg, rgba(22, 32, 26, 0.95) 0%, rgba(0, 0, 0, 0.45) 100%);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 4px 16px rgba(0, 0, 0, 0.35);
+  transition:
+    border-color 0.18s var(--ease-soft),
+    box-shadow 0.2s var(--ease-out-expo),
+    transform 0.16s var(--ease-spring);
+}
+
+.advanced-toggle:hover {
+  border-color: rgba(143, 214, 48, 0.55);
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(143, 214, 48, 0.12),
+    0 6px 22px rgba(0, 0, 0, 0.32);
+}
+
+.advanced-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(143, 214, 48, 0.45), 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+html[data-advanced="on"] .advanced-toggle {
+  border-color: rgba(143, 214, 48, 0.65);
+  color: #f6fcf4;
+  box-shadow:
+    0 0 0 1px rgba(143, 214, 48, 0.2) inset,
+    0 0 20px rgba(118, 185, 0, 0.22);
+}
+
+@media (max-width: 520px) {
+  .advanced-toggle {
+    top: 0.65rem;
+    left: 0.65rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.58rem;
+  }
+}
+
+/* Advanced tools: inline in workspace (same chrome as tab rail + panels, not a white modal). */
+.advanced-inline {
+  margin: 0.55rem 0 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(20, 28, 24, 0.35) 0%, var(--bg-panel) 18%);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.35) inset,
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 32px rgba(0, 0, 0, 0.28);
+}
+
+.advanced-inline__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 1rem 0.55rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.35) 0%, rgba(12, 16, 14, 0.25) 100%);
+}
+
+.advanced-inline__head-text {
+  min-width: 0;
+}
+
+.advanced-inline__kicker {
+  margin: 0;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(176, 221, 144, 0.88);
+}
+
+.advanced-inline__title {
+  margin: 0.1rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #eaf6e8;
+  line-height: 1.2;
+}
+
+.advanced-inline__body {
+  padding: 0.75rem 0.95rem 1rem;
+  max-height: min(62vh, 520px);
+  overflow-y: auto;
+}
+
+.advanced-inline__lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: rgba(170, 196, 182, 0.95);
+}
+
+.advanced-inline__lead kbd {
+  font-size: 0.78em;
+}
+
+.advanced-inline__card {
+  padding: 0.65rem 0.75rem 0.75rem;
+  margin-bottom: 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(118, 185, 0, 0.14);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.advanced-inline__card:last-child {
+  margin-bottom: 0;
+}
+
+.advanced-inline__h {
+  margin: 0 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--system-accent, #8fd630);
+}
+
+.advanced-inline__p {
+  margin: 0 0 0.45rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: rgba(180, 200, 188, 0.92);
+}
+
+.advanced-inline__file {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.8rem;
+}
+
+.advanced-inline__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.45rem;
+}
+
+.advanced-inline__label {
+  display: block;
+  margin: 0.35rem 0 0.25rem;
+  font-size: 0.82rem;
+}
+
+.advanced-inline__input {
+  display: block;
+  width: 100%;
+  max-width: 16rem;
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(118, 185, 0, 0.28);
+  background: rgba(0, 0, 0, 0.35);
+  color: inherit;
+  font: inherit;
+}
+
+.advanced-inline__input--wide {
+  max-width: none;
+}
+
+.advanced-inline__ta {
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid rgba(118, 185, 0, 0.28);
+  background: rgba(0, 0, 0, 0.45);
+  color: #e8f0eb;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.advanced-inline__difflab {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: rgba(190, 210, 195, 0.9);
+}
+
+.advanced-inline__diffgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  margin: 0.35rem 0;
+}
+
+@media (max-width: 640px) {
+  .advanced-inline__diffgrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.advanced-inline__pre {
+  margin: 0.5rem 0 0;
+  padding: 0.55rem 0.65rem;
+  max-height: 14rem;
+  overflow: auto;
+  font-size: 0.68rem;
+  line-height: 1.35;
+  border-radius: 8px;
+  border: 1px solid rgba(118, 185, 0, 0.22);
+  background: rgba(0, 0, 0, 0.5);
+  color: #d2e8c8;
+}
+
+.advanced-inline__status {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--system-accent, #8fd630);
+}
+
+.advanced-inline__list {
+  margin: 0.45rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+}
+
+.advanced-inline__list li {
+  margin: 0.25rem 0;
+}
+
+.advanced-inline__dl {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+}
+
+.advanced-inline__dl dt {
+  margin-top: 0.45rem;
+  font-weight: 700;
+  color: var(--system-accent, #8fd630);
+}
+
+.advanced-inline__dl dd {
+  margin: 0.15rem 0 0;
+  color: rgba(160, 180, 168, 0.88);
+}
+
+.advanced-inline__check {
+  display: block;
+  margin: 0.35rem 0;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.advanced-inline__cmdlist {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.advanced-inline__cmdlist button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+
+.advanced-inline__cmdlist button:hover,
+.advanced-inline__cmdlist button:focus-visible {
+  background: rgba(118, 185, 0, 0.12);
+  border-color: rgba(118, 185, 0, 0.25);
+  outline: none;
+}
+
 /* PDF export: premium modal + accent matches active report tab (data-pdf-theme from JS) */
 .pdf-dialog {
   /* Default until theme applies — black + green (same as --system-accent / System tab) */
@@ -6541,6 +6843,136 @@ html[data-theme="light"] .theme-toggle:hover {
   border-color: rgba(203, 213, 225, 0.95);
   box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(248, 250, 252, 0.8) inset;
   transform: scale(1.04);
+}
+
+/* Light: Advanced pill follows active tab accent (same idea as tool tabs / footer). */
+html[data-theme="light"] .advanced-toggle {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  color: #334155;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .advanced-toggle {
+  border-color: rgba(91, 33, 182, 0.35);
+  color: #5b21b6;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .advanced-toggle {
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #be123c;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .advanced-toggle {
+  border-color: rgba(16, 185, 129, 0.45);
+  color: #047857;
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .advanced-toggle {
+  border-color: rgba(8, 145, 178, 0.45);
+  color: #0e7490;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .advanced-toggle {
+  border-color: rgba(234, 88, 12, 0.45);
+  color: #9a3412;
+}
+
+html[data-theme="light"] .advanced-inline {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] .advanced-inline__head {
+  background: #f8fafc;
+  border-bottom-color: #e2e8f0;
+}
+
+html[data-theme="light"] .advanced-inline__kicker {
+  color: #64748b;
+}
+
+html[data-theme="light"] .advanced-inline__title {
+  color: #0f172a;
+}
+
+html[data-theme="light"] .advanced-inline__lead {
+  color: #475569;
+}
+
+html[data-theme="light"] .advanced-inline__card {
+  background: #fafafa;
+  border-color: #e2e8f0;
+}
+
+html[data-theme="light"] .advanced-inline__p {
+  color: #475569;
+}
+
+html[data-theme="light"] .advanced-inline__difflab {
+  color: #64748b;
+}
+
+html[data-theme="light"] .advanced-inline__dl dd {
+  color: #64748b;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .advanced-inline {
+  border-color: #e9d5ff;
+}
+
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .advanced-inline__h,
+html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .advanced-inline__dl dt {
+  color: #5b21b6;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .advanced-inline {
+  border-color: #fecdd3;
+}
+
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .advanced-inline__h,
+html[data-theme="light"] body:has(#tool-panel-bsod:target) .advanced-inline__dl dt {
+  color: #be123c;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .advanced-inline {
+  border-color: #a7f3d0;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .advanced-inline__h,
+html[data-theme="light"] body:has(#tool-panel-gpu:target) .advanced-inline__dl dt {
+  color: #047857;
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .advanced-inline {
+  border-color: #a5f3fc;
+}
+
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .advanced-inline__h,
+html[data-theme="light"] body:has(#tool-panel-evtx:target) .advanced-inline__dl dt {
+  color: #0e7490;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .advanced-inline {
+  border-color: #fed7aa;
+}
+
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .advanced-inline__h,
+html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .advanced-inline__dl dt {
+  color: #9a3412;
+}
+
+html[data-theme="light"] .advanced-inline__ta,
+html[data-theme="light"] .advanced-inline__input {
+  background: #ffffff;
+  border-color: #e2e8f0;
+  color: #0f172a;
+}
+
+html[data-theme="light"] .advanced-inline__pre {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #0f172a;
 }
 
 html[data-theme="light"] .site-header {

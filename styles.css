@@ -5270,6 +5270,12 @@ details.report-category__details:not([open]) .report-category__chevron {
   box-shadow: 0 0 0 2px rgba(143, 214, 48, 0.2);
 }
 
+/* No PDF export on System or BSOD tabs (GPU / Event Viewer / DxDiag keep it). Light + dark. */
+body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-footer__export,
+body:has(#tool-panel-bsod:target) .site-footer__export {
+  display: none !important;
+}
+
 /* PDF export: premium modal + accent matches active report tab (data-pdf-theme from JS) */
 .pdf-dialog {
   /* Default until theme applies — black + green (same as --system-accent / System tab) */

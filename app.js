@@ -15676,6 +15676,10 @@
     { hash: "#tool-panel-evtx", title: "Event Viewer" },
     { hash: "#tool-panel-dxdiag", title: "DxDiag" },
   ];
+  /** Sections included in PDF when using “All report tabs” (System + BSOD omitted by product choice). */
+  const PDF_EXPORTABLE_SECTIONS = PDF_EXPORT_SECTIONS.filter(
+    (s) => s.hash !== "#tool-panel-system" && s.hash !== "#tool-panel-bsod"
+  );
   const LEGACY_TAB_HASH = {
     "#system": "#tool-panel-system",
     "#bsod": "#tool-panel-bsod",
@@ -16307,6 +16311,8 @@
 
     /* <dialog> does not fire a reliable "open" event in all browsers; sync on this click, before showModal, so data-pdf-theme matches location.hash. */
     openBtn?.addEventListener("click", () => {
+      const h = canonicalPdfHash();
+      if (h === "#tool-panel-system" || h === "#tool-panel-bsod") return;
       if (dlg instanceof HTMLDialogElement) {
         setStatus("");
         resetPdfExportPanel();
@@ -16398,7 +16404,9 @@
           pdf.setTextColor(232, 240, 235);
         }
         const delay = (ms) => new Promise((r) => setTimeout(r, ms));
-        const sections = allTabs ? PDF_EXPORT_SECTIONS.slice() : PDF_EXPORT_SECTIONS.filter((s) => s.hash === canonicalPdfHash());
+        const sections = allTabs
+          ? PDF_EXPORTABLE_SECTIONS.slice()
+          : PDF_EXPORTABLE_SECTIONS.filter((s) => s.hash === canonicalPdfHash());
         const totalSections = Math.max(1, sections.length);
         setPdfExportBarPct(4);
 

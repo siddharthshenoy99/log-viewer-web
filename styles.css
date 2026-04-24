@@ -5272,14 +5272,14 @@ details.report-category__details:not([open]) .report-category__chevron {
 
 /* PDF export: premium modal + accent matches active report tab (data-pdf-theme from JS) */
 .pdf-dialog {
-  /* Default until theme applies (matches System) */
-  --pdf-accent: #8b5cf6;
-  --pdf-accent-rgb: 139, 92, 246;
-  --pdf-accent-mid: rgba(139, 92, 246, 0.4);
-  --pdf-accent-dim: rgba(139, 92, 246, 0.1);
-  --pdf-accent-ghost: rgba(139, 92, 246, 0.2);
-  --pdf-kicker: #c4b5fd;
-  --pdf-h2-tint: #ede9fe;
+  /* Default until theme applies — black + green (same as --system-accent / System tab) */
+  --pdf-accent: #8fd630;
+  --pdf-accent-rgb: 143, 214, 48;
+  --pdf-accent-mid: rgba(143, 214, 48, 0.42);
+  --pdf-accent-dim: rgba(143, 214, 48, 0.1);
+  --pdf-accent-ghost: rgba(143, 214, 48, 0.16);
+  --pdf-kicker: #b0dd90;
+  --pdf-h2-tint: #e8f6e0;
   --pdf-surface-veil: rgba(0, 0, 0, 0.34);
   position: relative;
   width: min(32rem, calc(100vw - 2rem));
@@ -5298,15 +5298,15 @@ details.report-category__details:not([open]) .report-category__chevron {
   isolation: isolate;
 }
 
-/* System Information — dark: violet (aligns with light .panel--system; PDF uses a stronger chroma) */
+/* System Information — dark: same #8fd630 as .panel--system / WER (black + green) */
 .pdf-dialog[data-pdf-theme="system"] {
-  --pdf-accent: #8b5cf6;
-  --pdf-accent-rgb: 139, 92, 246;
-  --pdf-accent-mid: rgba(139, 92, 246, 0.5);
-  --pdf-accent-dim: rgba(139, 92, 246, 0.12);
-  --pdf-accent-ghost: rgba(167, 139, 250, 0.2);
-  --pdf-kicker: #c4b5fd;
-  --pdf-h2-tint: #f5f3ff;
+  --pdf-accent: #8fd630;
+  --pdf-accent-rgb: 143, 214, 48;
+  --pdf-accent-mid: rgba(143, 214, 48, 0.5);
+  --pdf-accent-dim: rgba(143, 214, 48, 0.12);
+  --pdf-accent-ghost: rgba(143, 214, 48, 0.18);
+  --pdf-kicker: #b0dd90;
+  --pdf-h2-tint: #e8f6e0;
 }
 
 /* BSOD: matches .tool-tab--bsod + .panel--bsod — #8fd630, rgba(143,214,48) */
@@ -5355,7 +5355,7 @@ details.report-category__details:not([open]) .report-category__chevron {
 
 @supports not (color: color-mix(in srgb, black, white)) {
   .pdf-dialog {
-    border-color: rgba(120, 90, 180, 0.4);
+    border-color: rgba(100, 150, 60, 0.4);
   }
   .pdf-dialog[data-pdf-theme="bsod"],
   .pdf-dialog[data-pdf-theme="gpu"],
@@ -5790,18 +5790,18 @@ html[data-theme="light"] .pdf-dialog__head h2 {
   font-weight: 700;
 }
 
-/* Light: same palette as .panel--* .panel__head h2 / icon chrome in light mode */
+/* Light: green chrome like GPU tab / System (emerald) — not violet */
 html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] {
-  --pdf-accent: #7c3aed;
-  --pdf-accent-rgb: 124, 58, 237;
-  --pdf-accent-mid: rgba(91, 33, 182, 0.35);
-  --pdf-accent-dim: rgba(124, 58, 237, 0.1);
-  --pdf-accent-ghost: rgba(124, 58, 237, 0.12);
-  --pdf-kicker: #6d28d9;
-  --pdf-h2-tint: #4c1d95;
-  border-color: color-mix(in srgb, #7c3aed 22%, #e2e8f0);
+  --pdf-accent: #10b981;
+  --pdf-accent-rgb: 16, 185, 129;
+  --pdf-accent-mid: rgba(16, 185, 129, 0.4);
+  --pdf-accent-dim: rgba(16, 185, 129, 0.1);
+  --pdf-accent-ghost: rgba(52, 211, 153, 0.12);
+  --pdf-kicker: #047857;
+  --pdf-h2-tint: #065f46;
+  border-color: color-mix(in srgb, #34d399 22%, #e2e8f0);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, #7c3aed 6%, #fff) inset,
+    0 0 0 1px color-mix(in srgb, #10b981 5%, #fff) inset,
     0 20px 55px rgba(15, 23, 42, 0.1);
 }
 html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__head h2,
@@ -5809,11 +5809,11 @@ html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__head 
   text-shadow: none;
 }
 html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__kicker {
-  color: #6d28d9;
+  color: #047857;
   opacity: 1;
 }
 html[data-theme="light"] .pdf-dialog[data-pdf-theme="system"] .pdf-dialog__head h2 {
-  color: #4c1d95;
+  color: #065f46;
 }
 
 /* BSOD light: rose like .panel--bsod .panel__head h2 */

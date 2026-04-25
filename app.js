@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.4.4";
+  const APP_VERSION = "1.4.5";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -14739,6 +14739,8 @@
     let savedMetricPick = null;
     /** @type {ReturnType<typeof createLanguageAdderSnapshot> | null} */
     let lastLangAdder = null;
+    /** Hook: Advanced-only merged timeline refresh (defined later; safe no-op until wired). */
+    let refreshGpuAdvancedHooks = () => {};
 
     // Language Adder for GPU-Z tab (metric names / units / localized headers).
     let btnLangAdder = null;
@@ -15147,6 +15149,11 @@
       renderAnalyzerTimeRange();
       redraw();
       refreshLanguageAdder();
+      try {
+        refreshGpuAdvancedHooks();
+      } catch {
+        /* */
+      }
     }
 
     function addFiles(fileList) {
@@ -15232,6 +15239,359 @@
     panel.addEventListener("gpuresize", () => {
       if (logs.length) redraw();
     });
+
+    // ----- Advanced-only: GPU-Z + Event log merged offline timeline (visual) -----
+    const isAppAdvanced = () => document.documentElement.getAttribute("data-advanced") === "on";
+    const advBlock = document.createElement("div");
+    advBlock.className = "gpu-adv-timeline";
+    advBlock.hidden = true;
+    advBlock.setAttribute("data-gpu-advanced-only", "true");
+    advBlock.innerHTML = `
+      <div class="gpu-adv-timeline__head">
+        <div>
+          <h3 class="gpu-adv-timeline__title">Advanced: GPU + Event log timeline (offline)</h3>
+          <p class="gpu-adv-timeline__hint">
+            Load a <strong>GPU-Z sensor log</strong> above, then add an <strong>Event Viewer export</strong> (<code>.evtx</code> or
+            <code>.xml</code>) to overlay likely GPU-related events on the same time axis. This is a visual aid only (not a diagnosis).
+          </p>
+        </div>
+      </div>
+      <div class="gpu-adv-timeline__row">
+        <div class="gpu-adv-timeline__drop dropzone dropzone--gpu-adv-evtx" tabindex="0" role="button" aria-label="Drop Event Viewer export here for GPU timeline">
+          <div class="dropzone__inner">
+            <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
+            <p><strong>Choose or drop an Event Viewer export</strong></p>
+            <p class="dropzone__sub">Supports <code>.evtx</code> (binary) or Event Viewer <code>.xml</code> export. Parsed locally; nothing is uploaded.</p>
+            <p class="gpu-adv-timeline__evmeta" data-gpu-adv-evmeta hidden></p>
+          </div>
+          <input type="file" class="file-input file-input--gpu-adv-evtx" accept=".evtx,.xml,text/xml,application/xml,text/*" />
+        </div>
+        <div class="gpu-adv-timeline__controls" data-gpu-adv-controls hidden>
+          <label class="gpu-adv-timeline__label">
+            GPU metric
+            <select class="gpu-adv-timeline__metric" data-gpu-adv-metric></select>
+          </label>
+          <button type="button" class="btn btn--secondary" data-gpu-adv-build>Build timeline</button>
+        </div>
+      </div>
+      <p class="insight-disclaimer" data-gpu-adv-status hidden></p>
+      <div class="gpu-adv-timeline__canvaswrap" data-gpu-adv-canvaswrap hidden>
+        <canvas class="gpu-adv-timeline__canvas" data-gpu-adv-canvas width="1200" height="360" aria-label="GPU metric and Event Viewer markers timeline"></canvas>
+        <p class="gpu-adv-timeline__legend" data-gpu-adv-legend></p>
+      </div>
+    `;
+    panel.appendChild(advBlock);
+
+    const advEvtxInput = advBlock.querySelector(".file-input--gpu-adv-evtx");
+    const advEvtxDrop = advBlock.querySelector(".dropzone--gpu-adv-evtx");
+    const advEvtxMeta = advBlock.querySelector("[data-gpu-adv-evmeta]");
+    const advControls = advBlock.querySelector("[data-gpu-adv-controls]");
+    const advMetricSel = advBlock.querySelector("[data-gpu-adv-metric]");
+    const advBuild = advBlock.querySelector("[data-gpu-adv-build]");
+    const advStatus = advBlock.querySelector("[data-gpu-adv-status]");
+    const advCanvasWrap = advBlock.querySelector("[data-gpu-adv-canvaswrap]");
+    const advCanvas = /** @type {HTMLCanvasElement | null} */ (advBlock.querySelector("[data-gpu-adv-canvas]"));
+    const advLegend = advBlock.querySelector("[data-gpu-adv-legend]");
+
+    /** @type {ArrayBuffer | null} */
+    let advEvtxBuf = null;
+    let advEvtxName = "";
+    let advEvtxLabel = "auto";
+    /** @type {ReturnType<typeof parseWindowsEventXmlExport> | null} */
+    let advEvtxEvents = null;
+
+    const GPU_TIMELINE_MARK_EVENT_IDS = new Set([
+      4101, 10110, 10111, 13, 14, 153, 63, 41, 6008, 18, 17, 19, 20, 193,
+    ]);
+
+    function isLikelyGpuEvtxEvent(e) {
+      const id = e?.eventId;
+      if (id != null && Number.isFinite(id) && GPU_TIMELINE_MARK_EVENT_IDS.has(/** @type {number} */ (id))) return true;
+      const p = String(e?.provider || "");
+      const msg = String(e?.message || "");
+      if (/nvlddmkm|amdkmdag|dxgkrnl|dxgmms2|display|video|d3d|tdr|livekern|kernel-power/i.test(`${p} ${msg}`)) return true;
+      return false;
+    }
+
+    function buildGpuMetricOptions() {
+      if (!(advMetricSel instanceof HTMLSelectElement)) return;
+      const prev = advMetricSel.value;
+      advMetricSel.innerHTML = "";
+      const set = new Map();
+      for (const log of logs) {
+        if (!log.parsed) continue;
+        for (const col of log.parsed.numericCols) {
+          if (col.index === 0) continue; // time column
+          const key = normalizeHeader(col.name);
+          if (!set.has(key)) set.set(key, col.name);
+        }
+      }
+      const items = [...set.values()].sort((a, b) => a.localeCompare(b));
+      for (const name of items) {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        advMetricSel.appendChild(opt);
+      }
+      if (prev && [...advMetricSel.options].some((o) => o.value === prev)) advMetricSel.value = prev;
+    }
+
+    function findGpuMetricCol(metricName) {
+      const want = normalizeHeader(metricName);
+      for (const log of logs) {
+        if (!log.parsed) continue;
+        for (const col of log.parsed.numericCols) {
+          if (col.index === 0) continue;
+          if (normalizeHeader(col.name) === want) return { log, col };
+        }
+      }
+      return null;
+    }
+
+    function drawGpuEvtxTimeline() {
+      if (!advCanvas || !advStatus || !advLegend || !advCanvasWrap) return;
+      if (!isAppAdvanced()) return;
+      if (!logs.length) {
+        advStatus.hidden = false;
+        advStatus.textContent = "Load a GPU-Z sensor log first, then add an Event Viewer export.";
+        advCanvasWrap.hidden = true;
+        return;
+      }
+      if (!advEvtxBuf || !advEvtxEvents || !advEvtxEvents.length) {
+        advStatus.hidden = false;
+        advStatus.textContent = "Load an Event Viewer export (.evtx or .xml) to overlay events on the GPU metric timeline.";
+        advCanvasWrap.hidden = true;
+        return;
+      }
+      const mName = advMetricSel instanceof HTMLSelectElement ? advMetricSel.value : "";
+      const pick = mName ? findGpuMetricCol(mName) : null;
+      if (!pick || !pick.col?.pts?.length) {
+        advStatus.hidden = false;
+        advStatus.textContent = "Pick a GPU metric that exists in the loaded sensor log.";
+        advCanvasWrap.hidden = true;
+        return;
+      }
+      const pts = pick.col.pts
+        .map((p) => ({ t: p.t, v: p.v }))
+        .filter((p) => p.t != null && Number.isFinite(p.t) && Number.isFinite(p.v));
+      if (pts.length < 2) {
+        advStatus.hidden = false;
+        advStatus.textContent = "The selected metric does not have enough timestamped samples to draw a timeline.";
+        advCanvasWrap.hidden = true;
+        return;
+      }
+      pts.sort((a, b) => a.t - b.t);
+      const tMin = pts[0].t;
+      const tMax = pts[pts.length - 1].t;
+      if (!(tMax > tMin)) {
+        advStatus.hidden = false;
+        advStatus.textContent = "Could not determine a valid time range for the GPU-Z samples.";
+        advCanvasWrap.hidden = true;
+        return;
+      }
+      const evs = (advEvtxEvents || [])
+        .filter((e) => isLikelyGpuEvtxEvent(e))
+        .map((e) => ({ t: Date.parse(e.timeIso || ""), e }))
+        .filter((x) => Number.isFinite(x.t) && x.t >= tMin - 5_000 && x.t <= tMax + 5_000)
+        .sort((a, b) => a.t - b.t);
+      const vmin = Math.min(...pts.map((p) => p.v));
+      const vmax = Math.max(...pts.map((p) => p.v));
+      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      const cssW = advCanvas.clientWidth || advCanvas.parentElement?.clientWidth || 1100;
+      const cssH = 320;
+      advCanvas.width = Math.floor(cssW * dpr);
+      advCanvas.height = Math.floor(cssH * dpr);
+      advCanvas.style.width = `${cssW}px`;
+      advCanvas.style.height = `${cssH}px`;
+      const ctx = advCanvas.getContext("2d");
+      if (!ctx) return;
+      const light = document.documentElement.getAttribute("data-theme") === "light";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      ctx.fillStyle = light ? "#ffffff" : "#0b0f0d";
+      ctx.fillRect(0, 0, cssW, cssH);
+      const plotTop = 18;
+      const plotBottom = cssH - 46;
+      const plotLeft = 64;
+      const plotRight = cssW - 18;
+      const x = (tt) => plotLeft + ((tt - tMin) / (tMax - tMin)) * (plotRight - plotLeft);
+      const y = (vv) => {
+        if (!(vmax > vmin)) return (plotTop + plotBottom) / 2;
+        return plotBottom - ((vv - vmin) / (vmax - vmin)) * (plotBottom - plotTop);
+      };
+      // grid
+      ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.12)" : "rgba(255,255,255,0.10)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const yy = plotTop + (i / 4) * (plotBottom - plotTop);
+        ctx.beginPath();
+        ctx.moveTo(plotLeft, yy);
+        ctx.lineTo(plotRight, yy);
+        ctx.stroke();
+      }
+      // series
+      ctx.strokeStyle = light ? "rgba(5, 150, 105, 0.95)" : "rgba(16, 185, 129, 0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let started = false;
+      for (const p of pts) {
+        const xx = x(p.t);
+        const yy = y(p.v);
+        if (!started) {
+          ctx.moveTo(xx, yy);
+          started = true;
+        } else ctx.lineTo(xx, yy);
+      }
+      ctx.stroke();
+      // y labels
+      ctx.fillStyle = light ? "rgba(15, 23, 42, 0.62)" : "rgba(255,255,255,0.60)";
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
+      ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
+      for (let i = 0; i <= 4; i++) {
+        const vv = vmax - (i / 4) * (vmax - vmin);
+        const yy = plotTop + (i / 4) * (plotBottom - plotTop);
+        ctx.fillText(vv.toFixed(2), plotLeft - 8, yy);
+      }
+      // x labels
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = light ? "rgba(15, 23, 42, 0.45)" : "rgba(255,255,255,0.45)";
+      const tA = new Date(tMin);
+      const tB = new Date(tMax);
+      ctx.fillText(tA.toLocaleString(), plotLeft, plotBottom + 6);
+      ctx.fillText(tB.toLocaleString(), plotRight, plotBottom + 6);
+      // events
+      for (const ev of evs) {
+        const xx = x(ev.t);
+        ctx.fillStyle = "rgba(244, 63, 94, 0.95)";
+        ctx.fillRect(Math.max(plotLeft, Math.min(plotRight, xx)) - 0.5, plotBottom + 2, 1, 10);
+        ctx.beginPath();
+        ctx.moveTo(Math.max(plotLeft, Math.min(plotRight, xx)), plotTop);
+        ctx.lineTo(Math.max(plotLeft, Math.min(plotRight, xx)), plotBottom);
+        ctx.strokeStyle = "rgba(244, 63, 94, 0.20)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      advStatus.hidden = false;
+      advStatus.textContent = `Overlaying ${evs.length} likely GPU-related events (filtered) across ${pts.length} GPU-Z samples.`;
+      advCanvasWrap.hidden = false;
+      advLegend.textContent = `Line: ${pick.log.name} · ${pick.col.name}. Markers: filtered Event Viewer rows (file: ${advEvtxName || "export"}).`;
+    }
+
+    async function parseAdvEvtxBuffer(name, buffer) {
+      if (!(buffer instanceof ArrayBuffer)) return;
+      advEvtxName = name || "event-log";
+      advEvtxLabel = "auto";
+      if (/\.xml$/i.test(name) || /<\?xml/i.test(new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(buffer).slice(0, 4096)))) {
+        const { text, label } = decodeBuffer(buffer, "gpu", "auto");
+        advEvtxLabel = label;
+        advEvtxEvents = parseWindowsEventXmlExport(text);
+        if (advEvtxMeta) {
+          advEvtxMeta.hidden = false;
+          advEvtxMeta.textContent = `${advEvtxName} · XML · ${advEvtxEvents.length.toLocaleString()} events parsed`;
+        }
+        return;
+      }
+      // binary
+      const ac = new AbortController();
+      const events =
+        buffer.byteLength > 1_200_000
+          ? await parseEvtxBinaryRecordsAsync(buffer, ac.signal, () => {})
+          : parseEvtxBinaryRecords(buffer);
+      advEvtxEvents = events;
+      if (advEvtxMeta) {
+        advEvtxMeta.hidden = false;
+        advEvtxMeta.textContent = `${advEvtxName} · EVTX · ${advEvtxEvents.length.toLocaleString()} records decoded`;
+      }
+    }
+
+    const syncGpuAdvancedBlock = () => {
+      const on = isAppAdvanced();
+      advBlock.hidden = !on;
+      if (!on) return;
+      buildGpuMetricOptions();
+      if (advControls) advControls.hidden = !logs.length;
+    };
+
+    const dataAdvancedObsGpu = new MutationObserver(() => {
+      syncGpuAdvancedBlock();
+      if (isAppAdvanced()) drawGpuEvtxTimeline();
+    });
+    dataAdvancedObsGpu.observe(document.documentElement, { attributes: true, attributeFilter: ["data-advanced"] });
+    syncGpuAdvancedBlock();
+
+    async function loadAdvEvtxFile(/** @type {File} */ f) {
+      const buf = await f.arrayBuffer();
+      advEvtxBuf = buf;
+      if (advStatus) {
+        advStatus.hidden = false;
+        advStatus.textContent = "Parsing event log for timeline…";
+      }
+      await parseAdvEvtxBuffer(f.name, buf);
+      syncGpuAdvancedBlock();
+      if (isAppAdvanced()) drawGpuEvtxTimeline();
+    }
+
+    if (advEvtxDrop && advEvtxInput) {
+      const preventDefaults = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      };
+      ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) => advEvtxDrop.addEventListener(ev, preventDefaults));
+      advEvtxDrop.addEventListener("dragenter", () => advEvtxDrop.classList.add("is-dragover"));
+      advEvtxDrop.addEventListener("dragleave", () => advEvtxDrop.classList.remove("is-dragover"));
+      advEvtxDrop.addEventListener("dragover", () => advEvtxDrop.classList.add("is-dragover"));
+      advEvtxDrop.addEventListener("drop", (e) => {
+        advEvtxDrop.classList.remove("is-dragover");
+        const f = e.dataTransfer?.files?.[0];
+        if (f) void loadAdvEvtxFile(f);
+      });
+      advEvtxDrop.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          advEvtxInput.click();
+        }
+      });
+    }
+
+    if (advEvtxInput) {
+      advEvtxInput.addEventListener("change", () => {
+        const f = advEvtxInput.files?.[0];
+        if (f) void loadAdvEvtxFile(f);
+        advEvtxInput.value = "";
+      });
+    }
+    advBuild?.addEventListener("click", () => drawGpuEvtxTimeline());
+    advMetricSel?.addEventListener("change", () => drawGpuEvtxTimeline());
+
+    refreshGpuAdvancedHooks = () => {
+      syncGpuAdvancedBlock();
+      if (isAppAdvanced()) drawGpuEvtxTimeline();
+    };
+
+    window.addEventListener("resize", () => {
+      try {
+        if (isAppAdvanced()) drawGpuEvtxTimeline();
+      } catch {
+        /* */
+      }
+    });
+    panel.addEventListener("gpuresize", () => {
+      try {
+        if (isAppAdvanced()) drawGpuEvtxTimeline();
+      } catch {
+        /* */
+      }
+    });
+    const dataThemeObsGpu = new MutationObserver(() => {
+      try {
+        if (isAppAdvanced()) drawGpuEvtxTimeline();
+      } catch {
+        /* */
+      }
+    });
+    dataThemeObsGpu.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }
 
   /** EVTX/XML: watched Event IDs for GPU / stability triage (education only). Omit generic ID 0 from matching (too noisy). */

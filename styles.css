@@ -9275,6 +9275,145 @@ html[data-theme="light"] .panel--gpu .analyzer-toolbar .btn--ghost:hover {
   color: #111827;
 }
 
+/* Advanced: merged GPU-Z + Event Viewer canvas (injected; GPU tab, offline). */
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline {
+  border-top: 1px solid #e5e7eb;
+  background: #ffffff;
+  padding: 0.9rem var(--panel-pad-x) 1rem;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__title {
+  color: #065f46;
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__hint {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__row {
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  align-items: start;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__controls {
+  border: 1px solid #e5e7eb;
+  background: #f9fafb;
+  border-radius: 12px;
+  padding: 0.6rem 0.65rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: #374151;
+  font-weight: 600;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__metric {
+  width: 100%;
+}
+
+html[data-theme="light"] .panel--gpu .dropzone--gpu-adv-evtx {
+  background: #ffffff;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__canvaswrap {
+  margin-top: 0.75rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 0.55rem;
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__canvas {
+  width: 100%;
+  height: 320px;
+  display: block;
+  border-radius: 10px;
+  border: 1px solid #eef2f7;
+}
+
+html[data-theme="light"] .panel--gpu .gpu-adv-timeline__legend {
+  margin: 0.55rem 0 0;
+  color: #6b7280;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.panel--gpu .gpu-adv-timeline {
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 0.85rem var(--panel-pad-x) 0.95rem;
+}
+.panel--gpu .gpu-adv-timeline__title {
+  color: #ecfdf5;
+  margin: 0 0 0.35rem;
+  font-size: 1.02rem;
+}
+.panel--gpu .gpu-adv-timeline__hint {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.92rem;
+}
+.panel--gpu .gpu-adv-timeline__row {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 0.75rem;
+  margin-top: 0.7rem;
+  align-items: start;
+}
+.panel--gpu .gpu-adv-timeline__controls {
+  border: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 12px;
+  padding: 0.55rem 0.6rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.panel--gpu .gpu-adv-timeline__label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.panel--gpu .gpu-adv-timeline__metric {
+  width: 100%;
+}
+.panel--gpu .gpu-adv-timeline__canvaswrap {
+  margin-top: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+.panel--gpu .gpu-adv-timeline__canvas {
+  width: 100%;
+  height: 320px;
+  display: block;
+  border-radius: 10px;
+}
+.panel--gpu .gpu-adv-timeline__legend {
+  margin: 0.45rem 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
 /* Language Adder: match per-tab accent in light mode only (do not change dark mode). */
 html[data-theme="light"] .panel--bsod .bsod-toolbar .btn-lang-adder.btn--ghost {
   border-color: #e11d48;

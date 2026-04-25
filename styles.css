@@ -9275,6 +9275,47 @@ html[data-theme="light"] .panel--gpu .analyzer-toolbar .btn--ghost:hover {
   color: #111827;
 }
 
+/* Language Adder: match per-tab accent in light mode only (do not change dark mode). */
+html[data-theme="light"] .panel--bsod .bsod-toolbar .btn-lang-adder.btn--ghost {
+  border-color: #e11d48;
+  color: #be123c;
+}
+html[data-theme="light"] .panel--bsod .bsod-toolbar .btn-lang-adder.btn--ghost:hover {
+  background: #fff1f2;
+  border-color: #be123c;
+  color: #9f1239;
+}
+
+html[data-theme="light"] .panel--gpu .analyzer-toolbar .btn-lang-adder.btn--ghost {
+  border-color: #047857;
+  color: #047857;
+}
+html[data-theme="light"] .panel--gpu .analyzer-toolbar .btn-lang-adder.btn--ghost:hover {
+  background: #ecfdf5;
+  border-color: #065f46;
+  color: #065f46;
+}
+
+html[data-theme="light"] .panel--evtx .evtx-toolbar .btn-lang-adder.btn--ghost {
+  border-color: #0891b2;
+  color: #0e7490;
+}
+html[data-theme="light"] .panel--evtx .evtx-toolbar .btn-lang-adder.btn--ghost:hover {
+  background: #ecfeff;
+  border-color: #0e7490;
+  color: #155e75;
+}
+
+html[data-theme="light"] .panel--dxdiag .dxdiag-toolbar .btn-lang-adder.btn--ghost {
+  border-color: #c2410c;
+  color: #9a3412;
+}
+html[data-theme="light"] .panel--dxdiag .dxdiag-toolbar .btn-lang-adder.btn--ghost:hover {
+  background: #fff7ed;
+  border-color: #9a3412;
+  color: #7c2d12;
+}
+
 html[data-theme="light"] .panel--gpu .log-chip {
   border-color: #6ee7b7;
   background: #d1fae5;

@@ -12226,7 +12226,7 @@
     if (toolbar) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "btn btn--ghost";
+      b.className = "btn btn--ghost btn-lang-adder";
       b.textContent = "Language Adder";
       b.title = "Export unknown (untranslated) tokens to extend offline language support";
       b.disabled = true;
@@ -13813,7 +13813,7 @@
       if (toolbar) {
         const b = document.createElement("button");
         b.type = "button";
-        b.className = "btn btn--ghost";
+        b.className = "btn btn--ghost btn-lang-adder";
         b.textContent = "Language Adder";
         b.title = "Export unknown (untranslated) labels/tokens for adding a new language offline";
         b.disabled = true;
@@ -14745,7 +14745,7 @@
     if (toolbar) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "btn btn--ghost";
+      b.className = "btn btn--ghost btn-lang-adder";
       b.textContent = "Language Adder";
       b.title = "Export unknown (untranslated) tokens to extend offline language support";
       b.disabled = true;
@@ -16807,7 +16807,7 @@
     if (toolbar) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "btn btn--ghost";
+      b.className = "btn btn--ghost btn-lang-adder";
       b.textContent = "Language Adder";
       b.title = "Export unknown (untranslated) tokens to extend offline language support";
       b.disabled = true;
@@ -16937,7 +16937,7 @@
     if (toolbar) {
       const b = document.createElement("button");
       b.type = "button";
-      b.className = "btn btn--ghost";
+      b.className = "btn btn--ghost btn-lang-adder";
       b.textContent = "Language Adder";
       b.title = "Export unknown (untranslated) tokens to extend offline language support";
       b.disabled = true;

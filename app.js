@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.4.1";
+  const APP_VERSION = "1.4.4";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -13128,6 +13128,204 @@
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   }
 
+  /** Debug-only: collects unknown MSInfo labels so new languages can be added systematically. */
+  function isDebugI18nMode() {
+    try {
+      const sp = new URLSearchParams(location.search || "");
+      return sp.get("debug") === "1" || sp.get("i18n") === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * @returns {{
+   *   version: number,
+   *   createdAtIso: string,
+   *   fileName: string,
+   *   encodingLabel: string,
+   *   unknownLabelsByPath: Record<string, { total: number, labels: Record<string, number> }>,
+   *   notes: string[]
+   * }}
+   */
+  function createI18nDiagnosticsSnapshot(fileName, encodingLabel, kvs, systemSummary) {
+    /** @type {Record<string, { total: number, labels: Record<string, number> }>} */
+    const unknownLabelsByPath = {};
+    const add = (path, label) => {
+      const p = String(path || "").trim() || "(root)";
+      const l = String(label || "").replace(/\s+/g, " ").trim();
+      if (!l) return;
+      if (!unknownLabelsByPath[p]) unknownLabelsByPath[p] = { total: 0, labels: {} };
+      unknownLabelsByPath[p].total++;
+      unknownLabelsByPath[p].labels[l] = (unknownLabelsByPath[p].labels[l] || 0) + 1;
+    };
+
+    /** @type {Record<string, number>} */
+    const unknownTokens = {};
+    const addTok = (s) => {
+      const t = String(s || "").replace(/\s+/g, " ").trim();
+      if (!t) return;
+      unknownTokens[t] = (unknownTokens[t] || 0) + 1;
+    };
+
+    const knownEnglishish = (s) => {
+      const t = String(s || "").trim();
+      if (!t) return true;
+      // If it does not look non-English, treat as known (no need to collect).
+      if (!localeScriptLooksNonEnglishListed(t)) return true;
+      // If our offline translation changes it, it is already covered.
+      const en = translateMsinfoI18nTokensToEnglish(t);
+      return en !== t;
+    };
+
+    for (const k of Array.isArray(kvs) ? kvs : []) {
+      const item = String(k?.item || "").trim();
+      if (!item) continue;
+      if (knownEnglishish(item)) continue;
+      add(k?.path || "", item);
+    }
+
+    // Also capture unknown tokens from structured sections (keys/values) so non-MSInfo tabs are covered.
+    const sum = systemSummary && typeof systemSummary === "object" ? systemSummary : null;
+    if (sum) {
+      const net = Array.isArray(sum.networkAdapters) ? sum.networkAdapters : [];
+      for (const a of net) {
+        const details = Array.isArray(a?.details) ? a.details : [];
+        for (const d of details) {
+          const k = String(d?.k || "").trim();
+          const v = String(d?.v || "").trim();
+          if (k && !knownEnglishish(k)) addTok(k);
+          if (v && !knownEnglishish(v)) addTok(v);
+        }
+      }
+      const svcAll = Array.isArray(sum.servicesAll) ? sum.servicesAll : [];
+      const svcRun = Array.isArray(sum.runningServices) ? sum.runningServices : [];
+      for (const s of [...svcAll, ...svcRun]) {
+        const name = String(s?.name || "").trim();
+        const state = String(s?.state || "").trim();
+        const startMode = String(s?.startMode || "").trim();
+        if (name && !knownEnglishish(name)) addTok(name);
+        if (state && !knownEnglishish(state)) addTok(state);
+        if (startMode && !knownEnglishish(startMode)) addTok(startMode);
+      }
+      const drives = Array.isArray(sum.storageDrives) ? sum.storageDrives : [];
+      for (const d of drives) {
+        const fs = String(d?.fileSystem || "").trim();
+        const vol = String(d?.volumeName || "").trim();
+        if (fs && !knownEnglishish(fs)) addTok(fs);
+        if (vol && !knownEnglishish(vol)) addTok(vol);
+      }
+    }
+
+    const notes = [
+      "This report lists MSInfo Item labels that look non-English but were not changed by the current offline translation tables.",
+      "Use it to add new token pairs or label mappings without guessing. Keep translations specific (prefer full labels over short substrings).",
+      "The unknownTokens block additionally lists non-English tokens found in Network / Services / Storage values that were not translated by current offline tables.",
+    ];
+
+    return {
+      version: 1,
+      createdAtIso: new Date().toISOString(),
+      fileName: String(fileName || ""),
+      encodingLabel: String(encodingLabel || ""),
+      unknownLabelsByPath,
+      unknownTokens,
+      notes,
+    };
+  }
+
+  /**
+   * User-facing export: includes path context + frequency, plain text.
+   * @param {ReturnType<typeof createI18nDiagnosticsSnapshot> | null} diag
+   * @returns {string}
+   */
+  function buildLanguageAdderTxt(diag) {
+    if (!diag) return "";
+    const lines = [];
+    lines.push("Language Adder export (offline)");
+    lines.push(`createdAt: ${diag.createdAtIso}`);
+    lines.push(`file: ${diag.fileName || ""}`);
+    lines.push(`encoding: ${diag.encodingLabel || ""}`);
+    lines.push("");
+    for (const n of diag.notes || []) lines.push(`- ${n}`);
+    lines.push("");
+
+    // Unknown labels grouped by MSInfo path.
+    const paths = Object.keys(diag.unknownLabelsByPath || {}).sort((a, b) => a.localeCompare(b));
+    lines.push("=== Unknown MSInfo Item labels (grouped by path) ===");
+    if (!paths.length) {
+      lines.push("(none)");
+    } else {
+      for (const p of paths) {
+        const block = diag.unknownLabelsByPath[p];
+        const labels = block && block.labels ? block.labels : {};
+        const list = Object.entries(labels).sort((a, b) => (b[1] || 0) - (a[1] || 0) || a[0].localeCompare(b[0]));
+        lines.push("");
+        lines.push(`[${p}]  (total occurrences: ${block?.total || 0})`);
+        for (const [k, n] of list) {
+          lines.push(`${n}x\t${k}`);
+        }
+      }
+    }
+
+    lines.push("");
+    lines.push("=== Unknown tokens from parsed sections (Network / Services / Storage) ===");
+    const toks = Object.entries(diag.unknownTokens || {}).sort(
+      (a, b) => (b[1] || 0) - (a[1] || 0) || a[0].localeCompare(b[0])
+    );
+    if (!toks.length) lines.push("(none)");
+    else for (const [k, n] of toks) lines.push(`${n}x\t${k}`);
+
+    lines.push("");
+    lines.push("How to use:");
+    lines.push("- Send this .txt file back to the developer/maintainer.");
+    lines.push("- We will add English mappings for the repeated labels/tokens first.");
+    lines.push("- Avoid translating section headings; focus on field labels and common values (Yes/No, units, statuses).");
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  /**
+   * @param {ReturnType<typeof createI18nDiagnosticsSnapshot> | null} diag
+   * @returns {string}
+   */
+  function buildI18nStubFromDiagnostics(diag) {
+    if (!diag) return "";
+    /** @type {{ s: string, n: number }[]} */
+    const items = [];
+    const push = (s, n) => {
+      const t = String(s || "").replace(/\s+/g, " ").trim();
+      if (!t) return;
+      items.push({ s: t, n: Math.max(1, Number(n) || 1) });
+    };
+    for (const [path, block] of Object.entries(diag.unknownLabelsByPath || {})) {
+      void path;
+      const labels = block && block.labels ? block.labels : {};
+      for (const [k, v] of Object.entries(labels)) push(k, v);
+    }
+    for (const [k, v] of Object.entries(diag.unknownTokens || {})) push(k, v);
+
+    // Deduplicate by string; keep max count.
+    const by = new Map();
+    for (const it of items) {
+      const prev = by.get(it.s);
+      if (!prev || it.n > prev.n) by.set(it.s, it);
+    }
+    const list = Array.from(by.values()).sort((a, b) => b.n - a.n || a.s.localeCompare(b.s));
+
+    const escJs = (s) => String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    const lines = [];
+    lines.push("// Paste candidates into LOCALE_PAIRS_MSINFO_INTL (or a new LOCALE_PAIRS_MSINFO_<lang>)");
+    lines.push("// Fill in the English right-hand side. Keep keys specific; avoid short substrings.");
+    lines.push("");
+    for (const it of list) {
+      lines.push(`// seen ${it.n}×`);
+      lines.push(`["${escJs(it.s)}", ""],`);
+    }
+    lines.push("");
+    return lines.join("\n");
+  }
+
   function setupSystemPanel(panel) {
     const dropzone = panel.querySelector(".dropzone");
     const input = panel.querySelector(".file-input");
@@ -13170,6 +13368,87 @@
     const compareRawDetails = systemCompare?.querySelector(".system-compare__raw-details");
     const compareOut = systemCompare?.querySelector(".system-compare__pre");
     const SYSTEM_COMPARE_MAX_CHARS = 200000;
+    const debugI18n = isDebugI18nMode();
+    /** @type {ReturnType<typeof createI18nDiagnosticsSnapshot> | null} */
+    let lastI18nDiag = null;
+
+    // User-facing Language Adder button (always available; exports unknown tokens when a file is analyzed).
+    let btnLangAdder = null;
+    if (toolbarWrap) {
+      const toolbar = toolbarWrap.querySelector(".system-toolbar");
+      if (toolbar) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn--ghost";
+        b.textContent = "Language Adder";
+        b.title = "Export unknown (untranslated) labels/tokens for adding a new language offline";
+        b.disabled = true;
+        b.addEventListener("click", () => {
+          if (!lastI18nDiag || !state) {
+            window.alert("Load and analyze a System Information file first.");
+            return;
+          }
+          const safeBase = (state.name || "msinfo")
+            .replace(/\.[^.]+$/, "")
+            .replace(/[^A-Za-z0-9._-]+/g, "_")
+            .slice(0, 80);
+          const fn = `${safeBase}.language-adder.txt`;
+          downloadTextAsFile(fn, buildLanguageAdderTxt(lastI18nDiag), "text/plain;charset=utf-8");
+        });
+        toolbar.appendChild(b);
+        btnLangAdder = b;
+      }
+    }
+
+    /** Debug-only export button (injected into toolbar). */
+    let btnI18nExport = null;
+    let btnI18nStub = null;
+    if (debugI18n && toolbarWrap) {
+      const toolbar = toolbarWrap.querySelector(".system-toolbar");
+      if (toolbar) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "btn btn--ghost";
+        b.textContent = "Export i18n diagnostics";
+        b.title = "Debug: download unknown MSInfo labels as JSON";
+        b.disabled = true;
+        b.addEventListener("click", () => {
+          if (!lastI18nDiag || !state) {
+            window.alert("No diagnostics yet. Load and analyze an MSInfo file first.");
+            return;
+          }
+          const safeBase = (state.name || "msinfo")
+            .replace(/\.[^.]+$/, "")
+            .replace(/[^A-Za-z0-9._-]+/g, "_")
+            .slice(0, 80);
+          const fn = `${safeBase}.i18n-missing.json`;
+          downloadTextAsFile(fn, JSON.stringify(lastI18nDiag, null, 2), "application/json;charset=utf-8");
+        });
+        toolbar.appendChild(b);
+        btnI18nExport = b;
+
+        const s = document.createElement("button");
+        s.type = "button";
+        s.className = "btn btn--ghost";
+        s.textContent = "Export i18n stub";
+        s.title = "Debug: download a translation stub (fill English values, then paste into token tables)";
+        s.disabled = true;
+        s.addEventListener("click", () => {
+          if (!lastI18nDiag || !state) {
+            window.alert("No diagnostics yet. Load and analyze an MSInfo file first.");
+            return;
+          }
+          const safeBase = (state.name || "msinfo")
+            .replace(/\.[^.]+$/, "")
+            .replace(/[^A-Za-z0-9._-]+/g, "_")
+            .slice(0, 80);
+          const fn = `${safeBase}.i18n-stub.txt`;
+          downloadTextAsFile(fn, buildI18nStubFromDiagnostics(lastI18nDiag), "text/plain;charset=utf-8");
+        });
+        toolbar.appendChild(s);
+        btnI18nStub = s;
+      }
+    }
     /** @type {AbortController | null} */
     let systemLoadAbort = null;
     /** @type {{ name: string, buffer: ArrayBuffer, label: string, fileMetaBase: string, msiRepairedXml: string | null, msiOriginalDecoded: string, msiFixedRaw: string | null, msiViewOriginal: boolean, analyzed?: boolean } | null} */
@@ -13417,6 +13696,24 @@
       if (data) {
         const sum = extractSystemSummary(data);
         renderSystemSummary(summaryEl, sum, true, recovery.notes, xmlRep);
+        if (debugI18n && Array.isArray(data.kvs)) {
+          try {
+            lastI18nDiag = createI18nDiagnosticsSnapshot(state.name, state.label, data.kvs, sum);
+            if (btnI18nExport) btnI18nExport.disabled = false;
+            if (btnI18nStub) btnI18nStub.disabled = false;
+          } catch {
+            lastI18nDiag = null;
+          }
+        }
+          // Always refresh Language Adder snapshot after any successful parse.
+          if (Array.isArray(data.kvs)) {
+            try {
+              lastI18nDiag = createI18nDiagnosticsSnapshot(state.name, state.label, data.kvs, sum);
+              if (btnLangAdder) btnLangAdder.disabled = false;
+            } catch {
+              /* keep prior snapshot */
+            }
+          }
       } else {
         renderSystemSummary(summaryEl, null, false, recovery.notes, xmlRep);
       }

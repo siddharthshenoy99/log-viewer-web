@@ -10077,6 +10077,17 @@ html[data-theme="light"] .panel--system .system-toolbar .btn--ghost:hover {
   color: #111827;
 }
 
+/* Language Adder: System tab uses purple accent (light mode only). */
+html[data-theme="light"] .panel--system .system-toolbar .btn-lang-adder.btn--ghost {
+  border-color: #6d28d9;
+  color: #5b21b6;
+}
+html[data-theme="light"] .panel--system .system-toolbar .btn-lang-adder.btn--ghost:hover {
+  background: #f5f3ff;
+  border-color: #5b21b6;
+  color: #4c1d95;
+}
+
 html[data-theme="light"] .panel--system .system-raw-search-row .btn--ghost,
 html[data-theme="light"] .panel--system .system-search-results .btn--ghost {
   background: #ffffff;

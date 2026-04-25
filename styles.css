@@ -3490,7 +3490,7 @@ details.gpu-dashboard__details:not([open]) .gpu-dashboard__summary-chevron {
   grid-template-columns: minmax(8.5rem, 38%) 1fr;
   column-gap: 0.65rem;
   row-gap: 0.35rem;
-  align-items: start;
+  align-items: baseline;
   font-size: 0.82rem;
 }
 
@@ -3503,6 +3503,7 @@ details.gpu-dashboard__details:not([open]) .gpu-dashboard__summary-chevron {
   color: var(--muted);
   text-align: right;
   padding-right: 0.25rem;
+  line-height: 1.45;
 }
 
 .gpu-subcard__facts dd {

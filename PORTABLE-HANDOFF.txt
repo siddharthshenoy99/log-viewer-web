@@ -13,7 +13,7 @@ WHAT THIS IS
 
   Multilingual System Information (.nfo) exports: summaries and labels use
   local normalization and offline phrase mapping (no remote translation API).
-  Dedicated handling is included for Russian, Japanese, Turkish, Spanish,
+  Dedicated handling is included for French, Russian, Japanese, Turkish, Spanish,
   Portuguese, and Swedish in addition to English. Section-level “Translate”
   uses the same offline tables (e.g. Swedish Services / Running Services
   display names and common field labels).

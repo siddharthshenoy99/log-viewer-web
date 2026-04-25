@@ -10137,6 +10137,9 @@
     )
   );
 
+  /** Fast membership check for whether a token is already present in our offline mapping keys. */
+  const MSINFO_I18N_EN_TOKEN_KEYS = new Set(MSINFO_I18N_EN_TOKEN_PAIRS.map((p) => p[0]));
+
   /**
    * One pass of the sorted {@link MSINFO_I18N_EN_TOKEN_PAIRS} table (longer keys first).
    * @param {string} str
@@ -13380,14 +13383,41 @@
       unknownTokens[t] = (unknownTokens[t] || 0) + 1;
     };
 
+    /** Normalize a token the same way as offline mapping does (for membership checks). */
+    const normKey = (s) => {
+      let t = normalizeMsinfoLineBreakEntities(String(s ?? "")).trim();
+      try {
+        t = t.normalize("NFC");
+      } catch {
+        /* */
+      }
+      return t;
+    };
+
     const knownEnglishish = (s) => {
-      const t = String(s || "").trim();
+      const t = normKey(s);
       if (!t) return true;
+      // If the token exists in our offline phrase table (even if it maps to itself), treat as supported.
+      if (MSINFO_I18N_EN_TOKEN_KEYS.has(t)) return true;
       // If it does not look non-English, treat as known (no need to collect).
       if (!localeScriptLooksNonEnglishListed(t)) return true;
       // If our offline translation changes it, it is already covered.
       const en = translateMsinfoI18nTokensToEnglish(t);
       return en !== t;
+    };
+
+    const detectLanguage = (/** @type {string} */ blob) => {
+      const b = String(blob || "");
+      // Prefer script-unique detection first.
+      if (/[\u3040-\u30ff\u31f0-\u31ff\u3400-\u9fff]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
+      if (/[\u0400-\u04ff]/.test(b)) return { code: "ru", name: "Russian", confidence: 0.99 };
+      // Latin hints (best-effort heuristics).
+      if (looksLikeTurkishWindowsLatinHint(b)) return { code: "tr", name: "Turkish", confidence: 0.9 };
+      if (looksLikeFrenchWindowsLatinHint(b)) return { code: "fr", name: "French", confidence: 0.9 };
+      if (looksLikePortugueseWindowsLatinHint(b)) return { code: "pt", name: "Portuguese", confidence: 0.85 };
+      if (looksLikeSpanishWindowsLatinHint(b)) return { code: "es", name: "Spanish", confidence: 0.85 };
+      if (looksLikeSwedishWindowsLatinHint(b)) return { code: "sv", name: "Swedish", confidence: 0.85 };
+      return { code: "unknown", name: "Unknown", confidence: 0.5 };
     };
 
     for (const k of Array.isArray(kvs) ? kvs : []) {
@@ -13429,8 +13459,16 @@
       }
     }
 
+    // Detect likely source language (best-effort) from the remaining unknown strings we plan to export.
+    const detectBlobParts = [];
+    for (const block of Object.values(unknownLabelsByPath)) {
+      for (const k of Object.keys(block?.labels || {})) detectBlobParts.push(k);
+    }
+    for (const k of Object.keys(unknownTokens)) detectBlobParts.push(k);
+    const lang = detectLanguage(detectBlobParts.join("  "));
+
     const notes = [
-      "This report lists MSInfo Item labels that look non-English but were not changed by the current offline translation tables.",
+      "This report lists only strings that look non-English AND are not already covered by the current offline translation tables.",
       "Use it to add new token pairs or label mappings without guessing. Keep translations specific (prefer full labels over short substrings).",
       "The unknownTokens block additionally lists non-English tokens found in Network / Services / Storage values that were not translated by current offline tables.",
     ];
@@ -13440,6 +13478,9 @@
       createdAtIso: new Date().toISOString(),
       fileName: String(fileName || ""),
       encodingLabel: String(encodingLabel || ""),
+      detectedLanguageCode: lang.code,
+      detectedLanguageName: lang.name,
+      detectedLanguageConfidence: lang.confidence,
       unknownLabelsByPath,
       unknownTokens,
       notes,
@@ -13458,6 +13499,11 @@
     lines.push(`createdAt: ${diag.createdAtIso}`);
     lines.push(`file: ${diag.fileName || ""}`);
     lines.push(`encoding: ${diag.encodingLabel || ""}`);
+    if (diag.detectedLanguageName) {
+      const code = diag.detectedLanguageCode || "";
+      const conf = Number(diag.detectedLanguageConfidence || 0);
+      lines.push(`detectedLanguage: ${diag.detectedLanguageName}${code ? ` (${code})` : ""} (confidence: ${conf.toFixed(2)})`);
+    }
     lines.push("");
     for (const n of diag.notes || []) lines.push(`- ${n}`);
     lines.push("");
@@ -13604,7 +13650,13 @@
             .replace(/\.[^.]+$/, "")
             .replace(/[^A-Za-z0-9._-]+/g, "_")
             .slice(0, 80);
-          const fn = `${safeBase}.language-adder.txt`;
+          const detectedName = String(lastI18nDiag?.detectedLanguageName || "").trim();
+          const detectedConf = Number(lastI18nDiag?.detectedLanguageConfidence || 0);
+          const prefix =
+            detectedName && detectedName !== "Unknown" && detectedConf >= 0.9
+              ? detectedName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 32)
+              : safeBase;
+          const fn = `${prefix}.language-adder.txt`;
           downloadTextAsFile(fn, buildLanguageAdderTxt(lastI18nDiag), "text/plain;charset=utf-8");
         });
         toolbar.appendChild(b);

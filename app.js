@@ -12218,6 +12218,34 @@
     /** @type {{ name: string, buffer: ArrayBuffer } | null} */
     let fileState = null;
     let textState = "";
+    /** @type {ReturnType<typeof createLanguageAdderSnapshot> | null} */
+    let lastLangAdder = null;
+
+    // Language Adder for BSOD tab.
+    let btnLangAdder = null;
+    if (toolbar) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn btn--ghost";
+      b.textContent = "Language Adder";
+      b.title = "Export unknown (untranslated) tokens to extend offline language support";
+      b.disabled = true;
+      b.addEventListener("click", () => {
+        if (!lastLangAdder) {
+          window.alert("Load and analyze a file (or paste text) first.");
+          return;
+        }
+        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
+        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
+        const base =
+          detectedName && detectedName !== "Unknown" && detectedConf >= 0.9
+            ? detectedName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 32)
+            : (fileState?.name || "bsod").replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 32);
+        downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
+      });
+      toolbar.appendChild(b);
+      btnLangAdder = b;
+    }
 
     function setVisible(loaded) {
       if (toolbar) toolbar.hidden = !loaded;
@@ -12249,6 +12277,25 @@
           ? "Pasted / merged text"
           : "";
       renderBsodReport(reportEl, analyzeBsodText(t), metaLine);
+      try {
+        // Tokenize lightly: words + common Windows phrases.
+        const toks = String(t || "")
+          .split(/[\r\n\t]+/g)
+          .flatMap((ln) => ln.split(/[•·]| {2,}/g))
+          .map((x) => x.trim())
+          .filter(Boolean)
+          .slice(0, 4000);
+        lastLangAdder = createLanguageAdderSnapshot({
+          fileName: fileState?.name || "Pasted",
+          encodingLabel: "auto",
+          source: "bsod",
+          tokens: toks,
+        });
+        if (btnLangAdder) btnLangAdder.disabled = Object.keys(lastLangAdder.unknownTokens || {}).length === 0;
+      } catch {
+        lastLangAdder = null;
+        if (btnLangAdder) btnLangAdder.disabled = true;
+      }
       if (meta) {
         meta.textContent = t
           ? `${metaLine}${t.length > 0 ? ` · ${t.length.toLocaleString()} characters` : ""}`
@@ -13595,6 +13642,124 @@
     return lines.join("\n");
   }
 
+  /**
+   * Shared Language Adder snapshot builder for non-System tabs.
+   * Collects tokens that look non-English and are not already supported by offline mappings.
+   *
+   * @param {{
+   *   fileName: string,
+   *   encodingLabel: string,
+   *   source: "bsod" | "gpu" | "evtx" | "dxdiag",
+   *   tokens: string[],
+   * }} o
+   * @returns {{
+   *   version: number,
+   *   createdAtIso: string,
+   *   fileName: string,
+   *   encodingLabel: string,
+   *   source: string,
+   *   detectedLanguageCode: string,
+   *   detectedLanguageName: string,
+   *   detectedLanguageConfidence: number,
+   *   unknownTokens: Record<string, number>,
+   *   notes: string[]
+   * }}
+   */
+  function createLanguageAdderSnapshot(o) {
+    const unknownTokens = {};
+    const addTok = (s) => {
+      const t = String(s || "").replace(/\s+/g, " ").trim();
+      if (!t) return;
+      unknownTokens[t] = (unknownTokens[t] || 0) + 1;
+    };
+
+    const normKey = (s) => {
+      let t = normalizeMsinfoLineBreakEntities(String(s ?? "")).trim();
+      try {
+        t = t.normalize("NFC");
+      } catch {
+        /* */
+      }
+      return t;
+    };
+
+    const isSupportedOrEnglishish = (s) => {
+      const t = normKey(s);
+      if (!t) return true;
+      if (MSINFO_I18N_EN_TOKEN_KEYS.has(t)) return true;
+      if (!localeScriptLooksNonEnglishListed(t)) return true;
+      const en = translateMsinfoI18nTokensToEnglish(t);
+      return en !== t;
+    };
+
+    for (const t of Array.isArray(o?.tokens) ? o.tokens : []) {
+      if (!t) continue;
+      if (isSupportedOrEnglishish(t)) continue;
+      addTok(t);
+    }
+
+    const detectLanguage = (blob) => {
+      const b = String(blob || "");
+      if (/[\u3040-\u30ff\u31f0-\u31ff\u3400-\u9fff]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
+      if (/[\u0400-\u04ff]/.test(b)) return { code: "ru", name: "Russian", confidence: 0.99 };
+      if (looksLikeTurkishWindowsLatinHint(b)) return { code: "tr", name: "Turkish", confidence: 0.9 };
+      if (looksLikeFrenchWindowsLatinHint(b)) return { code: "fr", name: "French", confidence: 0.9 };
+      if (looksLikePortugueseWindowsLatinHint(b)) return { code: "pt", name: "Portuguese", confidence: 0.85 };
+      if (looksLikeSpanishWindowsLatinHint(b)) return { code: "es", name: "Spanish", confidence: 0.85 };
+      if (looksLikeSwedishWindowsLatinHint(b)) return { code: "sv", name: "Swedish", confidence: 0.85 };
+      return { code: "unknown", name: "Unknown", confidence: 0.5 };
+    };
+
+    const lang = detectLanguage(Object.keys(unknownTokens).join("  "));
+    const notes = [
+      "This report lists only strings that look non-English AND are not already covered by the current offline translation tables.",
+      "Use it to add new token pairs or label mappings without guessing. Keep translations specific (prefer full labels over short substrings).",
+    ];
+
+    return {
+      version: 1,
+      createdAtIso: new Date().toISOString(),
+      fileName: String(o?.fileName || ""),
+      encodingLabel: String(o?.encodingLabel || ""),
+      source: String(o?.source || ""),
+      detectedLanguageCode: lang.code,
+      detectedLanguageName: lang.name,
+      detectedLanguageConfidence: lang.confidence,
+      unknownTokens,
+      notes,
+    };
+  }
+
+  /**
+   * @param {ReturnType<typeof createLanguageAdderSnapshot> | null} diag
+   * @returns {string}
+   */
+  function buildLanguageAdderTxtFromSnapshot(diag) {
+    if (!diag) return "";
+    const lines = [];
+    lines.push("Language Adder export (offline)");
+    lines.push(`createdAt: ${diag.createdAtIso}`);
+    lines.push(`file: ${diag.fileName || ""}`);
+    lines.push(`encoding: ${diag.encodingLabel || ""}`);
+    lines.push(`source: ${diag.source || ""}`);
+    if (diag.detectedLanguageName) {
+      const code = diag.detectedLanguageCode || "";
+      const conf = Number(diag.detectedLanguageConfidence || 0);
+      lines.push(`detectedLanguage: ${diag.detectedLanguageName}${code ? ` (${code})` : ""} (confidence: ${conf.toFixed(2)})`);
+    }
+    lines.push("");
+    for (const n of diag.notes || []) lines.push(`- ${n}`);
+    lines.push("");
+    lines.push("=== Unknown tokens (this tab) ===");
+    const toks = Object.entries(diag.unknownTokens || {}).sort(
+      (a, b) => (b[1] || 0) - (a[1] || 0) || a[0].localeCompare(b[0])
+    );
+    if (!toks.length) lines.push("(none)");
+    else for (const [k, n] of toks) lines.push(`${n}x\t${k}`);
+    lines.push("");
+    return lines.join("\n");
+  }
+
   function setupSystemPanel(panel) {
     const dropzone = panel.querySelector(".dropzone");
     const input = panel.querySelector(".file-input");
@@ -14572,6 +14737,31 @@
     let nextId = 1;
     /** @type {string[] | null} */
     let savedMetricPick = null;
+    /** @type {ReturnType<typeof createLanguageAdderSnapshot> | null} */
+    let lastLangAdder = null;
+
+    // Language Adder for GPU-Z tab (metric names / units / localized headers).
+    let btnLangAdder = null;
+    if (toolbar) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn btn--ghost";
+      b.textContent = "Language Adder";
+      b.title = "Export unknown (untranslated) tokens to extend offline language support";
+      b.disabled = true;
+      b.addEventListener("click", () => {
+        if (!lastLangAdder) {
+          window.alert("Load and analyze GPU-Z logs first.");
+          return;
+        }
+        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
+        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
+        const base = detectedName && detectedName !== "Unknown" && detectedConf >= 0.9 ? detectedName : "GPUZ";
+        downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
+      });
+      toolbar.appendChild(b);
+      btnLangAdder = b;
+    }
 
     function setAnalyzerVisible(hasLogs) {
       toolbar.hidden = !hasLogs;
@@ -14594,6 +14784,28 @@
         }
       }
       return [...set.values()].sort((a, b) => a.localeCompare(b));
+    }
+
+    function refreshLanguageAdder() {
+      try {
+        const toks = [];
+        for (const log of logs) {
+          if (!log.parsed) continue;
+          toks.push(...(log.parsed.cols || []).map((c) => c.name).filter(Boolean));
+          // Also include the raw header line if present (some localized GPU-Z exports).
+          if (log.text) toks.push(...String(log.text).slice(0, 5000).split(/[,;\r\n\t]+/g).slice(0, 400));
+        }
+        lastLangAdder = createLanguageAdderSnapshot({
+          fileName: logs[0]?.name || "GPU-Z",
+          encodingLabel: logs[0]?.label || "auto",
+          source: "gpu",
+          tokens: toks,
+        });
+        if (btnLangAdder) btnLangAdder.disabled = Object.keys(lastLangAdder.unknownTokens || {}).length === 0;
+      } catch {
+        lastLangAdder = null;
+        if (btnLangAdder) btnLangAdder.disabled = true;
+      }
     }
 
     function getSelectedMetricsFromUi() {
@@ -14934,6 +15146,7 @@
       }
       renderAnalyzerTimeRange();
       redraw();
+      refreshLanguageAdder();
     }
 
     function addFiles(fileList) {
@@ -15009,6 +15222,8 @@
     });
     btnClearAll?.addEventListener("click", () => {
       logs = [];
+      lastLangAdder = null;
+      if (btnLangAdder) btnLangAdder.disabled = true;
       syncUi();
     });
     window.addEventListener("resize", () => {
@@ -16584,6 +16799,31 @@
     const parseNoteEl = panel.querySelector(".dxdiag-parse-note");
     const summaryEl = panel.querySelector(".dxdiag-summary");
     const pre = panel.querySelector(".content--dxdiag");
+    /** @type {ReturnType<typeof createLanguageAdderSnapshot> | null} */
+    let lastLangAdder = null;
+
+    // Language Adder for DxDiag tab.
+    let btnLangAdder = null;
+    if (toolbar) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn btn--ghost";
+      b.textContent = "Language Adder";
+      b.title = "Export unknown (untranslated) tokens to extend offline language support";
+      b.disabled = true;
+      b.addEventListener("click", () => {
+        if (!lastLangAdder) {
+          window.alert("Load and analyze a DxDiag export first.");
+          return;
+        }
+        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
+        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
+        const base = detectedName && detectedName !== "Unknown" && detectedConf >= 0.9 ? detectedName : "DxDiag";
+        downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
+      });
+      toolbar.appendChild(b);
+      btnLangAdder = b;
+    }
 
     function clearAll() {
       if (toolbar) toolbar.hidden = true;
@@ -16593,6 +16833,8 @@
       if (summaryEl) summaryEl.innerHTML = "";
       if (pre) pre.textContent = "";
       if (input) input.value = "";
+      lastLangAdder = null;
+      if (btnLangAdder) btnLangAdder.disabled = true;
     }
 
     function loadFile(file) {
@@ -16610,6 +16852,31 @@
         const parsed = parseDxDiagText(text);
         if (pre) pre.textContent = text;
         if (summaryEl) summaryEl.innerHTML = renderDxDiagSummaryHtml(parsed, name);
+        try {
+          const toks = [];
+          // Include parsed keys and common section labels.
+          for (const [k, v] of Object.entries(parsed?.system || {})) {
+            toks.push(k, v);
+          }
+          for (const d of parsed?.displays || []) {
+            for (const [k, v] of Object.entries(d)) toks.push(k, v);
+          }
+          for (const s of parsed?.sounds || []) {
+            for (const [k, v] of Object.entries(s)) toks.push(k, v);
+          }
+          // Include some raw lines too (localized headings).
+          toks.push(...String(text).split(/[\r\n]+/g).slice(0, 1200));
+          lastLangAdder = createLanguageAdderSnapshot({
+            fileName: name,
+            encodingLabel: label,
+            source: "dxdiag",
+            tokens: toks,
+          });
+          if (btnLangAdder) btnLangAdder.disabled = Object.keys(lastLangAdder.unknownTokens || {}).length === 0;
+        } catch {
+          lastLangAdder = null;
+          if (btnLangAdder) btnLangAdder.disabled = true;
+        }
         if (parseNoteEl) parseNoteEl.textContent = "";
         if (metaEl) metaEl.textContent = `${name} · ${(buf.byteLength / 1024).toFixed(1)} KiB · ${label}`;
         if (toolbar) toolbar.hidden = false;
@@ -16662,6 +16929,95 @@
     const summaryEl = panel.querySelector(".evtx-summary");
     const cardsEl = panel.querySelector(".evtx-watch-cards");
     const tbody = panel.querySelector(".evtx-table-body");
+    /** @type {ReturnType<typeof createLanguageAdderSnapshot> | null} */
+    let lastLangAdder = null;
+
+    // Language Adder for Event Viewer tab (localized message text / provider names).
+    let btnLangAdder = null;
+    if (toolbar) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn btn--ghost";
+      b.textContent = "Language Adder";
+      b.title = "Export unknown (untranslated) tokens to extend offline language support";
+      b.disabled = true;
+      b.addEventListener("click", () => {
+        if (!lastLangAdder) {
+          window.alert("Load and analyze an Event Viewer export first.");
+          return;
+        }
+        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
+        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
+        const base = detectedName && detectedName !== "Unknown" && detectedConf >= 0.9 ? detectedName : "EventViewer";
+        downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
+      });
+      toolbar.appendChild(b);
+      btnLangAdder = b;
+    }
+
+    const refreshLanguageAdder = (fileName, encodingLabel, events) => {
+      try {
+        const toks = [];
+
+        const isTechnicalJargonish = (s) => {
+          const t = String(s || "").trim();
+          if (!t) return true;
+          // Known driver/module tokens and file types.
+          if (/\b(?:nvlddmkm|amdkmdag|dxgkrnl|dxgmms2|watchdog|wdf)\b/i.test(t)) return true;
+          if (/\b[a-z0-9_.-]+\.(?:sys|dll|exe|efi|inf|cat|mui|log|cab|dat)\b/i.test(t)) return true;
+          // GUIDs, hashes, and IDs.
+          if (/\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b/i.test(t)) return true;
+          if (/\b0x[a-f0-9]{4,}\b/i.test(t)) return true;
+          if (/\b[a-f0-9]{16,}\b/i.test(t)) return true;
+          // Paths / registry / URLs.
+          if (/[A-Za-z]:\\|\\\\|\/System32\/|HKEY_|https?:\/\//i.test(t)) return true;
+          // "Event ID 4101" / pure numeric IDs.
+          if (/\b(?:event\s*id|id)\s*[:#]?\s*\d+\b/i.test(t)) return true;
+          if (/^\d{1,6}$/.test(t)) return true;
+          return false;
+        };
+
+        const extractHumanSegments = (msg) => {
+          const out = [];
+          const raw = String(msg || "");
+          if (!raw) return out;
+          // Split into sentence-ish chunks and keep the ones that contain non-ASCII letters (likely localized language),
+          // while dropping chunks dominated by technical ids/paths.
+          const parts = raw
+            .split(/[\r\n]+/g)
+            .flatMap((ln) => ln.split(/[.;:!?•·]+/g))
+            .map((x) => x.trim())
+            .filter(Boolean);
+          for (const p of parts) {
+            if (p.length < 2) continue;
+            if (!/[^\x00-\x7F]/.test(p)) continue; // keep only clearly non-English chunks
+            if (isTechnicalJargonish(p)) continue;
+            // Also drop chunks that contain obvious driver/module tokens even if the chunk is otherwise localized.
+            if (/\b[a-z0-9_.-]+\.(?:sys|dll|exe)\b/i.test(p)) continue;
+            if (/\b(?:nvlddmkm|amdkmdag)\b/i.test(p)) continue;
+            out.push(p.slice(0, 180));
+          }
+          return out;
+        };
+
+        for (const e of Array.isArray(events) ? events : []) {
+          // Provider/channel names are usually English/ASCII; still include them in case they are localized.
+          toks.push(e?.provider, e?.channel, e?.level, e?.task);
+          // Messages can contain technical identifiers; only export human-language chunks.
+          toks.push(...extractHumanSegments(e?.message));
+        }
+        lastLangAdder = createLanguageAdderSnapshot({
+          fileName: String(fileName || "event-log"),
+          encodingLabel: String(encodingLabel || "auto"),
+          source: "evtx",
+          tokens: toks.filter(Boolean),
+        });
+        if (btnLangAdder) btnLangAdder.disabled = Object.keys(lastLangAdder.unknownTokens || {}).length === 0;
+      } catch {
+        lastLangAdder = null;
+        if (btnLangAdder) btnLangAdder.disabled = true;
+      }
+    };
     const loadJobEl = panel.querySelector(".panel-load-job--evtx");
     const loadProgress = panel.querySelector(".evtx-panel-load__progress");
     const loadLabel = panel.querySelector(".evtx-panel-load__label");
@@ -16833,6 +17189,7 @@
             parseNote =
               "No <Event> blocks parsed. Confirm this is an Event Viewer XML export (not plain text).";
           renderEvtxResults(name, events, parseNote, "xml");
+          refreshLanguageAdder(name, "XML", events);
           if (metaEl) metaEl.textContent = `${name} · XML`;
           setP(1, "");
           pauseForDoneUi = true;
@@ -16853,6 +17210,7 @@
             parseNote =
               "XML-like head found but no <Event> blocks parsed; file may be truncated or not an Event Viewer export.";
           renderEvtxResults(name, events, parseNote, "xml");
+          refreshLanguageAdder(name, "XML (detected)", events);
           if (metaEl) metaEl.textContent = `${name} · XML (detected)`;
           setP(1, "");
           pauseForDoneUi = true;
@@ -16876,6 +17234,7 @@
               "Some EVTX rows still lack a decoded Event ID (heavy template compression or damaged chunk). XML export may list every ID and message.";
         }
         renderEvtxResults(name, events, parseNote, "evtx");
+        refreshLanguageAdder(name, "EVTX (binary)", events);
         if (metaEl) metaEl.textContent = `${name} · EVTX (binary)`;
         setP(1, "");
         pauseForDoneUi = true;

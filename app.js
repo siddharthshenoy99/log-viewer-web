@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.4.5";
+  const APP_VERSION = "1.4.6";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -10151,6 +10151,32 @@
   /** Fast membership check for whether a token is already present in our offline mapping keys. */
   const MSINFO_I18N_EN_TOKEN_KEYS = new Set(MSINFO_I18N_EN_TOKEN_PAIRS.map((p) => p[0]));
 
+  /** Cross-tab hub snapshots for Advanced “GPU God’s Eye” (offline). */
+  /** @type {{ logs: { name: string, parsed: ReturnType<typeof parseSensorCsv> | null }[] } | null} */
+  let gpuHubSnapshot = null;
+  /** @type {{ name: string, events: ReturnType<typeof parseWindowsEventXmlExport>, source: string } | null} */
+  let evtxHubSnapshot = null;
+
+  function isAdvancedModeOn() {
+    return document.documentElement.getAttribute("data-advanced") === "on";
+  }
+
+  function dispatchGpuHubUpdated() {
+    try {
+      window.dispatchEvent(new CustomEvent("rv-gpu-hub", { bubbles: false }));
+    } catch {
+      /* */
+    }
+  }
+
+  function dispatchEvtxHubUpdated() {
+    try {
+      window.dispatchEvent(new CustomEvent("rv-evtx-hub", { bubbles: false }));
+    } catch {
+      /* */
+    }
+  }
+
   /**
    * One pass of the sorted {@link MSINFO_I18N_EN_TOKEN_PAIRS} table (longer keys first).
    * @param {string} str
@@ -14552,11 +14578,23 @@
           /* */
         }
         advInline.hidden = false;
+        const godsTab = document.getElementById("tab-gods-eye");
+        if (godsTab instanceof HTMLElement) {
+          godsTab.removeAttribute("hidden");
+          godsTab.setAttribute("aria-hidden", "false");
+        }
         const t = document.getElementById("advanced-toggle");
         if (t) {
           t.setAttribute("aria-expanded", "true");
           t.textContent = "Advanced · on";
         }
+        queueMicrotask(() => {
+          try {
+            window.dispatchEvent(new Event("rv-workspace-sync"));
+          } catch {
+            /* */
+          }
+        });
       }
     }
 
@@ -14739,8 +14777,6 @@
     let savedMetricPick = null;
     /** @type {ReturnType<typeof createLanguageAdderSnapshot> | null} */
     let lastLangAdder = null;
-    /** Hook: Advanced-only merged timeline refresh (defined later; safe no-op until wired). */
-    let refreshGpuAdvancedHooks = () => {};
 
     // Language Adder for GPU-Z tab (metric names / units / localized headers).
     let btnLangAdder = null;
@@ -15150,10 +15186,11 @@
       redraw();
       refreshLanguageAdder();
       try {
-        refreshGpuAdvancedHooks();
+        gpuHubSnapshot = { logs: logs.map((l) => ({ name: l.name, parsed: l.parsed })) };
       } catch {
-        /* */
+        gpuHubSnapshot = null;
       }
+      dispatchGpuHubUpdated();
     }
 
     function addFiles(fileList) {
@@ -15231,6 +15268,8 @@
       logs = [];
       lastLangAdder = null;
       if (btnLangAdder) btnLangAdder.disabled = true;
+      gpuHubSnapshot = null;
+      dispatchGpuHubUpdated();
       syncUi();
     });
     window.addEventListener("resize", () => {
@@ -15239,359 +15278,6 @@
     panel.addEventListener("gpuresize", () => {
       if (logs.length) redraw();
     });
-
-    // ----- Advanced-only: GPU-Z + Event log merged offline timeline (visual) -----
-    const isAppAdvanced = () => document.documentElement.getAttribute("data-advanced") === "on";
-    const advBlock = document.createElement("div");
-    advBlock.className = "gpu-adv-timeline";
-    advBlock.hidden = true;
-    advBlock.setAttribute("data-gpu-advanced-only", "true");
-    advBlock.innerHTML = `
-      <div class="gpu-adv-timeline__head">
-        <div>
-          <h3 class="gpu-adv-timeline__title">Advanced: GPU + Event log timeline (offline)</h3>
-          <p class="gpu-adv-timeline__hint">
-            Load a <strong>GPU-Z sensor log</strong> above, then add an <strong>Event Viewer export</strong> (<code>.evtx</code> or
-            <code>.xml</code>) to overlay likely GPU-related events on the same time axis. This is a visual aid only (not a diagnosis).
-          </p>
-        </div>
-      </div>
-      <div class="gpu-adv-timeline__row">
-        <div class="gpu-adv-timeline__drop dropzone dropzone--gpu-adv-evtx" tabindex="0" role="button" aria-label="Drop Event Viewer export here for GPU timeline">
-          <div class="dropzone__inner">
-            <span class="dropzone__icon" aria-hidden="true">&#8682;</span>
-            <p><strong>Choose or drop an Event Viewer export</strong></p>
-            <p class="dropzone__sub">Supports <code>.evtx</code> (binary) or Event Viewer <code>.xml</code> export. Parsed locally; nothing is uploaded.</p>
-            <p class="gpu-adv-timeline__evmeta" data-gpu-adv-evmeta hidden></p>
-          </div>
-          <input type="file" class="file-input file-input--gpu-adv-evtx" accept=".evtx,.xml,text/xml,application/xml,text/*" />
-        </div>
-        <div class="gpu-adv-timeline__controls" data-gpu-adv-controls hidden>
-          <label class="gpu-adv-timeline__label">
-            GPU metric
-            <select class="gpu-adv-timeline__metric" data-gpu-adv-metric></select>
-          </label>
-          <button type="button" class="btn btn--secondary" data-gpu-adv-build>Build timeline</button>
-        </div>
-      </div>
-      <p class="insight-disclaimer" data-gpu-adv-status hidden></p>
-      <div class="gpu-adv-timeline__canvaswrap" data-gpu-adv-canvaswrap hidden>
-        <canvas class="gpu-adv-timeline__canvas" data-gpu-adv-canvas width="1200" height="360" aria-label="GPU metric and Event Viewer markers timeline"></canvas>
-        <p class="gpu-adv-timeline__legend" data-gpu-adv-legend></p>
-      </div>
-    `;
-    panel.appendChild(advBlock);
-
-    const advEvtxInput = advBlock.querySelector(".file-input--gpu-adv-evtx");
-    const advEvtxDrop = advBlock.querySelector(".dropzone--gpu-adv-evtx");
-    const advEvtxMeta = advBlock.querySelector("[data-gpu-adv-evmeta]");
-    const advControls = advBlock.querySelector("[data-gpu-adv-controls]");
-    const advMetricSel = advBlock.querySelector("[data-gpu-adv-metric]");
-    const advBuild = advBlock.querySelector("[data-gpu-adv-build]");
-    const advStatus = advBlock.querySelector("[data-gpu-adv-status]");
-    const advCanvasWrap = advBlock.querySelector("[data-gpu-adv-canvaswrap]");
-    const advCanvas = /** @type {HTMLCanvasElement | null} */ (advBlock.querySelector("[data-gpu-adv-canvas]"));
-    const advLegend = advBlock.querySelector("[data-gpu-adv-legend]");
-
-    /** @type {ArrayBuffer | null} */
-    let advEvtxBuf = null;
-    let advEvtxName = "";
-    let advEvtxLabel = "auto";
-    /** @type {ReturnType<typeof parseWindowsEventXmlExport> | null} */
-    let advEvtxEvents = null;
-
-    const GPU_TIMELINE_MARK_EVENT_IDS = new Set([
-      4101, 10110, 10111, 13, 14, 153, 63, 41, 6008, 18, 17, 19, 20, 193,
-    ]);
-
-    function isLikelyGpuEvtxEvent(e) {
-      const id = e?.eventId;
-      if (id != null && Number.isFinite(id) && GPU_TIMELINE_MARK_EVENT_IDS.has(/** @type {number} */ (id))) return true;
-      const p = String(e?.provider || "");
-      const msg = String(e?.message || "");
-      if (/nvlddmkm|amdkmdag|dxgkrnl|dxgmms2|display|video|d3d|tdr|livekern|kernel-power/i.test(`${p} ${msg}`)) return true;
-      return false;
-    }
-
-    function buildGpuMetricOptions() {
-      if (!(advMetricSel instanceof HTMLSelectElement)) return;
-      const prev = advMetricSel.value;
-      advMetricSel.innerHTML = "";
-      const set = new Map();
-      for (const log of logs) {
-        if (!log.parsed) continue;
-        for (const col of log.parsed.numericCols) {
-          if (col.index === 0) continue; // time column
-          const key = normalizeHeader(col.name);
-          if (!set.has(key)) set.set(key, col.name);
-        }
-      }
-      const items = [...set.values()].sort((a, b) => a.localeCompare(b));
-      for (const name of items) {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        advMetricSel.appendChild(opt);
-      }
-      if (prev && [...advMetricSel.options].some((o) => o.value === prev)) advMetricSel.value = prev;
-    }
-
-    function findGpuMetricCol(metricName) {
-      const want = normalizeHeader(metricName);
-      for (const log of logs) {
-        if (!log.parsed) continue;
-        for (const col of log.parsed.numericCols) {
-          if (col.index === 0) continue;
-          if (normalizeHeader(col.name) === want) return { log, col };
-        }
-      }
-      return null;
-    }
-
-    function drawGpuEvtxTimeline() {
-      if (!advCanvas || !advStatus || !advLegend || !advCanvasWrap) return;
-      if (!isAppAdvanced()) return;
-      if (!logs.length) {
-        advStatus.hidden = false;
-        advStatus.textContent = "Load a GPU-Z sensor log first, then add an Event Viewer export.";
-        advCanvasWrap.hidden = true;
-        return;
-      }
-      if (!advEvtxBuf || !advEvtxEvents || !advEvtxEvents.length) {
-        advStatus.hidden = false;
-        advStatus.textContent = "Load an Event Viewer export (.evtx or .xml) to overlay events on the GPU metric timeline.";
-        advCanvasWrap.hidden = true;
-        return;
-      }
-      const mName = advMetricSel instanceof HTMLSelectElement ? advMetricSel.value : "";
-      const pick = mName ? findGpuMetricCol(mName) : null;
-      if (!pick || !pick.col?.pts?.length) {
-        advStatus.hidden = false;
-        advStatus.textContent = "Pick a GPU metric that exists in the loaded sensor log.";
-        advCanvasWrap.hidden = true;
-        return;
-      }
-      const pts = pick.col.pts
-        .map((p) => ({ t: p.t, v: p.v }))
-        .filter((p) => p.t != null && Number.isFinite(p.t) && Number.isFinite(p.v));
-      if (pts.length < 2) {
-        advStatus.hidden = false;
-        advStatus.textContent = "The selected metric does not have enough timestamped samples to draw a timeline.";
-        advCanvasWrap.hidden = true;
-        return;
-      }
-      pts.sort((a, b) => a.t - b.t);
-      const tMin = pts[0].t;
-      const tMax = pts[pts.length - 1].t;
-      if (!(tMax > tMin)) {
-        advStatus.hidden = false;
-        advStatus.textContent = "Could not determine a valid time range for the GPU-Z samples.";
-        advCanvasWrap.hidden = true;
-        return;
-      }
-      const evs = (advEvtxEvents || [])
-        .filter((e) => isLikelyGpuEvtxEvent(e))
-        .map((e) => ({ t: Date.parse(e.timeIso || ""), e }))
-        .filter((x) => Number.isFinite(x.t) && x.t >= tMin - 5_000 && x.t <= tMax + 5_000)
-        .sort((a, b) => a.t - b.t);
-      const vmin = Math.min(...pts.map((p) => p.v));
-      const vmax = Math.max(...pts.map((p) => p.v));
-      const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-      const cssW = advCanvas.clientWidth || advCanvas.parentElement?.clientWidth || 1100;
-      const cssH = 320;
-      advCanvas.width = Math.floor(cssW * dpr);
-      advCanvas.height = Math.floor(cssH * dpr);
-      advCanvas.style.width = `${cssW}px`;
-      advCanvas.style.height = `${cssH}px`;
-      const ctx = advCanvas.getContext("2d");
-      if (!ctx) return;
-      const light = document.documentElement.getAttribute("data-theme") === "light";
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, cssW, cssH);
-      ctx.fillStyle = light ? "#ffffff" : "#0b0f0d";
-      ctx.fillRect(0, 0, cssW, cssH);
-      const plotTop = 18;
-      const plotBottom = cssH - 46;
-      const plotLeft = 64;
-      const plotRight = cssW - 18;
-      const x = (tt) => plotLeft + ((tt - tMin) / (tMax - tMin)) * (plotRight - plotLeft);
-      const y = (vv) => {
-        if (!(vmax > vmin)) return (plotTop + plotBottom) / 2;
-        return plotBottom - ((vv - vmin) / (vmax - vmin)) * (plotBottom - plotTop);
-      };
-      // grid
-      ctx.strokeStyle = light ? "rgba(15, 23, 42, 0.12)" : "rgba(255,255,255,0.10)";
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= 4; i++) {
-        const yy = plotTop + (i / 4) * (plotBottom - plotTop);
-        ctx.beginPath();
-        ctx.moveTo(plotLeft, yy);
-        ctx.lineTo(plotRight, yy);
-        ctx.stroke();
-      }
-      // series
-      ctx.strokeStyle = light ? "rgba(5, 150, 105, 0.95)" : "rgba(16, 185, 129, 0.95)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      let started = false;
-      for (const p of pts) {
-        const xx = x(p.t);
-        const yy = y(p.v);
-        if (!started) {
-          ctx.moveTo(xx, yy);
-          started = true;
-        } else ctx.lineTo(xx, yy);
-      }
-      ctx.stroke();
-      // y labels
-      ctx.fillStyle = light ? "rgba(15, 23, 42, 0.62)" : "rgba(255,255,255,0.60)";
-      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial";
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      for (let i = 0; i <= 4; i++) {
-        const vv = vmax - (i / 4) * (vmax - vmin);
-        const yy = plotTop + (i / 4) * (plotBottom - plotTop);
-        ctx.fillText(vv.toFixed(2), plotLeft - 8, yy);
-      }
-      // x labels
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillStyle = light ? "rgba(15, 23, 42, 0.45)" : "rgba(255,255,255,0.45)";
-      const tA = new Date(tMin);
-      const tB = new Date(tMax);
-      ctx.fillText(tA.toLocaleString(), plotLeft, plotBottom + 6);
-      ctx.fillText(tB.toLocaleString(), plotRight, plotBottom + 6);
-      // events
-      for (const ev of evs) {
-        const xx = x(ev.t);
-        ctx.fillStyle = "rgba(244, 63, 94, 0.95)";
-        ctx.fillRect(Math.max(plotLeft, Math.min(plotRight, xx)) - 0.5, plotBottom + 2, 1, 10);
-        ctx.beginPath();
-        ctx.moveTo(Math.max(plotLeft, Math.min(plotRight, xx)), plotTop);
-        ctx.lineTo(Math.max(plotLeft, Math.min(plotRight, xx)), plotBottom);
-        ctx.strokeStyle = "rgba(244, 63, 94, 0.20)";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-      advStatus.hidden = false;
-      advStatus.textContent = `Overlaying ${evs.length} likely GPU-related events (filtered) across ${pts.length} GPU-Z samples.`;
-      advCanvasWrap.hidden = false;
-      advLegend.textContent = `Line: ${pick.log.name} · ${pick.col.name}. Markers: filtered Event Viewer rows (file: ${advEvtxName || "export"}).`;
-    }
-
-    async function parseAdvEvtxBuffer(name, buffer) {
-      if (!(buffer instanceof ArrayBuffer)) return;
-      advEvtxName = name || "event-log";
-      advEvtxLabel = "auto";
-      if (/\.xml$/i.test(name) || /<\?xml/i.test(new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(buffer).slice(0, 4096)))) {
-        const { text, label } = decodeBuffer(buffer, "gpu", "auto");
-        advEvtxLabel = label;
-        advEvtxEvents = parseWindowsEventXmlExport(text);
-        if (advEvtxMeta) {
-          advEvtxMeta.hidden = false;
-          advEvtxMeta.textContent = `${advEvtxName} · XML · ${advEvtxEvents.length.toLocaleString()} events parsed`;
-        }
-        return;
-      }
-      // binary
-      const ac = new AbortController();
-      const events =
-        buffer.byteLength > 1_200_000
-          ? await parseEvtxBinaryRecordsAsync(buffer, ac.signal, () => {})
-          : parseEvtxBinaryRecords(buffer);
-      advEvtxEvents = events;
-      if (advEvtxMeta) {
-        advEvtxMeta.hidden = false;
-        advEvtxMeta.textContent = `${advEvtxName} · EVTX · ${advEvtxEvents.length.toLocaleString()} records decoded`;
-      }
-    }
-
-    const syncGpuAdvancedBlock = () => {
-      const on = isAppAdvanced();
-      advBlock.hidden = !on;
-      if (!on) return;
-      buildGpuMetricOptions();
-      if (advControls) advControls.hidden = !logs.length;
-    };
-
-    const dataAdvancedObsGpu = new MutationObserver(() => {
-      syncGpuAdvancedBlock();
-      if (isAppAdvanced()) drawGpuEvtxTimeline();
-    });
-    dataAdvancedObsGpu.observe(document.documentElement, { attributes: true, attributeFilter: ["data-advanced"] });
-    syncGpuAdvancedBlock();
-
-    async function loadAdvEvtxFile(/** @type {File} */ f) {
-      const buf = await f.arrayBuffer();
-      advEvtxBuf = buf;
-      if (advStatus) {
-        advStatus.hidden = false;
-        advStatus.textContent = "Parsing event log for timeline…";
-      }
-      await parseAdvEvtxBuffer(f.name, buf);
-      syncGpuAdvancedBlock();
-      if (isAppAdvanced()) drawGpuEvtxTimeline();
-    }
-
-    if (advEvtxDrop && advEvtxInput) {
-      const preventDefaults = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      };
-      ["dragenter", "dragover", "dragleave", "drop"].forEach((ev) => advEvtxDrop.addEventListener(ev, preventDefaults));
-      advEvtxDrop.addEventListener("dragenter", () => advEvtxDrop.classList.add("is-dragover"));
-      advEvtxDrop.addEventListener("dragleave", () => advEvtxDrop.classList.remove("is-dragover"));
-      advEvtxDrop.addEventListener("dragover", () => advEvtxDrop.classList.add("is-dragover"));
-      advEvtxDrop.addEventListener("drop", (e) => {
-        advEvtxDrop.classList.remove("is-dragover");
-        const f = e.dataTransfer?.files?.[0];
-        if (f) void loadAdvEvtxFile(f);
-      });
-      advEvtxDrop.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          advEvtxInput.click();
-        }
-      });
-    }
-
-    if (advEvtxInput) {
-      advEvtxInput.addEventListener("change", () => {
-        const f = advEvtxInput.files?.[0];
-        if (f) void loadAdvEvtxFile(f);
-        advEvtxInput.value = "";
-      });
-    }
-    advBuild?.addEventListener("click", () => drawGpuEvtxTimeline());
-    advMetricSel?.addEventListener("change", () => drawGpuEvtxTimeline());
-
-    refreshGpuAdvancedHooks = () => {
-      syncGpuAdvancedBlock();
-      if (isAppAdvanced()) drawGpuEvtxTimeline();
-    };
-
-    window.addEventListener("resize", () => {
-      try {
-        if (isAppAdvanced()) drawGpuEvtxTimeline();
-      } catch {
-        /* */
-      }
-    });
-    panel.addEventListener("gpuresize", () => {
-      try {
-        if (isAppAdvanced()) drawGpuEvtxTimeline();
-      } catch {
-        /* */
-      }
-    });
-    const dataThemeObsGpu = new MutationObserver(() => {
-      try {
-        if (isAppAdvanced()) drawGpuEvtxTimeline();
-      } catch {
-        /* */
-      }
-    });
-    dataThemeObsGpu.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   }
 
   /** EVTX/XML: watched Event IDs for GPU / stability triage (education only). Omit generic ID 0 from matching (too noisy). */
@@ -17389,6 +17075,8 @@
 
     function clearAll() {
       evtxLoadAbort?.abort();
+      evtxHubSnapshot = null;
+      dispatchEvtxHubUpdated();
       if (loadJobEl) {
         loadJobEl.hidden = true;
         loadJobEl.classList.remove("panel-load-job--phase-read");
@@ -17474,6 +17162,13 @@
         rows.length > 0
           ? rows.join("")
           : `<tr><td colspan="6" class="evtx-empty-row">No matching rows in this decode. Drop the same <code>.evtx</code> you open in Event Viewer, or use <strong>Save All Events As… → XML</strong> for a text-perfect match.</td></tr>`;
+
+      try {
+        evtxHubSnapshot = { name, events: all, source };
+      } catch {
+        evtxHubSnapshot = null;
+      }
+      dispatchEvtxHubUpdated();
 
       if (toolbar) toolbar.hidden = false;
       if (body) body.hidden = false;
@@ -17652,38 +17347,426 @@
     btnClear?.addEventListener("click", () => clearAll());
   }
 
+  /**
+   * Advanced-only merged GPU timeline: GPU‑Z sensor samples + GPU‑related Event Viewer rows.
+   * @param {HTMLElement} panel
+   */
+  function setupGodsEyePanel(panel) {
+    const statusEl = panel.querySelector("[data-godeye-status]");
+    const wrapEl = panel.querySelector("[data-godeye-canvas-wrap]");
+    const canvas = panel.querySelector("[data-godeye-canvas]");
+    const legendEl = panel.querySelector("[data-godeye-legend]");
+    const SERIES_COLORS = ["#76b900", "#22c55e", "#38bdf8", "#f97316", "#a855f7", "#eab308"];
+
+    let raf = 0;
+
+    function schedule() {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        render();
+      });
+    }
+
+    function setStatus(html) {
+      if (statusEl) statusEl.innerHTML = html;
+    }
+
+    function isLightTheme() {
+      return (document.documentElement.getAttribute("data-theme") || "dark") === "light";
+    }
+
+    function isGpuRelevantEvtxEvent(e) {
+      const id = e?.eventId;
+      if (id == null) return false;
+      if (EVTX_WATCHED_IDS.has(id)) return true;
+      const prov = String(e?.provider || "");
+      const msg = String(e?.message || "");
+      const hay = `${prov} ${msg}`.toLowerCase();
+      if (/\b(nvlddmkm|amdkmdag|dxgkrnl|tdr|display driver|livekernelevent|xid)\b/i.test(hay)) return true;
+      return false;
+    }
+
+    function metricPickScore(name) {
+      const n = normalizeHeader(name);
+      let s = 0;
+      if (/gpu|graphics|nvidia|amd|geforce|radeon/i.test(n)) s += 6;
+      if (/temp|°c|celsius/i.test(n)) s += 5;
+      if (/hotspot/i.test(n)) s += 4;
+      if (/power|watt|w\b/i.test(n)) s += 4;
+      if (/clock|freq|mhz|ghz/i.test(n)) s += 3;
+      if (/load|util|usage|busy/i.test(n)) s += 3;
+      if (/fan|rpm/i.test(n)) s += 2;
+      if (/volt|vcore/i.test(n)) s += 2;
+      if (/pcie|bus/i.test(n)) s += 2;
+      if (/mem|vram/i.test(n)) s += 2;
+      return s;
+    }
+
+    /** @param {ReturnType<typeof parseSensorCsv> | null} parsed @param {number} max */
+    function pickMetrics(parsed, max) {
+      if (!parsed) return [];
+      const cols = Array.isArray(parsed.numericCols) ? parsed.numericCols.slice() : [];
+      cols.sort((a, b) => metricPickScore(b.name) - metricPickScore(a.name) || a.index - b.index);
+      const out = [];
+      for (const c of cols) {
+        if (!c || c.index === 0) continue;
+        out.push(c);
+        if (out.length >= max) break;
+      }
+      return out;
+    }
+
+    function gpuTimeBoundsFromParsed(parsed) {
+      if (!parsed) return { min: null, max: null };
+      const tr = parsed.timeRange;
+      if (tr && tr.startMs != null && tr.endMs != null && Number.isFinite(tr.startMs) && Number.isFinite(tr.endMs)) {
+        return { min: tr.startMs, max: tr.endMs };
+      }
+      let min = Infinity;
+      let max = -Infinity;
+      for (const col of parsed.numericCols || []) {
+        for (const p of col.pts || []) {
+          const t = p.t;
+          if (t == null || !Number.isFinite(t)) continue;
+          if (t < min) min = t;
+          if (t > max) max = t;
+        }
+      }
+      if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: null, max: null };
+      return { min, max };
+    }
+
+    function resizeCanvasToCssPixels() {
+      if (!(canvas instanceof HTMLCanvasElement) || !wrapEl) return;
+      const rect = wrapEl.getBoundingClientRect();
+      const cssW = Math.max(320, Math.floor(rect.width || 1200));
+      const cssH = 520;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      const ctx = canvas.getContext("2d");
+      if (ctx) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    function draw() {
+      if (!(canvas instanceof HTMLCanvasElement)) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      const light = isLightTheme();
+      const bg = light ? "#ffffff" : "rgba(10, 14, 12, 0.92)";
+      const fg = light ? "#0f172a" : "rgba(230, 245, 235, 0.92)";
+      const muted = light ? "#64748b" : "rgba(170, 200, 180, 0.55)";
+      const grid = light ? "rgba(15, 23, 42, 0.08)" : "rgba(118, 185, 0, 0.12)";
+      const eventColor = light ? "#c026d3" : "rgba(76, 222, 128, 0.95)";
+
+      const cssW = canvas.clientWidth || 1200;
+      const cssH = canvas.clientHeight || 520;
+      ctx.clearRect(0, 0, cssW, cssH);
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, cssW, cssH);
+
+      const gpu = gpuHubSnapshot;
+      const ev = evtxHubSnapshot;
+      if (!isAdvancedModeOn()) {
+        setStatus(
+          "Turn on <strong>Advanced</strong> to enable GPU God&rsquo;s Eye. This merged timeline is intentionally hidden in the standard workflow."
+        );
+        if (wrapEl) wrapEl.hidden = true;
+        if (legendEl) legendEl.hidden = true;
+        return;
+      }
+
+      if (!gpu || !gpu.logs?.length || !gpu.logs.some((l) => l.parsed)) {
+        setStatus("Load <strong>GPU‑Z</strong> sensor logs on the GPU‑Z tab first. This view needs parsed timestamps from column 0.");
+        if (wrapEl) wrapEl.hidden = true;
+        if (legendEl) legendEl.hidden = true;
+        return;
+      }
+      if (!ev || !Array.isArray(ev.events) || !ev.events.length) {
+        setStatus("Load an <strong>Event Viewer</strong> export on the Event Viewer tab first (<code>.evtx</code> or XML).");
+        if (wrapEl) wrapEl.hidden = true;
+        if (legendEl) legendEl.hidden = true;
+        return;
+      }
+
+      /** @type {number[]} */
+      const evTimes = [];
+      for (const e of ev.events) {
+        const t = Date.parse(e.timeIso || "");
+        if (Number.isFinite(t)) evTimes.push(t);
+      }
+      if (!evTimes.length) {
+        setStatus("Event Viewer rows did not include parseable timestamps (<code>SystemTime</code>). Try an XML export for richer time fields.");
+        if (wrapEl) wrapEl.hidden = true;
+        if (legendEl) legendEl.hidden = true;
+        return;
+      }
+      evTimes.sort((a, b) => a - b);
+      const evMin = evTimes[0];
+      const evMax = evTimes[evTimes.length - 1];
+
+      /** @type {{ min: number, max: number }[]} */
+      const gpuBounds = [];
+      for (const l of gpu.logs) {
+        const b = gpuTimeBoundsFromParsed(l.parsed);
+        if (b.min != null && b.max != null) gpuBounds.push({ min: b.min, max: b.max });
+      }
+      if (!gpuBounds.length) {
+        setStatus("GPU‑Z logs are present, but timestamps could not be parsed from column 0. Re-export a sensor log that includes a time column.");
+        if (wrapEl) wrapEl.hidden = true;
+        if (legendEl) legendEl.hidden = true;
+        return;
+      }
+      const gpuMin = Math.min(...gpuBounds.map((b) => b.min));
+      const gpuMax = Math.max(...gpuBounds.map((b) => b.max));
+
+      let t0 = Math.max(gpuMin, evMin);
+      let t1 = Math.min(gpuMax, evMax);
+      if (!(t1 > t0)) {
+        // No overlap: still visualize the union window (less “merged”, but still useful offline).
+        t0 = Math.min(gpuMin, evMin);
+        t1 = Math.max(gpuMax, evMax);
+        setStatus(
+          `<strong>Note:</strong> GPU‑Z time range and Event Viewer timestamps do not overlap as parsed. Showing the combined window anyway (check timezone / wrong file / partial capture).`
+        );
+      } else {
+        const g0 = new Date(gpuMin).toLocaleString();
+        const g1 = new Date(gpuMax).toLocaleString();
+        const e0 = new Date(evMin).toLocaleString();
+        const e1 = new Date(evMax).toLocaleString();
+        setStatus(`<strong>Merged window</strong> · GPU‑Z: <code>${g0}</code> → <code>${g1}</code> · Events: <code>${e0}</code> → <code>${e1}</code>`);
+      }
+
+      const span = Math.max(60_000, t1 - t0);
+      const pad = span * 0.02;
+      t0 -= pad;
+      t1 += pad;
+
+      const padL = 56;
+      const padR = 18;
+      const padT = 18;
+      const padB = 70;
+      const plotW = Math.max(40, cssW - padL - padR);
+      const plotH = Math.max(40, cssH - padT - padB);
+
+      const xOf = (/** @type {number} */ ms) => padL + ((ms - t0) / (t1 - t0)) * plotW;
+
+      // Grid
+      ctx.strokeStyle = grid;
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 6; i++) {
+        const x = padL + (plotW * i) / 6;
+        ctx.beginPath();
+        ctx.moveTo(x, padT);
+        ctx.lineTo(x, padT + plotH);
+        ctx.stroke();
+      }
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + (plotH * i) / 4;
+        ctx.beginPath();
+        ctx.moveTo(padL, y);
+        ctx.lineTo(padL + plotW, y);
+        ctx.stroke();
+      }
+
+      // X labels (3 ticks)
+      ctx.fillStyle = muted;
+      ctx.font = "12px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
+      for (let i = 0; i < 3; i++) {
+        const ms = t0 + ((t1 - t0) * i) / 2;
+        const label = (() => {
+          try {
+            return new Date(ms).toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+          } catch {
+            return String(ms);
+          }
+        })();
+        const x = xOf(ms);
+        ctx.fillText(label, Math.min(padL + plotW - 120, Math.max(padL, x - 55)), padT + plotH + 26);
+      }
+
+      /** @type {{ label: string, color: string, minY: number, maxY: number, pts: { x: number, y: number }[] }[]} */
+      const series = [];
+      let si = 0;
+      for (const log of gpu.logs) {
+        const parsed = log.parsed;
+        if (!parsed) continue;
+        const picks = pickMetrics(parsed, 2);
+        for (const col of picks) {
+          const ptsRaw = (col.pts || [])
+            .map((p) => ({ t: p.t, v: p.v }))
+            .filter((p) => p.t != null && Number.isFinite(p.t) && Number.isFinite(p.v) && p.t >= t0 && p.t <= t1);
+          if (ptsRaw.length < 2) continue;
+          let minY = Infinity;
+          let maxY = -Infinity;
+          for (const p of ptsRaw) {
+            if (p.v < minY) minY = p.v;
+            if (p.v > maxY) maxY = p.v;
+          }
+          if (!Number.isFinite(minY) || !Number.isFinite(maxY) || minY === maxY) {
+            minY -= 1;
+            maxY += 1;
+          }
+          const pts = ptsRaw.map((p) => {
+            const x = xOf(p.t);
+            const yn = (p.v - minY) / (maxY - minY);
+            const y = padT + plotH - yn * plotH;
+            return { x, y };
+          });
+          const color = SERIES_COLORS[si % SERIES_COLORS.length];
+          si++;
+          series.push({
+            label: `${log.name}: ${col.name}`,
+            color,
+            minY,
+            maxY,
+            pts,
+          });
+        }
+      }
+
+      if (!series.length) {
+        setStatus("GPU‑Z data is loaded, but no numeric samples fell inside the merged time window. Try a longer capture or confirm the time column parses.");
+        if (wrapEl) wrapEl.hidden = true;
+        if (legendEl) legendEl.hidden = true;
+        return;
+      }
+
+      // Draw series
+      for (const s of series) {
+        ctx.strokeStyle = s.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < s.pts.length; i++) {
+          const p = s.pts[i];
+          if (!p) continue;
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        }
+        ctx.stroke();
+      }
+
+      // Events
+      const evPts = [];
+      for (const e of ev.events) {
+        if (!isGpuRelevantEvtxEvent(e)) continue;
+        const ms = Date.parse(e.timeIso || "");
+        if (!Number.isFinite(ms) || ms < t0 || ms > t1) continue;
+        evPts.push({ ms, e });
+      }
+      evPts.sort((a, b) => a.ms - b.ms);
+
+      ctx.strokeStyle = eventColor;
+      ctx.lineWidth = 1.25;
+      for (const p of evPts) {
+        const x = xOf(p.ms);
+        ctx.beginPath();
+        ctx.moveTo(x, padT);
+        ctx.lineTo(x, padT + plotH);
+        ctx.stroke();
+      }
+
+      // Title + counts
+      ctx.fillStyle = fg;
+      ctx.font = "600 13px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial";
+      ctx.fillText(`GPU God's Eye · ${evPts.length} GPU-related markers · ${series.length} sensor series`, padL, 16);
+
+      // Legend
+      if (legendEl) {
+        legendEl.hidden = false;
+        const chips = series
+          .map(
+            (s) =>
+              `<span class="godeye-legend__chip" style="--chip:${esc(s.color)}"><span class="godeye-legend__swatch" aria-hidden="true"></span>${esc(
+                s.label
+              )}</span>`
+          )
+          .join("");
+        const evChip = `<span class="godeye-legend__chip godeye-legend__chip--events" style="--chip:${esc(
+          eventColor
+        )}"><span class="godeye-legend__swatch" aria-hidden="true"></span>GPU-related Event Viewer markers</span>`;
+        legendEl.innerHTML = `${evChip}${chips}`;
+      }
+
+      if (wrapEl) wrapEl.hidden = false;
+    }
+
+    function render() {
+      if (!isAdvancedModeOn()) {
+        if (panel instanceof HTMLElement) panel.hidden = true;
+        if (wrapEl) wrapEl.hidden = true;
+        if (legendEl) legendEl.hidden = true;
+        setStatus(
+          "Turn on <strong>Advanced</strong> to enable GPU God&rsquo;s Eye. This merged timeline is intentionally hidden in the standard workflow."
+        );
+        return;
+      }
+      if (panel instanceof HTMLElement) panel.hidden = false;
+
+      resizeCanvasToCssPixels();
+      draw();
+    }
+
+    window.addEventListener("rv-gpu-hub", schedule);
+    window.addEventListener("rv-evtx-hub", schedule);
+    window.addEventListener("resize", schedule);
+    panel.addEventListener("godeyeresize", schedule);
+
+    const mo = new MutationObserver(() => schedule());
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-advanced"] });
+
+    schedule();
+  }
+
   /** Tabs use URL hash + CSS :target (links in HTML). This syncs legacy hashes, ARIA, and GPU chart resize. */
   function setupWorkspaceTabs() {
     const root = document.getElementById("workspace");
     if (!root) return;
-    const TAB_HREFS = [
+    const TAB_BASE = [
       "#tool-panel-system",
       "#tool-panel-bsod",
       "#tool-panel-gpu",
       "#tool-panel-evtx",
       "#tool-panel-dxdiag",
     ];
+    const GODS_EYE_HASH = "#tool-panel-gods-eye";
     const LEGACY = {
       "#system": "#tool-panel-system",
       "#bsod": "#tool-panel-bsod",
       "#gpu": "#tool-panel-gpu",
       "#evtx": "#tool-panel-evtx",
       "#dxdiag": "#tool-panel-dxdiag",
+      "#godeye": GODS_EYE_HASH,
+      "#godseye": GODS_EYE_HASH,
     };
+
+    function allowedWorkspaceHashes() {
+      const list = TAB_BASE.slice();
+      if (document.documentElement.getAttribute("data-advanced") === "on") list.push(GODS_EYE_HASH);
+      return list;
+    }
 
     /** @returns {string} */
     function canonicalPanelHash() {
       const raw = (location.hash || "").split("?")[0].toLowerCase();
       if (!raw) return "#tool-panel-system";
       const mapped = LEGACY[raw] || raw;
-      return TAB_HREFS.includes(mapped) ? mapped : "#tool-panel-system";
+      if (mapped === GODS_EYE_HASH && document.documentElement.getAttribute("data-advanced") !== "on") {
+        return "#tool-panel-system";
+      }
+      return allowedWorkspaceHashes().includes(mapped) ? mapped : "#tool-panel-system";
     }
 
     function replaceHashIfNeeded() {
       const raw = (location.hash || "").split("?")[0].toLowerCase();
       if (!raw) return;
       const mapped = LEGACY[raw] || raw;
-      if (LEGACY[raw] && TAB_HREFS.includes(mapped)) {
+      const allowed = allowedWorkspaceHashes();
+      if (LEGACY[raw] && allowed.includes(mapped)) {
         try {
           history.replaceState(null, "", mapped);
         } catch {
@@ -17691,7 +17774,7 @@
         }
         return;
       }
-      if (TAB_HREFS.includes(mapped)) return;
+      if (allowed.includes(mapped)) return;
       try {
         history.replaceState(null, "", `${location.pathname}${location.search}`);
       } catch {
@@ -17715,9 +17798,13 @@
       if (canonicalPanelHash() === "#tool-panel-gpu") {
         document.querySelector(".panel--gpu")?.dispatchEvent(new CustomEvent("gpuresize", { bubbles: false }));
       }
+      if (canonicalPanelHash() === GODS_EYE_HASH) {
+        document.querySelector(".panel--godeye")?.dispatchEvent(new CustomEvent("godeyeresize", { bubbles: false }));
+      }
     }
 
     window.addEventListener("hashchange", onWorkspaceHash);
+    window.addEventListener("rv-workspace-sync", onWorkspaceHash);
 
     /** Default fragment navigation scrolls the active panel into view — undo so tabs feel in-place. */
     function preserveScrollForTabClicks() {
@@ -17742,7 +17829,7 @@
     }
     preserveScrollForTabClicks();
 
-    /** <kbd>Shift</kbd>+1 … 5 — switch tools (uses <code>code</code> so symbol layouts still map to digits; skipped in fields and while About dialog is open). */
+    /** <kbd>Shift</kbd>+1 … 6 — switch tools (uses <code>code</code> so symbol layouts still map to digits; skipped in fields and while About dialog is open). */
     document.addEventListener("keydown", (e) => {
       if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
       const digit =
@@ -17756,14 +17843,17 @@
                 ? 4
                 : e.code === "Digit5"
                   ? 5
-                  : 0;
+                  : e.code === "Digit6"
+                    ? 6
+                    : 0;
       if (!digit) return;
       const t = /** @type {HTMLElement | null} */ (e.target);
       if (t?.closest("input, textarea, select, [contenteditable=true]")) return;
       const aboutDlg = document.getElementById("about-dialog");
       if (aboutDlg instanceof HTMLDialogElement && aboutDlg.open) return;
+      const tabs = [...root.querySelectorAll("a.tool-tab[href]:not([hidden])")];
+      if (digit > tabs.length) return;
       e.preventDefault();
-      const tabs = [...root.querySelectorAll("a.tool-tab[href]")];
       const tab = tabs[digit - 1];
       if (tab instanceof HTMLAnchorElement) tab.click();
     });
@@ -17771,7 +17861,7 @@
     root.addEventListener("keydown", (e) => {
       const el = /** @type {HTMLElement | null} */ (e.target);
       if (!el || !el.classList.contains("tool-tab")) return;
-      const tabs = [...root.querySelectorAll("a.tool-tab[href]")];
+      const tabs = [...root.querySelectorAll("a.tool-tab[href]:not([hidden])")];
       const i = tabs.indexOf(el);
       if (i < 0) return;
       if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
@@ -18917,6 +19007,31 @@
         toggle.textContent = on ? "Advanced · on" : "Advanced";
       }
       if (inline) inline.hidden = !on;
+      const godsTab = document.getElementById("tab-gods-eye");
+      if (godsTab instanceof HTMLElement) {
+        if (on) {
+          godsTab.removeAttribute("hidden");
+          godsTab.setAttribute("aria-hidden", "false");
+        } else {
+          godsTab.setAttribute("hidden", "");
+          godsTab.setAttribute("aria-hidden", "true");
+          const h = (location.hash || "").split("?")[0].toLowerCase();
+          if (h === "#tool-panel-gods-eye") {
+            try {
+              history.replaceState(null, "", "#tool-panel-system");
+            } catch {
+              /* */
+            }
+          }
+        }
+      }
+      queueMicrotask(() => {
+        try {
+          window.dispatchEvent(new Event("rv-workspace-sync"));
+        } catch {
+          /* */
+        }
+      });
     }
 
     toggle?.addEventListener("click", () => {
@@ -18947,6 +19062,7 @@
       { label: "Go: GPU-Z logs", run: () => { location.hash = "#tool-panel-gpu"; } },
       { label: "Go: Event Viewer", run: () => { location.hash = "#tool-panel-evtx"; } },
       { label: "Go: DxDiag", run: () => { location.hash = "#tool-panel-dxdiag"; } },
+      { label: "Go: GPU God's Eye (merged timeline)", run: () => { location.hash = "#tool-panel-gods-eye"; } },
       {
         label: "Toggle light / dark theme",
         run: () => {
@@ -19060,6 +19176,13 @@
       setupDxDiagPanel(p);
     } catch (err) {
       console.error("DxDiag panel init failed:", err);
+    }
+  });
+  document.querySelectorAll(".panel--godeye").forEach((p) => {
+    try {
+      setupGodsEyePanel(p);
+    } catch (err) {
+      console.error("GPU God's Eye panel init failed:", err);
     }
   });
   setupWorkspaceTabs();

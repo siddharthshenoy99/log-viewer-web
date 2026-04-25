@@ -31,7 +31,7 @@
       database, or remote API. Analysis runs in the browser from local files only.
       Required: index.html, styles.css, app.js, nvidia-logo.png (same folder), vendor/jspdf.umd.min.js, vendor/html2canvas.min.js (offline PDF). Optional: favicon.svg (tab icon).
       Optional: Open-Report-Viewer.bat, serve.ps1, PORTABLE-HANDOFF.txt (handoff notes).
-      app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu | #tool-panel-evtx | #tool-panel-dxdiag.
+      app.js is a plain script (not ES modules) so file:// works; tabs: #tool-panel-system | #tool-panel-bsod | #tool-panel-gpu | #tool-panel-evtx | #tool-panel-dxdiag | #tool-panel-gods-eye (Advanced only).
       Network: nothing is fetched for parsing; https:// and ms-settings: links run only when the user clicks them (docs, vendor sites, Windows Settings).
     -->
     <title>NVIDIA Report Viewer</title>
@@ -177,6 +177,12 @@
       <script>
         (function () {
           try {
+            var adv = false;
+            try {
+              adv = localStorage.getItem("log-viewer-advanced") === "1";
+            } catch (e0) {
+              adv = false;
+            }
             var h = (location.hash || "").toLowerCase();
             var map = {
               "#system": "#tool-panel-system",
@@ -184,9 +190,13 @@
               "#gpu": "#tool-panel-gpu",
               "#evtx": "#tool-panel-evtx",
               "#dxdiag": "#tool-panel-dxdiag",
+              "#godeye": "#tool-panel-gods-eye",
+              "#godseye": "#tool-panel-gods-eye",
             };
             if (map[h]) history.replaceState(null, "", map[h]);
-            else if (h && !/^#tool-panel-(system|bsod|gpu|evtx|dxdiag)$/.test(h))
+            h = (location.hash || "").split("?")[0].toLowerCase();
+            if (h === "#tool-panel-gods-eye" && !adv) history.replaceState(null, "", "#tool-panel-system");
+            else if (h && !/^#tool-panel-(system|bsod|gpu|evtx|dxdiag|gods-eye)$/.test(h))
               history.replaceState(null, "", location.pathname + location.search);
           } catch (e) {}
         })();
@@ -261,6 +271,21 @@
           <span class="tool-tab__title">DxDiag</span>
           <span class="tool-tab__desc">GPU / display / audio · text export</span>
           <span class="tool-tab__shortcut" aria-hidden="true">Shift+5</span>
+        </a>
+        <a
+          class="tool-tab tool-tab--godeye tool-tab--advanced-only"
+          id="tab-gods-eye"
+          role="tab"
+          href="#tool-panel-gods-eye"
+          aria-controls="tool-panel-gods-eye"
+          aria-selected="false"
+          tabindex="-1"
+          hidden
+          title="Advanced only · Shortcut: Shift+6 (outside text fields)"
+        >
+          <span class="tool-tab__title">GPU God&rsquo;s Eye</span>
+          <span class="tool-tab__desc">GPU‑Z + Event Viewer timeline · offline</span>
+          <span class="tool-tab__shortcut" aria-hidden="true">Shift+6</span>
         </a>
       </nav>
 
@@ -1086,6 +1111,57 @@
           </details>
         </div>
       </section>
+
+      <section
+        class="panel panel--godeye tool-panel"
+        id="tool-panel-gods-eye"
+        role="tabpanel"
+        aria-labelledby="tab-gods-eye"
+        data-panel="godeye"
+        hidden
+      >
+        <div class="panel__head">
+          <div class="panel__head-inner">
+            <div class="panel__icon-wrap" aria-hidden="true">
+              <svg class="panel-icon panel-icon--godeye" viewBox="0 0 40 40" focusable="false">
+                <path
+                  d="M20 9c-6 0-11 5-11 11 0 6 5 11 11 11s11-5 11-11c0-6-5-11-11-11z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linejoin="round"
+                />
+                <circle cx="20" cy="20" r="4" fill="currentColor" opacity="0.9" />
+                <path
+                  d="M8 31c2-3 6-5 12-5s10 2 12 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  opacity="0.85"
+                />
+              </svg>
+            </div>
+            <div class="panel__head-text">
+              <h2>GPU God&rsquo;s Eye</h2>
+              <p class="panel__hint">
+                Advanced-only merged view: align <strong>GPU‑Z sensor samples</strong> with <strong>GPU‑related Event Viewer</strong> rows on a shared
+                timeline. Everything stays offline in this tab.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="godeye-body">
+          <p class="godeye-status insight-disclaimer" data-godeye-status role="status" aria-live="polite">
+            Turn on <strong>Advanced</strong>, then load GPU‑Z logs and an Event Viewer export in their tabs. This view refreshes automatically when new data is parsed.
+          </p>
+          <div class="godeye-canvas-wrap" data-godeye-canvas-wrap hidden>
+            <canvas class="godeye-canvas" data-godeye-canvas width="1200" height="520" aria-label="GPU God’s Eye merged timeline"></canvas>
+            <div class="godeye-legend" data-godeye-legend hidden></div>
+          </div>
+        </div>
+      </section>
       </div>
     </main>
 
@@ -1147,7 +1223,12 @@
               <li>
                 <strong>Tabs:</strong> <kbd>Shift</kbd>+<kbd>1</kbd> System Information, <kbd>Shift</kbd>+<kbd>2</kbd> BSOD
                 &amp; WinDbg, <kbd>Shift</kbd>+<kbd>3</kbd> GPU-Z logs, <kbd>Shift</kbd>+<kbd>4</kbd> Event Viewer (local
-                <code>.evtx</code>), <kbd>Shift</kbd>+<kbd>5</kbd> DxDiag text (physical row keys; skipped in a text field
+                <code>.evtx</code>), <kbd>Shift</kbd>+<kbd>5</kbd> DxDiag text,
+                <span class="about-dialog__kbd-godeye"
+                  ><kbd>Shift</kbd>+<kbd>6</kbd> GPU God&rsquo;s Eye (Advanced only; merged GPU‑Z + Event Viewer
+                  timeline)</span
+                >
+                (physical row keys; skipped in a text field
                 and while this About dialog is open). With focus on a tab, <kbd>Home</kbd> / <kbd>End</kbd> / arrow keys
                 still move between tools.
               </li>
@@ -1384,6 +1465,6 @@
     <script src="vendor/jspdf.umd.min.js" charset="utf-8"></script>
     <script src="vendor/html2canvas.min.js" charset="utf-8"></script>
     <!-- Plain script (not ES modules) so file:// works with no local server -->
-    <script src="app.js?v=adv46" charset="utf-8"></script>
+    <script src="app.js?v=adv47" charset="utf-8"></script>
   </body>
 </html>

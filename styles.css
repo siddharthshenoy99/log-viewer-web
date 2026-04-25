@@ -16,6 +16,8 @@
   --evtx-accent: var(--nv-green);
   /* DxDiag: match black + green in dark mode (see light overrides in panel--dxdiag block). */
   --dxdiag-accent: var(--nv-green);
+  /* GPU God's Eye: dark = NVIDIA green; light theme uses indigo (see html[data-theme="light"]). */
+  --godeye-accent: var(--nv-green);
   --radius: 12px;
   /* Use wide viewports; cap so line length stays readable on ultrawide */
   --layout-max: min(96vw, 1560px);
@@ -492,6 +494,22 @@ code {
   color: rgba(165, 200, 150, 0.52);
 }
 
+.workspace:has(#tool-panel-gods-eye:target) .tool-tab--godeye {
+  opacity: 1;
+  color: #eef6e8;
+  background: rgba(0, 0, 0, 0.38);
+  border-color: rgba(118, 185, 0, 0.45);
+  box-shadow: 0 0 18px rgba(118, 185, 0, 0.12);
+}
+
+.workspace:has(#tool-panel-gods-eye:target) .tool-tab--godeye .tool-tab__desc {
+  color: rgba(190, 210, 175, 0.92);
+}
+
+.workspace:has(#tool-panel-gods-eye:target) .tool-tab--godeye .tool-tab__shortcut {
+  color: rgba(165, 200, 150, 0.52);
+}
+
 .tool-tab-panels {
   border: 1px solid var(--border);
   border-radius: 0 0 var(--radius) var(--radius);
@@ -515,6 +533,11 @@ code {
 .workspace .tool-tab-panels:not(:has(> .tool-panel:target)) > .tool-panel.panel--system {
   display: flex !important;
   flex-direction: column;
+}
+
+/* Advanced off: JS sets [hidden] on God's Eye; beat :target display so the panel cannot flash. */
+.workspace .tool-tab-panels > .tool-panel.panel--godeye[hidden] {
+  display: none !important;
 }
 
 .workspace .tool-panel.panel {
@@ -1201,6 +1224,13 @@ details.sys-section:not([open]) .sys-section__chevron {
     0 0 32px rgba(118, 185, 0, 0.08);
 }
 
+.panel--godeye {
+  border-color: rgba(118, 185, 0, 0.4);
+  box-shadow:
+    0 0 0 1px var(--nv-green-soft) inset,
+    0 0 32px rgba(118, 185, 0, 0.08);
+}
+
 .panel--bsod {
   border-color: rgba(143, 214, 48, 0.35);
   box-shadow:
@@ -1212,7 +1242,8 @@ details.sys-section:not([open]) .sys-section__chevron {
 .workspace .tool-panel.panel--bsod,
 .workspace .tool-panel.panel--gpu,
 .workspace .tool-panel.panel--evtx,
-.workspace .tool-panel.panel--dxdiag {
+.workspace .tool-panel.panel--dxdiag,
+.workspace .tool-panel.panel--godeye {
   box-shadow: none;
 }
 
@@ -1275,6 +1306,12 @@ details.sys-section:not([open]) .sys-section__chevron {
   box-shadow: 0 0 22px rgba(118, 185, 0, 0.14);
 }
 
+.panel--godeye .panel__icon-wrap {
+  color: var(--godeye-accent);
+  border-color: rgba(118, 185, 0, 0.42);
+  box-shadow: 0 0 22px rgba(118, 185, 0, 0.14);
+}
+
 .panel--bsod .panel__icon-wrap {
   color: var(--system-accent);
   border-color: rgba(143, 214, 48, 0.38);
@@ -1313,6 +1350,64 @@ details.sys-section:not([open]) .sys-section__chevron {
 
 .panel--dxdiag .panel__head h2 {
   color: var(--dxdiag-accent);
+}
+
+.panel--godeye .panel__head h2 {
+  color: var(--godeye-accent);
+}
+
+.godeye-body {
+  margin: 0 var(--panel-pad-x) 1rem;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.godeye-canvas-wrap {
+  position: relative;
+  border-radius: var(--radius);
+  border: 1px solid rgba(118, 185, 0, 0.22);
+  background: rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  flex: 1;
+  min-height: 280px;
+}
+
+.godeye-canvas {
+  display: block;
+  width: 100%;
+}
+
+.godeye-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.4rem 0.65rem;
+  padding: 0.55rem 0.65rem;
+  background: rgba(0, 0, 0, 0.28);
+  border-top: 1px solid rgba(118, 185, 0, 0.16);
+  font-size: 0.72rem;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.godeye-legend__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.godeye-legend__swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+  background: var(--chip, var(--nv-green));
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25) inset;
 }
 
 /* Inline callout in panel hint: same green / weight / tracking as BSOD panel h2, font size from .panel__hint. */
@@ -1906,6 +2001,63 @@ html[data-theme="light"] .panel--dxdiag .dxdiag-toolbar {
 
 html[data-theme="light"] .panel--dxdiag .dxdiag-toolbar .file-meta {
   color: #64748b;
+}
+
+/* GPU God's Eye light: indigo / slate head (distinct from DxDiag rust + EVTX cyan). */
+html[data-theme="light"] .panel--godeye {
+  border-color: #e5e7eb;
+  background: #ffffff;
+}
+
+html[data-theme="light"] .panel--godeye .panel__head {
+  padding: 1rem var(--panel-pad-x) 1.05rem;
+  border-bottom: 1px solid #1e1b4b;
+  background: linear-gradient(180deg, #312e81 0%, #1e1b4b 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+html[data-theme="light"] .panel--godeye .panel__head h2 {
+  color: #c7d2fe;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .panel--godeye .panel__hint {
+  color: #cbd5e1;
+  opacity: 1;
+}
+
+html[data-theme="light"] .panel--godeye .panel__hint strong {
+  color: #f8fafc;
+}
+
+html[data-theme="light"] .panel--godeye .panel__hint code {
+  background: rgba(49, 46, 129, 0.45);
+  border: 1px solid rgba(165, 180, 252, 0.35);
+  color: #e0e7ff;
+  box-shadow: none;
+}
+
+html[data-theme="light"] .panel--godeye .panel__icon-wrap {
+  color: #eef2ff;
+  background: linear-gradient(145deg, #4f46e5 0%, #312e81 100%);
+  border: 1px solid rgba(165, 180, 252, 0.45);
+  box-shadow: 0 2px 10px rgba(30, 27, 75, 0.45);
+}
+
+html[data-theme="light"] .panel--godeye .panel-icon--godeye {
+  color: #ffffff;
+}
+
+html[data-theme="light"] .panel--godeye .godeye-canvas-wrap {
+  border-color: #c7d2fe;
+  background: linear-gradient(180deg, #eef2ff 0%, #ffffff 55%);
+}
+
+html[data-theme="light"] .panel--godeye .godeye-legend {
+  background: #e0e7ff;
+  border-top-color: #c7d2fe;
+  color: #3730a3;
 }
 
 html[data-theme="light"] .dxdiag-raw {
@@ -7296,6 +7448,8 @@ html[data-theme="light"] {
   --evtx-accent: #0891b2;
   /* Light DxDiag panel keeps warm accents; use this where card headings share tokens. */
   --dxdiag-accent: #9a3412;
+  /* God's Eye: indigo (distinct from System violet, EVTX cyan, DxDiag rust). */
+  --godeye-accent: #4338ca;
   --lm-violet-deep: #4c1d95;
   --lm-violet: #5b21b6;
   --lm-violet-mid: #6d28d9;
@@ -7362,6 +7516,11 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .advanced-toggle {
 html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .advanced-toggle {
   border-color: rgba(234, 88, 12, 0.45);
   color: #9a3412;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .advanced-toggle {
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #4338ca;
 }
 
 html[data-theme="light"] .advanced-inline {
@@ -7449,6 +7608,15 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .advanced-inline__d
   color: #9a3412;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .advanced-inline {
+  border-color: #c7d2fe;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .advanced-inline__h,
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .advanced-inline__dl dt {
+  color: #4338ca;
+}
+
 html[data-theme="light"] .advanced-inline__ta,
 html[data-theme="light"] .advanced-inline__input {
   background: #ffffff;
@@ -7521,6 +7689,17 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-header::after
   );
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-header::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(67, 56, 202, 0.22) 22%,
+    rgba(79, 70, 229, 0.34) 50%,
+    rgba(67, 56, 202, 0.22) 78%,
+    transparent 100%
+  );
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .logo-wrap {
   background: linear-gradient(155deg, #ffffff 0%, #faf5ff 100%);
   border-color: rgba(226, 232, 240, 0.95);
@@ -7576,6 +7755,17 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .logo-wrap:hover {
   box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .logo-wrap {
+  background: linear-gradient(155deg, #ffffff 0%, #eef2ff 100%);
+  border-color: #c7d2fe;
+  box-shadow: var(--lm-shadow-md), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .logo-wrap:hover {
+  border-color: #a5b4fc;
+  box-shadow: var(--lm-shadow-lg), 0 0 0 1px rgba(255, 255, 255, 0.95) inset;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .brand-text h1 {
   filter: none;
   background: linear-gradient(108deg, #4c1d95 0%, #5b21b6 45%, #6d28d9 100%);
@@ -7616,6 +7806,14 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .brand-text h1 {
   color: transparent;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .brand-text h1 {
+  filter: none;
+  background: linear-gradient(108deg, #312e81 0%, #4338ca 42%, #6366f1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .hero-kicker {
   color: #6d28d9;
   text-shadow: none;
@@ -7646,6 +7844,12 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .hero-kicker {
   letter-spacing: 0.14em;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .hero-kicker {
+  color: #4338ca;
+  text-shadow: none;
+  letter-spacing: 0.14em;
+}
+
 html[data-theme="light"] .tagline {
   color: #64748b;
   text-shadow: none;
@@ -7671,6 +7875,10 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-header .tagli
   color: #c2410c;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-header .tagline-arrow__svg {
+  color: #4f46e5;
+}
+
 html[data-theme="light"] .lede {
   color: #475569;
   text-shadow: none;
@@ -7694,6 +7902,10 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .lede strong {
 
 html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .lede strong {
   color: #9a3412;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .lede strong {
+  color: #4338ca;
 }
 
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .site-header code {
@@ -7724,6 +7936,12 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-header code {
   color: #9a3412;
   background: #fff7ed;
   border-color: #fed7aa;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-header code {
+  color: #4338ca;
+  background: #eef2ff;
+  border-color: #c7d2fe;
 }
 
 html[data-theme="light"] .workspace-invite {
@@ -7759,6 +7977,11 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .workspace-invite {
   background: linear-gradient(180deg, #ffffff 0%, #fff7ed 100%);
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .workspace-invite {
+  border-color: #c7d2fe;
+  background: linear-gradient(180deg, #ffffff 0%, #eef2ff 100%);
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .workspace-invite strong {
   color: #5b21b6;
 }
@@ -7779,6 +8002,10 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .workspace-invite s
   color: #9a3412;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .workspace-invite strong {
+  color: #4338ca;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .workspace-invite .tagline-arrow__svg {
   color: #7c3aed;
 }
@@ -7797,6 +8024,10 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .workspace-invite .ta
 
 html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .workspace-invite .tagline-arrow__svg {
   color: #c2410c;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .workspace-invite .tagline-arrow__svg {
+  color: #4f46e5;
 }
 
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .privacy-badge {
@@ -7831,6 +8062,13 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .privacy-badge {
   color: #9a3412;
   border-color: rgba(253, 186, 116, 0.8);
   background: #fff7ed;
+  box-shadow: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .privacy-badge {
+  color: #4338ca;
+  border-color: rgba(165, 180, 252, 0.85);
+  background: #eef2ff;
   box-shadow: none;
 }
 
@@ -7976,6 +8214,28 @@ html[data-theme="light"] .workspace:has(#tool-panel-dxdiag:target) .tool-tab--dx
 
 html[data-theme="light"] .workspace:has(#tool-panel-dxdiag:target) .tool-tab--dxdiag .tool-tab__shortcut {
   color: #d97706;
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-gods-eye:target) .tool-tab--godeye {
+  position: relative;
+  z-index: 2;
+  color: #312e81;
+  background: #ffffff;
+  border-color: #e2e8f0;
+  border-bottom-color: #ffffff;
+  box-shadow: 0 -3px 0 #4338ca inset, var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-gods-eye:target) .tool-tab--godeye .tool-tab__title {
+  color: #3730a3;
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-gods-eye:target) .tool-tab--godeye .tool-tab__desc {
+  color: #64748b;
+}
+
+html[data-theme="light"] .workspace:has(#tool-panel-gods-eye:target) .tool-tab--godeye .tool-tab__shortcut {
+  color: #818cf8;
 }
 
 html[data-theme="light"] .tool-tab-panels {
@@ -8258,6 +8518,57 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .site-footer .tagli
   color: #c2410c;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__inner {
+  border-color: #c7d2fe;
+  background: #ffffff;
+  box-shadow: var(--lm-shadow-md);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__inner::before {
+  background: linear-gradient(180deg, #4f46e5 0%, #4338ca 48%, #312e81 100%);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__version {
+  color: #4338ca;
+  border-color: #c7d2fe;
+  background: linear-gradient(180deg, #eef2ff 0%, #e0e7ff 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__about,
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__export {
+  color: #334155;
+  border-color: #c7d2fe;
+  background: linear-gradient(180deg, #ffffff 0%, #eef2ff 100%);
+  box-shadow: var(--lm-shadow-sm);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__about:hover,
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__export:hover {
+  color: #312e81;
+  border-color: #a5b4fc;
+  background: linear-gradient(180deg, #eef2ff 0%, #e0e7ff 100%);
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__about:focus-visible,
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer__export:focus-visible {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 2px rgba(67, 56, 202, 0.28);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer code {
+  color: #4338ca;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .site-footer .tagline-arrow__svg {
+  color: #4f46e5;
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .scroll-to-top {
   background: #ffffff;
   border-color: #e9d5ff;
@@ -8293,6 +8604,13 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .scroll-to-top {
   box-shadow: var(--lm-shadow-sm);
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .scroll-to-top {
+  background: #ffffff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+  box-shadow: var(--lm-shadow-sm);
+}
+
 html[data-theme="light"] body:is(:not(:has(.tool-panel:target)), :has(#tool-panel-system:target)) .skip-link {
   background: #ffffff;
   border-color: #e9d5ff;
@@ -8323,6 +8641,12 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .skip-link {
   color: #9a3412;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .skip-link {
+  background: #ffffff;
+  border-color: #c7d2fe;
+  color: #4338ca;
+}
+
 html[data-theme="light"] .summary-card {
   border-color: #e2e8f0;
 }
@@ -8350,6 +8674,10 @@ html[data-theme="light"] body:has(#tool-panel-evtx:target) .about-dialog .taglin
 
 html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog .tagline-arrow__svg {
   color: #c2410c;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog .tagline-arrow__svg {
+  color: #4f46e5;
 }
 
 html[data-theme="light"] .about-dialog {
@@ -8418,6 +8746,21 @@ html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__head h2
   filter: none;
 }
 
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__head {
+  border-bottom-color: #c7d2fe;
+  background: linear-gradient(180deg, #eef2ff 0%, #ffffff 55%);
+  padding: 1.15rem 1.25rem 1rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__head h2 {
+  background: none;
+  -webkit-background-clip: border-box;
+  background-clip: border-box;
+  color: #3730a3;
+  font-weight: 700;
+  filter: none;
+}
+
 html[data-theme="light"] .about-dialog__version-line {
   color: #475569;
   font-weight: 500;
@@ -8433,6 +8776,10 @@ html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__versio
 
 html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__version {
   color: #059669;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__version {
+  color: #4338ca;
 }
 
 html[data-theme="light"] .about-dialog__close {
@@ -8454,6 +8801,10 @@ html[data-theme="light"] body:has(#tool-panel-bsod:target) .about-dialog__close:
 
 html[data-theme="light"] body:has(#tool-panel-gpu:target) .about-dialog__close:focus-visible {
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.38);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__close:focus-visible {
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.38);
 }
 
 html[data-theme="light"] .about-dialog__body {
@@ -8653,6 +9004,25 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__body
   box-shadow: 0 1px 0 #ffffff inset;
 }
 
+/* Keyboard docs: Shift+6 / GPU God's Eye — indigo callout after tab-scoped kbd rules (#about-dialog wins ties). */
+html[data-theme="light"] dialog#about-dialog .about-dialog__body .about-dialog__kbd-godeye {
+  color: #3730a3;
+  font-weight: 600;
+  padding: 0.12rem 0.35rem 0.14rem;
+  margin: 0 0.12rem;
+  border-radius: 8px;
+  background: rgba(67, 56, 202, 0.07);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+html[data-theme="light"] dialog#about-dialog .about-dialog__body .about-dialog__kbd-godeye kbd {
+  color: #312e81;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  box-shadow: 0 1px 0 #ffffff inset;
+}
+
 html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__foot {
   border-top-color: #fed7aa;
   background: linear-gradient(180deg, #fffdfb 0%, #ffffff 100%);
@@ -8663,6 +9033,39 @@ html[data-theme="light"] body:has(#tool-panel-dxdiag:target) .about-dialog__foot
   background: #fff7ed;
   border-color: #fdba74;
   color: #7c2d12;
+  box-shadow: var(--lm-shadow-md);
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__section h3 {
+  color: #4338ca;
+  font-size: 0.74rem;
+  letter-spacing: 0.07em;
+  margin-bottom: 0.5rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__body code {
+  color: #4338ca;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__body kbd {
+  color: #312e81;
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  box-shadow: 0 1px 0 #ffffff inset;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__foot {
+  border-top-color: #c7d2fe;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  padding: 0.85rem 1.25rem 1.05rem;
+}
+
+html[data-theme="light"] body:has(#tool-panel-gods-eye:target) .about-dialog__foot .btn--secondary:hover {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+  color: #312e81;
   box-shadow: var(--lm-shadow-md);
 }
 
@@ -9273,145 +9676,6 @@ html[data-theme="light"] .panel--gpu .analyzer-toolbar .btn--ghost:hover {
   background: #f9fafb;
   border-color: #9ca3af;
   color: #111827;
-}
-
-/* Advanced: merged GPU-Z + Event Viewer canvas (injected; GPU tab, offline). */
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline {
-  border-top: 1px solid #e5e7eb;
-  background: #ffffff;
-  padding: 0.9rem var(--panel-pad-x) 1rem;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__title {
-  color: #065f46;
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-  letter-spacing: 0.01em;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__hint {
-  margin: 0;
-  color: #4b5563;
-  line-height: 1.5;
-  font-size: 0.92rem;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__row {
-  display: grid;
-  grid-template-columns: 1.35fr 0.65fr;
-  gap: 0.75rem;
-  margin-top: 0.75rem;
-  align-items: start;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__controls {
-  border: 1px solid #e5e7eb;
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 0.6rem 0.65rem;
-  display: grid;
-  gap: 0.55rem;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__label {
-  display: grid;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  color: #374151;
-  font-weight: 600;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__metric {
-  width: 100%;
-}
-
-html[data-theme="light"] .panel--gpu .dropzone--gpu-adv-evtx {
-  background: #ffffff;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__canvaswrap {
-  margin-top: 0.75rem;
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  border-radius: 12px;
-  padding: 0.55rem;
-  box-shadow: var(--lm-shadow-sm);
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__canvas {
-  width: 100%;
-  height: 320px;
-  display: block;
-  border-radius: 10px;
-  border: 1px solid #eef2f7;
-}
-
-html[data-theme="light"] .panel--gpu .gpu-adv-timeline__legend {
-  margin: 0.55rem 0 0;
-  color: #6b7280;
-  font-size: 0.85rem;
-  line-height: 1.4;
-}
-
-.panel--gpu .gpu-adv-timeline {
-  border-top: 1px solid var(--border);
-  background: var(--bg-panel);
-  padding: 0.85rem var(--panel-pad-x) 0.95rem;
-}
-.panel--gpu .gpu-adv-timeline__title {
-  color: #ecfdf5;
-  margin: 0 0 0.35rem;
-  font-size: 1.02rem;
-}
-.panel--gpu .gpu-adv-timeline__hint {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
-  font-size: 0.92rem;
-}
-.panel--gpu .gpu-adv-timeline__row {
-  display: grid;
-  grid-template-columns: 1.2fr 0.8fr;
-  gap: 0.75rem;
-  margin-top: 0.7rem;
-  align-items: start;
-}
-.panel--gpu .gpu-adv-timeline__controls {
-  border: 1px solid var(--border);
-  background: rgba(0, 0, 0, 0.18);
-  border-radius: 12px;
-  padding: 0.55rem 0.6rem;
-  display: grid;
-  gap: 0.5rem;
-}
-.panel--gpu .gpu-adv-timeline__label {
-  display: grid;
-  gap: 0.35rem;
-  font-size: 0.82rem;
-  color: var(--muted);
-  font-weight: 600;
-}
-.panel--gpu .gpu-adv-timeline__metric {
-  width: 100%;
-}
-.panel--gpu .gpu-adv-timeline__canvaswrap {
-  margin-top: 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.5rem;
-  background: rgba(0, 0, 0, 0.18);
-}
-.panel--gpu .gpu-adv-timeline__canvas {
-  width: 100%;
-  height: 320px;
-  display: block;
-  border-radius: 10px;
-}
-.panel--gpu .gpu-adv-timeline__legend {
-  margin: 0.45rem 0 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.35;
 }
 
 /* Language Adder: match per-tab accent in light mode only (do not change dark mode). */

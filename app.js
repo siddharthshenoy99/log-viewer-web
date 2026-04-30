@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.4.9";
+  const APP_VERSION = "1.5.0";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -8351,6 +8351,121 @@
   }
 
   /**
+   * Best-effort offline UI language guess for MSInfo / Windows strings (no network). Scripts first, then Latin locales.
+   * @param {string} blob
+   * @returns {{ code: string, name: string, confidence: number }}
+   */
+  function detectOfflineUiLanguage(blob) {
+    const b = String(blob || "");
+    if (!b.trim()) return { code: "unknown", name: "Unknown", confidence: 0 };
+    if (/[\u0600-\u06FF]/.test(b)) return { code: "ar", name: "Arabic", confidence: 0.95 };
+    if (/[\u0590-\u05FF]/.test(b)) return { code: "he", name: "Hebrew", confidence: 0.95 };
+    if (/[\u3040-\u30FF\u31F0-\u31FF]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
+    if (/[\uAC00-\uD7AF]/.test(b)) return { code: "ko", name: "Korean", confidence: 0.99 };
+    if (/[\u0400-\u04FF]/.test(b)) return { code: "ru", name: "Russian", confidence: 0.99 };
+    if (/[\u0370-\u03FF]/.test(b)) return { code: "el", name: "Greek", confidence: 0.95 };
+    if (/[\u0E00-\u0E7F]/.test(b)) return { code: "th", name: "Thai", confidence: 0.95 };
+    if (/[\u0E80-\u0EFF]/.test(b)) return { code: "lo", name: "Lao", confidence: 0.9 };
+    if (/[\u0980-\u09FF]/.test(b)) return { code: "bn", name: "Bengali", confidence: 0.9 };
+    if (/[\u0900-\u097F]/.test(b)) return { code: "hi", name: "Hindi", confidence: 0.9 };
+    if (/[\u0A00-\u0A7F]/.test(b)) return { code: "pa", name: "Punjabi", confidence: 0.9 };
+    if (/[\u3400-\u9FFF]/.test(b) && !/[\u3040-\u30FF]/.test(b)) return { code: "zh", name: "Chinese", confidence: 0.92 };
+    if (looksLikeTurkishWindowsLatinHint(b)) return { code: "tr", name: "Turkish", confidence: 0.9 };
+    if (/Rendszerösszefoglaló|Időzóna|Illesztőprogram|Operációs\s+rendszer/i.test(b))
+      return { code: "hu", name: "Hungarian", confidence: 0.88 };
+    if (/Systemübersicht|Zeitzone|Betriebssystem|Arbeitsspeicher|Gerätetreiber|Treiberversion/i.test(b))
+      return { code: "de", name: "German", confidence: 0.88 };
+    if (/Informazioni\s+di\s+sistema|Ambiente\s+software|Memoria\s+fisica|Zona\s+oraria/i.test(b))
+      return { code: "it", name: "Italian", confidence: 0.88 };
+    if (/Systeemoverzicht|Software-omgeving|Tijdzone|Besturingssysteem/i.test(b))
+      return { code: "nl", name: "Dutch", confidence: 0.88 };
+    if (/Podsumowanie\s+systemu|Pamięć\s+fizyczna|Strefa\s+czasowa|Sterownik/i.test(b))
+      return { code: "pl", name: "Polish", confidence: 0.88 };
+    if (/Přehled\s+systému|Softwarové\s+prostředí|Časové\s+pásmo|Ovladač/i.test(b))
+      return { code: "cs", name: "Czech", confidence: 0.88 };
+    if (/Rezumat\s+sistem|Memorie\s+fizică|Fus\s+orar/i.test(b)) return { code: "ro", name: "Romanian", confidence: 0.85 };
+    if (/Järjestelmäyhteenveto|Ohjelmistoympäristö|Aikavyöhyke|Ohjain/i.test(b))
+      return { code: "fi", name: "Finnish", confidence: 0.88 };
+    if (/Thông\s+tin\s+hệ\s+thống|Hệ\s+điều\s+hành|Múi\s+giờ|Bộ\s+nhớ/i.test(b))
+      return { code: "vi", name: "Vietnamese", confidence: 0.85 };
+    if (/Systeminformasjon|Tidssone\s+for|Programvaremiljø/i.test(b))
+      return { code: "no", name: "Norwegian", confidence: 0.82 };
+    if (/Systemoversigt|Programvaremiljø|Tidssone/i.test(b)) return { code: "da", name: "Danish", confidence: 0.82 };
+    if (looksLikeFrenchWindowsLatinHint(b)) return { code: "fr", name: "French", confidence: 0.9 };
+    if (looksLikePortugueseWindowsLatinHint(b)) return { code: "pt", name: "Portuguese", confidence: 0.85 };
+    if (looksLikeSpanishWindowsLatinHint(b)) return { code: "es", name: "Spanish", confidence: 0.85 };
+    if (looksLikeSwedishWindowsLatinHint(b)) return { code: "sv", name: "Swedish", confidence: 0.85 };
+    return { code: "unknown", name: "Unknown", confidence: 0.45 };
+  }
+
+  /** Maps detection codes to safe English filenames for Language Adder downloads. */
+  const LANGUAGE_ADDER_FILENAME_LABEL = /** @type {const} */ ({
+    ar: "Arabic",
+    he: "Hebrew",
+    ja: "Japanese",
+    ko: "Korean",
+    ru: "Russian",
+    el: "Greek",
+    th: "Thai",
+    lo: "Lao",
+    bn: "Bengali",
+    hi: "Hindi",
+    pa: "Punjabi",
+    zh: "Chinese",
+    tr: "Turkish",
+    hu: "Hungarian",
+    de: "German",
+    it: "Italian",
+    nl: "Dutch",
+    pl: "Polish",
+    cs: "Czech",
+    ro: "Romanian",
+    fi: "Finnish",
+    vi: "Vietnamese",
+    no: "Norwegian",
+    da: "Danish",
+    fr: "French",
+    pt: "Portuguese",
+    es: "Spanish",
+    sv: "Swedish",
+  });
+
+  /**
+   * @param {string} s
+   * @returns {string}
+   */
+  function sanitizeLanguageAdderFileStem(s) {
+    return String(s || "")
+      .replace(/\.[^.]+$/, "")
+      .replace(/[^A-Za-z0-9._-]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "")
+      .slice(0, 48);
+  }
+
+  /**
+   * Preferred download stem: detected language name, else code label, else user/file stem.
+   * @param {{ detectedLanguageName?: string, detectedLanguageCode?: string, detectedLanguageConfidence?: number } | null | undefined} diag
+   * @param {string} fallbackStem
+   */
+  function languageAdderExportBasename(diag, fallbackStem) {
+    const conf = Number(diag?.detectedLanguageConfidence ?? 0);
+    const name = String(diag?.detectedLanguageName || "").trim();
+    const code = String(diag?.detectedLanguageCode || "").trim().toLowerCase();
+    const minConf = 0.55;
+    if (name && name !== "Unknown" && conf >= minConf) {
+      const stem = sanitizeLanguageAdderFileStem(name);
+      if (stem) return stem;
+    }
+    if (code && code !== "unknown" && conf >= minConf) {
+      const lab = LANGUAGE_ADDER_FILENAME_LABEL[/** @type {keyof typeof LANGUAGE_ADDER_FILENAME_LABEL} */ (code)];
+      if (lab) return sanitizeLanguageAdderFileStem(lab);
+    }
+    const fb = sanitizeLanguageAdderFileStem(fallbackStem);
+    return fb || "language-adder";
+  }
+
+  /**
    * True when text looks non-English for common Windows display languages (Arabic, CJK, Cyrillic, Greek, Hangul, kana, Latin with European diacritics).
    * Used to show the section Translate control; phrase maps cover Russian + intl. pairs below as best-effort.
    * @param {string} s
@@ -8785,6 +8900,14 @@
     ["Depolama / Diskler", "Storage / Disks"],
     ["Depolama / SCSI", "Storage / SCSI"],
     ["Depolama / Sürücü", "Storage / Drive"],
+    /** Common Turkish MSInfo column headers (Language Adder); longer keys already above (e.g. Kullanıcı Adı). */
+    ["Açıklama", "Description"],
+    ["Yüklü", "Installed"],
+    ["Bölüm", "Partition"],
+    ["Sürüm", "Version"],
+    ["Adı", "Name"],
+    ["Sürücü", "Driver"],
+    ["Güç", "Power"],
     // --- Swedish (sv) ---
     ["Programmiljö", "Software Environment"],
     ["Systemöversikt", "System Summary"],
@@ -12494,12 +12617,8 @@
           window.alert("Load and analyze a file (or paste text) first.");
           return;
         }
-        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
-        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
-        const base =
-          detectedName && detectedName !== "Unknown" && detectedConf >= 0.9
-            ? detectedName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 32)
-            : (fileState?.name || "bsod").replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 32);
+        const fb = (fileState?.name || "bsod").replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80);
+        const base = languageAdderExportBasename(lastLangAdder, fb);
         downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
       });
       toolbar.appendChild(b);
@@ -13723,20 +13842,6 @@
       return en !== t;
     };
 
-    const detectLanguage = (/** @type {string} */ blob) => {
-      const b = String(blob || "");
-      // Prefer script-unique detection first.
-      if (/[\u3040-\u30ff\u31f0-\u31ff\u3400-\u9fff]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
-      if (/[\u0400-\u04ff]/.test(b)) return { code: "ru", name: "Russian", confidence: 0.99 };
-      // Latin hints (best-effort heuristics).
-      if (looksLikeTurkishWindowsLatinHint(b)) return { code: "tr", name: "Turkish", confidence: 0.9 };
-      if (looksLikeFrenchWindowsLatinHint(b)) return { code: "fr", name: "French", confidence: 0.9 };
-      if (looksLikePortugueseWindowsLatinHint(b)) return { code: "pt", name: "Portuguese", confidence: 0.85 };
-      if (looksLikeSpanishWindowsLatinHint(b)) return { code: "es", name: "Spanish", confidence: 0.85 };
-      if (looksLikeSwedishWindowsLatinHint(b)) return { code: "sv", name: "Swedish", confidence: 0.85 };
-      return { code: "unknown", name: "Unknown", confidence: 0.5 };
-    };
-
     for (const k of Array.isArray(kvs) ? kvs : []) {
       const item = String(k?.item || "").trim();
       if (!item) continue;
@@ -13776,13 +13881,24 @@
       }
     }
 
-    // Detect likely source language (best-effort) from the remaining unknown strings we plan to export.
+    // Detect likely source language from MSInfo paths/items + unknown strings (unknown labels alone are often ASCII).
     const detectBlobParts = [];
     for (const block of Object.values(unknownLabelsByPath)) {
       for (const k of Object.keys(block?.labels || {})) detectBlobParts.push(k);
     }
     for (const k of Object.keys(unknownTokens)) detectBlobParts.push(k);
-    const lang = detectLanguage(detectBlobParts.join("  "));
+    const pathBlob = (Array.isArray(kvs) ? kvs : [])
+      .map((kv) => String(kv?.path || "").trim())
+      .filter(Boolean)
+      .join(" | ");
+    const itemSample = (Array.isArray(kvs) ? kvs : [])
+      .slice(0, 400)
+      .map((kv) => String(kv?.item || "").trim())
+      .filter(Boolean)
+      .join(" | ");
+    const lang = detectOfflineUiLanguage(
+      [pathBlob, itemSample, detectBlobParts.join("  "), String(fileName || "")].join("\n")
+    );
 
     const notes = [
       "This report lists only strings that look non-English AND are not already covered by the current offline translation tables.",
@@ -13957,19 +14073,13 @@
       addTok(t);
     }
 
-    const detectLanguage = (blob) => {
-      const b = String(blob || "");
-      if (/[\u3040-\u30ff\u31f0-\u31ff\u3400-\u9fff]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
-      if (/[\u0400-\u04ff]/.test(b)) return { code: "ru", name: "Russian", confidence: 0.99 };
-      if (looksLikeTurkishWindowsLatinHint(b)) return { code: "tr", name: "Turkish", confidence: 0.9 };
-      if (looksLikeFrenchWindowsLatinHint(b)) return { code: "fr", name: "French", confidence: 0.9 };
-      if (looksLikePortugueseWindowsLatinHint(b)) return { code: "pt", name: "Portuguese", confidence: 0.85 };
-      if (looksLikeSpanishWindowsLatinHint(b)) return { code: "es", name: "Spanish", confidence: 0.85 };
-      if (looksLikeSwedishWindowsLatinHint(b)) return { code: "sv", name: "Swedish", confidence: 0.85 };
-      return { code: "unknown", name: "Unknown", confidence: 0.5 };
-    };
-
-    const lang = detectLanguage(Object.keys(unknownTokens).join("  "));
+    const lang = detectOfflineUiLanguage(
+      [
+        Object.keys(unknownTokens).join("  "),
+        Array.isArray(o?.tokens) ? o.tokens.slice(0, 800).join("  ") : "",
+        String(o?.fileName || ""),
+      ].join("\n")
+    );
     const notes = [
       "This report lists only strings that look non-English AND are not already covered by the current offline translation tables.",
       "Use it to add new token pairs or label mappings without guessing. Keep translations specific (prefer full labels over short substrings).",
@@ -14085,12 +14195,7 @@
             .replace(/\.[^.]+$/, "")
             .replace(/[^A-Za-z0-9._-]+/g, "_")
             .slice(0, 80);
-          const detectedName = String(lastI18nDiag?.detectedLanguageName || "").trim();
-          const detectedConf = Number(lastI18nDiag?.detectedLanguageConfidence || 0);
-          const prefix =
-            detectedName && detectedName !== "Unknown" && detectedConf >= 0.9
-              ? detectedName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 32)
-              : safeBase;
+          const prefix = languageAdderExportBasename(lastI18nDiag, safeBase);
           const fn = `${prefix}.language-adder.txt`;
           downloadTextAsFile(fn, buildLanguageAdderTxt(lastI18nDiag), "text/plain;charset=utf-8");
         });
@@ -15039,9 +15144,8 @@
           window.alert("Load and analyze GPU-Z logs first.");
           return;
         }
-        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
-        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
-        const base = detectedName && detectedName !== "Unknown" && detectedConf >= 0.9 ? detectedName : "GPUZ";
+        const fb = (logs[0]?.name || "GPUZ").replace(/\.[^.]+$/, "").replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 80);
+        const base = languageAdderExportBasename(lastLangAdder, fb);
         downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
       });
       toolbar.appendChild(b);
@@ -17109,9 +17213,7 @@
           window.alert("Load and analyze a DxDiag export first.");
           return;
         }
-        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
-        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
-        const base = detectedName && detectedName !== "Unknown" && detectedConf >= 0.9 ? detectedName : "DxDiag";
+        const base = languageAdderExportBasename(lastLangAdder, "DxDiag");
         downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
       });
       toolbar.appendChild(b);
@@ -17239,9 +17341,7 @@
           window.alert("Load and analyze an Event Viewer export first.");
           return;
         }
-        const detectedName = String(lastLangAdder?.detectedLanguageName || "").trim();
-        const detectedConf = Number(lastLangAdder?.detectedLanguageConfidence || 0);
-        const base = detectedName && detectedName !== "Unknown" && detectedConf >= 0.9 ? detectedName : "EventViewer";
+        const base = languageAdderExportBasename(lastLangAdder, "EventViewer");
         downloadTextAsFile(`${base}.language-adder.txt`, buildLanguageAdderTxtFromSnapshot(lastLangAdder), "text/plain;charset=utf-8");
       });
       toolbar.appendChild(b);

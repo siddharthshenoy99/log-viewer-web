@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.4.8";
+  const APP_VERSION = "1.4.9";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -6633,13 +6633,13 @@
         pr
       ) ||
         /^bureau$/i.test(String(platformRole || "").trim())) &&
-      !/\bmobile\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|computador\s+móvel|computador\s+movel|surfplatta/i.test(
+      !/\bmobile\b|\bmobil\b|\bslate\b|мобильн|планшет|ноутбук|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|computador\s+móvel|computador\s+movel|surfplatta/i.test(
         pr
       )
     ) {
       systemForm = "Desktop / workstation-class";
     } else if (
-      /\bmobile\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|equipo\s+móvil|equipo\s+movil|bärbar\s+dator|surfplatta/i.test(
+      /\bmobile\b|\bmobil\b|slate|handheld|phone|мобильн|планшет|ноутбук|переносн|dizüstü|dizustu|taşınabilir|tasinabilir|móvil|movil|portátil|portatil|tableta|equipo\s+móvil|equipo\s+movil|bärbar\s+dator|surfplatta/i.test(
         pr
       )
     ) {
@@ -6649,14 +6649,14 @@
       /\bdesktop\b|рабочий\s+стол|настольн|masaüstü|masaustu/i.test(
         String(pcSystemType).toLocaleLowerCase("tr-TR")
       ) &&
-      !/\bmobile\b|laptop|ноутбук|планшет|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
+      !/\bmobile\b|\bmobil\b|laptop|ноутбук|планшет|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
         String(pcSystemType).toLocaleLowerCase("tr-TR")
       )
     ) {
       systemForm = "Desktop / workstation-class";
     } else if (
       pcSystemType &&
-      /\bmobile\b|laptop|notebook|tablet|ноутбук|планшет|переносн|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
+      /\bmobile\b|\bmobil\b|laptop|notebook|tablet|ноутбук|планшет|переносн|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
         String(pcSystemType).toLocaleLowerCase("tr-TR")
       )
     ) {
@@ -8269,8 +8269,15 @@
    */
   function looksLikeTurkishWindowsLatinHint(s) {
     const u = String(s || "");
-    return /\bhizmeti\b|\bHizmeti\b|\bUygulama\b|\bYönlendirici\b|\byönlendirici\b|\bAltyapı\b|\bAltyapi\b|\bOluşturucu\b|\bOlusturucu\b|\bYöneticisi\b|\bYoneticisi\b|\sGeçidi\b|\sGecidi\b|\bKatmanı\b|\bKatmani\b|\bBilgileri\b|\bKimliği\b|\bKimligi\b|\bCihazlar\b|\bYetenek\b|\bGörevleri\b|\bGorevleri\b|\bArka\s+Plan\b|\bBağlı\b|\bBagli\b|\bBitiş\b|\bBitis\b|\bNoktası\b|\bNoktasi\b|\bErişim\b|\bErisim\b|\bWindows\s+Ses\b|\bHazır\b|\bHazir\b|\bYönetimi\b|\bYonetimi\b|\bDurumu\b|\bModu\b|\bTürü\b|\bTuru\b|\bAtamalı\b|\bAtamali\b|\bHatalı\b|\bHatali\b|\bBildirimi\b|\bRaporlaması\b|\bRaporlamasi\b|\bHata\s+demeti\b|\bOlay\s+Adı\b|\bOlay\s+adi\b|\bÖzel\s+durum\b|\bOzel\s+durum\b|\bmodül\b|\bmodul\b|\bzaman\s+damgası\b|\bzaman\s+damgasi\b|\bRapor\s+kimliği\b|\bRapor\s+kimligi\b|\bWindows\s+ile\s+birlikte\s+çalışmayı\b|\bWindows\s+ile\s+birlikte\s+calismayi\b/i.test(
-      u
+    return (
+      /\bhizmeti\b|\bHizmeti\b|\bUygulama\b|\bYönlendirici\b|\byönlendirici\b|\bAltyapı\b|\bAltyapi\b|\bOluşturucu\b|\bOlusturucu\b|\bYöneticisi\b|\bYoneticisi\b|\sGeçidi\b|\sGecidi\b|\bKatmanı\b|\bKatmani\b|\bBilgileri\b|\bKimliği\b|\bKimligi\b|\bCihazlar\b|\bYetenek\b|\bGörevleri\b|\bGorevleri\b|\bArka\s+Plan\b|\bBağlı\b|\bBagli\b|\bBitiş\b|\bBitis\b|\bNoktası\b|\bNoktasi\b|\bErişim\b|\bErisim\b|\bWindows\s+Ses\b|\bHazır\b|\bHazir\b|\bYönetimi\b|\bYonetimi\b|\bDurumu\b|\bModu\b|\bTürü\b|\bTuru\b|\bAtamalı\b|\bAtamali\b|\bHatalı\b|\bHatali\b|\bBildirimi\b|\bRaporlaması\b|\bRaporlamasi\b|\bHata\s+demeti\b|\bOlay\s+Adı\b|\bOlay\s+adi\b|\bÖzel\s+durum\b|\bOzel\s+durum\b|\bmodül\b|\bmodul\b|\bzaman\s+damgası\b|\bzaman\s+damgasi\b|\bRapor\s+kimliği\b|\bRapor\s+kimligi\b|\bWindows\s+ile\s+birlikte\s+çalışmayı\b|\bWindows\s+ile\s+birlikte\s+calismayi\b/i.test(
+        u
+      ) ||
+      /** MSInfo category paths + summary values often ASCII-only (“Mobil”, “Orta Avrupa Yaz Saati”). */
+      /\bSistem\s+özeti\b|\bSistem\s+ozeti\b|\bBileşenler\b|\bBilesenler\b|\bPlatform\s+Rolü\b|\bPlatform\s+Rolu\b|\bSaat\s+Dilimi\b|\bSaat\s+dilimi\b|\bOrta\s+Avrupa\b|\bAvrupa\s+Yaz\b|\bYaz\s+Saati\b|\bStandart\s+Saati\b|\bTürkiye\s+Standart\b|\bTurkiye\s+Standart\b|\bMantıksal\b|\bMantiksal\b|\bÖğe\b|\bOge\b|\bBağdaştırıcı\b|\bBagdastirici\b/i.test(
+        u
+      ) ||
+      /(^|[\s,:;])(Mobil)([\s,:;)]|$)/i.test(u)
     );
   }
 
@@ -8368,6 +8375,10 @@
     if (/\bİşletim\b/i.test(t) || /\bIsletim\b/i.test(t)) return true;
     /** Turkish display exports: “NVIDIA uyumlu”, etc. (ASCII-only; needs Translate + phrase map). */
     if (/\buyumlu\b/i.test(t)) return true;
+    /** Turkish platform role + EU time zones often have no Turkish-specific letters. */
+    if (/\bOrta\s+Avrupa\b/i.test(t)) return true;
+    if (/\b(Yaz|Kış|Kis)\s+Saati\b/i.test(t)) return true;
+    if (/^Mobil$/i.test(t.trim())) return true;
     if (looksLikeTurkishWindowsLatinHint(t)) return true;
     if (looksLikeSpanishWindowsLatinHint(t)) return true;
     if (looksLikeFrenchWindowsLatinHint(t)) return true;
@@ -10495,6 +10506,11 @@
       .replace(/Masaüstü/giu, "Desktop")
       .replace(/Dizüstü/giu, "Laptop")
       .replace(/Taşınabilir/giu, "Mobile")
+      /** Turkish {@code Platform Rolü} value is often {@code Mobil} (ASCII; distinct from English “Mobile”). */
+      .replace(/\bMobil\b/gi, "Mobile")
+      .replace(/\bOrta\s+Avrupa\s+Yaz\s+Saati\b/giu, "Central European Summer Time")
+      .replace(/\bOrta\s+Avrupa\s+Kış\s+Saati\b/giu, "Central European Standard Time")
+      .replace(/\bOrta\s+Avrupa\s+Standart\s+Saati\b/giu, "Central Europe Standard Time")
       .replace(/Türkiye\s+Standart\s+Saati/giu, "Turkey Standard Time")
       /** Turkish disk lines: “217,40 GB (233.429.532.672 Bayt)”. Order: *bayt before bare Bayt. */
       .replace(/\bTerabayt\b/gi, "TB")
@@ -11246,6 +11262,14 @@
   }
 
   /**
+   * Heuristic: Turkish {@code msinfo32} export — many values are ASCII-only; needs {@code forceI18nSpan} + phrase map.
+   * @param {NonNullable<ReturnType<typeof extractSystemSummary>>} sum
+   */
+  function msinfoExportLooksTurkish(sum) {
+    return looksLikeTurkishWindowsLatinHint(msinfoExportTextBlobForLocale(sum));
+  }
+
+  /**
    * {@code <dt>} label: always English by default (values can still be toggled via Translate).
    * @param {string} enLabel
    * @param {string} esLabel
@@ -11294,9 +11318,10 @@
     }
 
     const frHit = msinfoExportLooksFrench(sum);
-    const spanishExport = !frHit && msinfoExportLooksSpanish(sum);
-    const summaryLoc = frHit ? "fr" : spanishExport ? "es" : null;
-    /** When the export is Spanish or French, force {@code .sum-i18n} on values so section Translate can update cells together with localized {@code <dt>} labels. */
+    const turkishExport = !frHit && msinfoExportLooksTurkish(sum);
+    const spanishExport = !frHit && !turkishExport && msinfoExportLooksSpanish(sum);
+    const summaryLoc = frHit ? "fr" : turkishExport ? "tr" : spanishExport ? "es" : null;
+    /** When the export is Spanish, French, or Turkish, force {@code .sum-i18n} on values so section Translate can update cells. */
     const summaryLblOpts = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
     const sumI18nSummary = summaryLoc ? summaryLblOpts : undefined;
 

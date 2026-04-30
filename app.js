@@ -2,10 +2,16 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.4.6";
+  const APP_VERSION = "1.4.7";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
+
+  /**
+   * Beyond this decoded character count, building a full MSInfo XML DOM often freezes the tab or exceeds browser
+   * heap limits. {@link parseMsInfoDocumentWithRecovery} prefers a linear scan instead.
+   */
+  const MSINFO_DOM_SAFE_MAX_CHARS = 6_000_000;
 
   function yieldToMain() {
     return new Promise((resolve) => {
@@ -639,11 +645,15 @@
       try {
         return walkMsInfo(recovery.doc);
       } catch {
-        return null;
+        /* fall through to loose/plain rows */
       }
     }
-    if (recovery.data && Array.isArray(recovery.data.kvs)) {
-      return recovery.data;
+    if (recovery.data) {
+      const k = recovery.data.kvs;
+      const r = recovery.data.rows;
+      if ((Array.isArray(k) && k.length > 0) || (Array.isArray(r) && r.length > 0)) {
+        return recovery.data;
+      }
     }
     return null;
   }
@@ -7603,7 +7613,7 @@
     const opens = (out.match(/<Category\b/gi) || []).length;
     const closes = (out.match(/<\/Category>/gi) || []).length;
     const need = opens - closes;
-    if (need > 0 && need < 800) {
+    if (need > 0 && need <= 10_000) {
       for (let i = 0; i < need; i++) out += "</Category>";
     }
     const t = out.trimEnd();
@@ -7621,6 +7631,30 @@
       .replace(/&apos;/gi, "'")
       .replace(/&quot;/gi, '"')
       .replace(/&amp;/gi, "&");
+  }
+
+  /** Element body captured by loose regex — unwrap CDATA like {@link xmlText} does for real DOM nodes. */
+  function xmlLooseElementText(raw) {
+    let s = String(raw ?? "").trim();
+    const cdata = s.match(/^<!\[CDATA\[([\s\S]*?)\]\]>$/);
+    if (cdata) s = cdata[1];
+    return decodeXmlishText(s.replace(/\s+/g, " ").trim());
+  }
+
+  /**
+   * Multi-field {@code <Data>} rows (e.g. Time / Type / Details) when Item+Value are absent — DOM-free scan.
+   * @param {string} inner
+   */
+  function looseExtractFieldsFromDataInner(inner) {
+    const fields = /** @type {Record<string, string>} */ ({});
+    const re = /<([A-Za-z][\w:.-]*)\b[^>]*>([\s\S]*?)<\/\1\s*>/g;
+    let m;
+    while ((m = re.exec(inner)) !== null) {
+      const key = m[1];
+      if (!key || Object.prototype.hasOwnProperty.call(fields, key)) continue;
+      fields[key] = xmlLooseElementText(m[2] || "");
+    }
+    return fields;
   }
 
   /**
@@ -7664,8 +7698,7 @@
 
   /** @param {string} inner XML body of a Data element (loose text scan). */
   function looseDataInnerToItemValue(inner) {
-    const normInner = (/** @type {string} */ s) =>
-      decodeXmlishText(String(s || "").replace(/\s+/g, " ").trim());
+    const normInner = (/** @type {string} */ s) => xmlLooseElementText(s);
     const pairs = [
       /** Spanish MSInfo child rows ({@code <Elemento>}/{@code <Valor>}) when XML is repaired as loose text. */
       [/<Elemento\b[^>]*>([\s\S]*?)<\/Elemento>/i, /<Valor\b[^>]*>([\s\S]*?)<\/Valor>/i],
@@ -7750,7 +7783,14 @@
           item = p.item;
           value = p.value;
         }
-        if (item || value) kvs.push({ path: pathStr(), item, value });
+        if (item || value) {
+          kvs.push({ path: pathStr(), item, value });
+        } else {
+          const fields = looseExtractFieldsFromDataInner(inner);
+          if (Object.keys(fields).length >= 2) {
+            rows.push({ path: pathStr(), fields });
+          }
+        }
         i = lt + m[0].length;
         continue;
       }
@@ -7895,6 +7935,25 @@
     }
 
     const tryDom = (/** @type {string} */ t) => parseMsInfoDocument(t);
+
+    if (baseline.length >= MSINFO_DOM_SAFE_MAX_CHARS && /<MsInfo\b/i.test(baseline)) {
+      const looseLarge = extractMsInfoLooseFromText(baseline);
+      const nk = looseLarge.kvs.length;
+      const nr = looseLarge.rows.length;
+      if (nk >= 5 || nr >= 1) {
+        notes.push(
+          "Large System Information export: skipped building the full XML DOM so the browser stays responsive and within typical memory limits. A tolerant linear scan reads categories and data rows instead."
+        );
+        return {
+          doc: null,
+          data: looseLarge,
+          mode: "loose",
+          notes,
+          repairedText: null,
+          rawDisplayText: baseline,
+        };
+      }
+    }
 
     let doc = tryDom(baseline);
     if (doc) {
@@ -14152,8 +14211,22 @@
         onStage(0.72, "Building summary…");
         await yieldToMain();
       }
-      if (recovery.doc) data = walkMsInfo(recovery.doc);
-      else if (recovery.data && recovery.data.kvs.length) data = recovery.data;
+      if (recovery.doc) {
+        try {
+          data = walkMsInfo(recovery.doc);
+        } catch (err) {
+          console.warn("walkMsInfo failed:", err);
+          data = null;
+        }
+      }
+      if (
+        !data &&
+        recovery.data &&
+        ((recovery.data.kvs && recovery.data.kvs.length > 0) ||
+          (recovery.data.rows && recovery.data.rows.length > 0))
+      ) {
+        data = recovery.data;
+      }
 
       const xmlRep =
         recovery.doc && Array.isArray(/** @type {any} */ (recovery.doc)._msinfoRepairs)

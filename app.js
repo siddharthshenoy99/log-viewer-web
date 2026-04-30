@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.1";
+  const APP_VERSION = "1.5.2";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -8401,7 +8401,11 @@
       /\bNome\s+do\s+aplicativo\s+com\s+falha\b|\bCaminho\s+do\s+aplicativo\s+com\s+falha\b|\bC[oó]digo\s+de\s+exce[cç][aã]o\b|\bTipo\s+de\s+adaptador\b|\bGateway\s+IP\s+padr[aã]o\b|\bConcess[aã]o\s+DHCP\b|\bEsses\s+arquivos\s+talvez\b|\bVerificando\s+novamente\b|\bStatus\s+do\s+Relatório\b|\bBucket\s+com\s+hash\b/i.test(
         u
       ) ||
-      /\bItem\b.*\bValor\b/is.test(u)
+      /\bItem\b.*\bValor\b/is.test(u) ||
+      /** Processor summary line (mixed EN/pt-BR): “8 Núcleo(s), 16 Processor(es) Lógico(s)”. */
+      /\bN[uú]cleo\(s\)\b|\bProcessor\(es\)\s+L[oó]gico\(s\)\b|\bProcessador\(es\)\s+L[oó]gico\(s\)\b|\bprocessadores\s+l[oó]gicos\b/i.test(
+        u
+      )
     );
   }
 
@@ -9685,6 +9689,25 @@
     ["SKU do sistema", "System SKU"],
     ["Versão do SMBIOS", "SMBIOS Version"],
     ["Versão do Controlador Incorporado", "Embedded Controller Version"],
+    ["Segurança baseada em virtualização", "Virtualization-based security"],
+    [
+      "Propriedades de Segurança Disponíveis da segurança baseada em virtualização",
+      "Virtualization-based security Available Security Properties",
+    ],
+    [
+      "Propriedades de Segurança Obrigatórias da segurança baseada em virtualização",
+      "Virtualization-based security Required Security Properties",
+    ],
+    [
+      "Um hipervisor foi detectado. Recursos necessários para o Hyper-V não serão exibidos.",
+      "A hypervisor has been detected. Features required for Hyper-V will not be displayed.",
+    ],
+    ["Suporte à Criptografia de Dispositivo Automática", "Automatic device encryption support"],
+    ["Política de Controle de Aplicativos para Empresas", "Enterprise Application Control policy"],
+    [
+      "Política de modo de usuário do Controle de Aplicativos para Empresas",
+      "Enterprise Application Control user mode policy",
+    ],
     /** pt-BR Windows Error Reporting — Application Error / fault bucket lines (WER XML text). Longer keys first. */
     ["ID do aplicativo relativo ao pacote com falha:", "Faulting package-relative application ID:"],
     ["Nome completo do pacote com falha:", "Faulting package full name:"],
@@ -10817,6 +10840,15 @@
       .replace(/\bParado\b/gu, "Stopped")
       .replace(/\bDesabilitado\b/gu, "Disabled")
       .replace(/\bAutom[aá]tico\b/gu, "Automatic")
+      /**
+       * Portuguese MSInfo processor summary — cores / logical processors (often mixed with English “Processor”):
+       * {@code …, 8 Núcleo(s), 16 Processor(es) Lógico(s)}.
+       */
+      .replace(/(\d+)\s*Processor\(es\)\s+L[óo]gico\(s\)/giu, "$1 logical processors")
+      .replace(/(\d+)\s*Processador\(es\)\s+L[óo]gico\(s\)/giu, "$1 logical processors")
+      .replace(/(\d+)\s*N[uú]cleo\(s\)/giu, "$1 cores")
+      .replace(/\b(\d+)\s+processadores\s+l[oó]gicos\b/giu, "$1 logical processors")
+      .replace(/\b(\d+)\s+n[uú]cleos\b/giu, "$1 cores")
       /** Spanish WER (Problem Reports) — labels vary by build; regex covers spacing / short forms. */
       .replace(/\bNombre\s+de\s+evento\s*:/giu, "Event name:")
       .replace(/\bId\.\s*de\s+informe\s*:/giu, "Report identifier:")
@@ -11470,11 +11502,19 @@
   }
 
   /**
+   * Heuristic: Portuguese (pt-BR) {@code msinfo32} export — must be checked before Spanish (similar Latin).
+   * @param {NonNullable<ReturnType<typeof extractSystemSummary>>} sum
+   */
+  function msinfoExportLooksPortuguese(sum) {
+    return looksLikePortugueseWindowsLatinHint(msinfoExportTextBlobForLocale(sum));
+  }
+
+  /**
    * {@code <dt>} label: always English by default (values can still be toggled via Translate).
    * @param {string} enLabel
    * @param {string} esLabel
    * @param {string} frLabel
-   * @param {"es" | "fr" | null} summaryLoc
+   * @param {"es" | "fr" | "pt" | "tr" | null} summaryLoc
    * @param {(s: string) => string} escFn
    * @param {{ forceI18nSpan?: boolean } | undefined} i18nOpts
    */
@@ -11519,8 +11559,9 @@
 
     const frHit = msinfoExportLooksFrench(sum);
     const turkishExport = !frHit && msinfoExportLooksTurkish(sum);
-    const spanishExport = !frHit && !turkishExport && msinfoExportLooksSpanish(sum);
-    const summaryLoc = frHit ? "fr" : turkishExport ? "tr" : spanishExport ? "es" : null;
+    const portugueseExport = !frHit && !turkishExport && msinfoExportLooksPortuguese(sum);
+    const spanishExport = !frHit && !turkishExport && !portugueseExport && msinfoExportLooksSpanish(sum);
+    const summaryLoc = frHit ? "fr" : turkishExport ? "tr" : portugueseExport ? "pt" : spanishExport ? "es" : null;
     /** When the export is Spanish, French, or Turkish, force {@code .sum-i18n} on values so section Translate can update cells. */
     const summaryLblOpts = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
     const sumI18nSummary = summaryLoc ? summaryLblOpts : undefined;
@@ -11621,7 +11662,9 @@
     const startups = sum.startupPrograms || [];
     const _startupHead = spanishExport
       ? `<thead><tr><th scope="col">Nombre</th><th scope="col">Comando</th><th scope="col">Ubicación</th><th scope="col">Usuario</th></tr></thead>`
-      : `<thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead>`;
+      : portugueseExport
+        ? `<thead><tr><th scope="col">Nome</th><th scope="col">Comando</th><th scope="col">Localização</th><th scope="col">Usuário</th></tr></thead>`
+        : `<thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead>`;
     const startupBody =
       startups.length > 0
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Startup programs">${_startupHead}<tbody>${startups
@@ -11647,7 +11690,9 @@
     const svcTableHead =
       spanishExport && svcI18nOpts
         ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicio", esc, undefined, svcI18nOpts)}</th></tr></thead>`
-        : `<thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead>`;
+        : portugueseExport && svcI18nOpts
+          ? `<thead><tr><th scope="col">${sumI18nSpan("Nome", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicialização", esc, undefined, svcI18nOpts)}</th></tr></thead>`
+          : `<thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead>`;
     const svcRows = (list) =>
       list.length > 0
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="${esc("Services")}">${svcTableHead}<tbody>${list

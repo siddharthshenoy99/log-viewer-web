@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.0";
+  const APP_VERSION = "1.5.1";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -1107,6 +1107,7 @@
         "アダプターの RAM",
         "RAM do adaptador",
         "Memória do adaptador",
+        "Memória RAM do adaptador",
         "Memória de vídeo dedicada",
         "Memória de video dedicada",
         "Memoria dedicada",
@@ -3034,6 +3035,8 @@
         (/Almacenamiento/i.test(s) && /Discos/i.test(s) && /\bDisco\b/i.test(s)) ||
         /Unidad local\s*\([A-Z]:/i.test(s) ||
         /(?:^|[\s/])Unidad\s+[A-Z]:/i.test(s) ||
+        (/Armazenamento/i.test(s) && /Unidades/i.test(s)) ||
+        (/Armazenamento/i.test(s) && /Discos/i.test(s)) ||
         (/Armazenamento/i.test(s) && /Unidades/i.test(s) && /\bUnidade\b/i.test(s)) ||
         (/Armazenamento/i.test(s) && /Discos/i.test(s) && /\bDisco\b/i.test(s)) ||
         /(?:^|[\s/])Unidade\s+[A-Z]:/i.test(s) ||
@@ -3112,7 +3115,7 @@
           f.Filsystem ||
           f["Fil system"]
         ) ||
-        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Capacité"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["Toplam Boyut"] || f["Tamaño"] || f["Tamanho"] || f["合計サイズ"] || f["サイズ"] || f["総容量"] || f["Totalt utrymme"] || f["Total storlek"] || f["Volymkapacitet"] || f.Storlek) &&
+        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Capacité"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["Toplam Boyut"] || f["Tamaño"] || f["Tamanho"] || f["Tamanho total"] || f["Capacidade total"] || f["合計サイズ"] || f["サイズ"] || f["総容量"] || f["Totalt utrymme"] || f["Total storlek"] || f["Volymkapacitet"] || f.Storlek) &&
           !!(
             f["Free Space"] ||
             f["Available Space"] ||
@@ -3121,6 +3124,8 @@
             f["Espace libre"] ||
             f["Espacio disponible"] ||
             f["Espacio libre"] ||
+            f["Espaço livre"] ||
+            f["Espaco livre"] ||
             f["Espaço disponível"] ||
             f["Espaco disponivel"] ||
             f["Boş Alan"] ||
@@ -3232,6 +3237,11 @@
           (nk.includes("birim") && nk.includes("boyut")) ||
           nk === "kapasite" ||
           nk === "boyut" ||
+          ((nk.includes("tamanho") || nk.includes("capacidade")) &&
+            nk.includes("total") &&
+            !nk.includes("livre") &&
+            !nk.includes("usado") &&
+            !nk.includes("livres")) ||
           (nk.includes("tamaño") && !nk.includes("libre") && !nk.includes("disponible") && !nk.includes("usado")) ||
           ((nk.includes("totalt") || nk.includes("total")) &&
             nk.includes("utrymme") &&
@@ -3272,6 +3282,11 @@
         if (nk.includes("belegt") || nk.includes("использ")) return v;
         if ((nk.includes("usado") && nk.includes("espacio")) || nk.includes("utilizado")) return v;
         if (
+          (nk.includes("espaço") || nk.includes("espaco")) &&
+          (nk.includes("usado") || nk.includes("utilizado"))
+        )
+          return v;
+        if (
           (nk.includes("använd") || nk.includes("anvant") || nk.includes("anvand")) &&
           nk.includes("utrymme")
         )
@@ -3294,6 +3309,7 @@
           continue;
         if (nk.includes("etiket")) return v;
         if ((nk.includes("nombre") && nk.includes("volumen")) || nk.includes("etiqueta")) return v;
+        if ((nk.includes("nome") && nk.includes("volume")) || /r[oó]tulo/i.test(nk)) return v;
         if ((nk.includes("volym") && nk.includes("namn")) || /volymens\s+namn/i.test(nk)) return v;
       }
       return "";
@@ -3327,6 +3343,9 @@
           "使用領域",
           "Espacio usado",
           "% usado",
+          "Espaço usado",
+          "Espaço utilizado",
+          "Espaco usado",
           "Använt utrymme",
           "Använda utrymmet",
           "Använt",
@@ -3337,6 +3356,9 @@
         f["Belegt"] ||
         f["Utilisé"] ||
         f["Espacio usado"] ||
+        f["Espaço usado"] ||
+        f["Espaço utilizado"] ||
+        f["Espaco usado"] ||
         f["Используется"] ||
         f["使用中"] ||
         f["使用済み"] ||
@@ -3401,10 +3423,15 @@
           "Volymetikett",
           "Etikett",
           "Volym namn",
+          "Nome do volume",
+          "Rótulo do volume",
+          "Nome da unidade",
         ]) ||
         f["Volume Name"] ||
         f["Nombre de volumen"] ||
         f["Nombre del volumen"] ||
+        f["Nome do volume"] ||
+        f["Rótulo do volume"] ||
         f["Volymnamn"] ||
         f["Volymens namn"] ||
         f["Volymetikett"] ||
@@ -3473,6 +3500,11 @@
       if (/^Lecteurs?$/iu.test(tTrim)) {
         const letter = String(f["Lecteur"] || "").trim();
         title = letter ? `Drive ${letter}` : "Drives";
+      } else if (/^Unidades?$/iu.test(tTrim)) {
+        const letter =
+          String(f["Unidade"] || f["Letra da unidade"] || f["Letra de unidade"] || f["Drive"] || "").trim();
+        const lm = letter.match(/\b([A-Z]):/i);
+        title = lm ? `Drive ${lm[1]}:` : letter || "Drives";
       } else if (f["Lecteur"]) {
         // "Lecteur: C:" should become "Drive C:" by default (English UI labels).
         const letter = String(f["Lecteur"] || "").trim();
@@ -3542,6 +3574,8 @@
           "総容量",
           "Tamaño",
           "Tamanho",
+          "Tamanho total",
+          "Capacidade total",
           "Totalt utrymme",
           "Total storlek",
           "Volymkapacitet",
@@ -3560,6 +3594,8 @@
         f["Toplam boyut"] ||
         f["Tamaño"] ||
         f["Tamanho"] ||
+        f["Tamanho total"] ||
+        f["Capacidade total"] ||
         f["合計サイズ"] ||
         f["サイズ"] ||
         f["総容量"] ||
@@ -3595,6 +3631,8 @@
           "未使用領域",
           "Ledigt utrymme",
           "Tillgängligt utrymme",
+          "Espaço livre",
+          "Espaco livre",
         ]) ||
         f["Free Space"] ||
         f["Available Space"] ||
@@ -3620,6 +3658,8 @@
         f["未使用領域"] ||
         f["Ledigt utrymme"] ||
         f["Tillgängligt utrymme"] ||
+        f["Espaço livre"] ||
+        f["Espaco livre"] ||
         "";
       let used = pickDriveUsedFromFields(f);
       let volumeName = pickDriveVolumeNameFromFields(f);
@@ -3641,6 +3681,9 @@
           "Serienummer",
           "Volym serienummer",
           "Volymens serienummer",
+          "Número de série do volume",
+          "Número de série",
+          "Numero de serie do volume",
         ]) ||
         f["Serial Number"] ||
         f["Número de serie"] ||
@@ -3650,6 +3693,8 @@
         f["Serienummer"] ||
         f["Volym serienummer"] ||
         f["Volymens serienummer"] ||
+        f["Número de série do volume"] ||
+        f["Número de série"] ||
         f["Seriennummer"] ||
         f["Серийный номер"] ||
         f["シリアル番号"] ||
@@ -3667,7 +3712,15 @@
 
       // Drop stray container/header records (e.g. "Disks") that do not represent a concrete volume (no letter, no FS/serial/name).
       const driveLetterRaw = String(
-        f["Drive"] || f["Lecteur"] || f["ドライブ"] || f["Unidad"] || f["Unidade"] || f["Volume"] || ""
+        f["Drive"] ||
+          f["Lecteur"] ||
+          f["Letra da unidade"] ||
+          f["Letra de unidade"] ||
+          f["ドライブ"] ||
+          f["Unidad"] ||
+          f["Unidade"] ||
+          f["Volume"] ||
+          ""
       ).trim();
       const driveLetter =
         (driveLetterRaw.match(/\b([A-Z]):\b/i) || driveLetterRaw.match(/^([A-Z]):$/i) || [])[1] || "";
@@ -3699,7 +3752,7 @@
 
     /** JP exports split volumes on ドライブ / ローカル ディスク (C:); physical disks repeat ディスク / ディスク 1. Spanish uses Unidad / Disco. */
     const driveRecordStartRe =
-      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?|Yerel\s+Disk(?:\s*\([A-Z]:?\))?|Yerel\s+disk(?:\s*\([A-Z]:?\))?|Sürücü(?:\s+[A-Z]:)?|Yerel\s+sürücü(?:\s*\([A-Z]:?\))?|Unidad|Disco(?:\s+\d+)?|Lokal\s+disk(?:\s*\([A-Z]:?\))?|Lokal\s+enhet(?:\s*\([A-Z]:?\))?|Volym(?:\s+\d+)?|Enhet|Lecteur|Lecteurs|Disque\s+local)$/iu;
+      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?|Yerel\s+Disk(?:\s*\([A-Z]:?\))?|Yerel\s+disk(?:\s*\([A-Z]:?\))?|Sürücü(?:\s+[A-Z]:)?|Yerel\s+sürücü(?:\s*\([A-Z]:?\))?|Unidad|Unidade(?:\s+local(?:\s*\([A-Z]:?\))?)?|Disco(?:\s+\d+)?|Disco\s+local(?:\s*\([A-Z]:?\))?|Lokal\s+disk(?:\s*\([A-Z]:?\))?|Lokal\s+enhet(?:\s*\([A-Z]:?\))?|Volym(?:\s+\d+)?|Enhet|Lecteur|Lecteurs|Disque\s+local)$/iu;
     const emitDrivesForPath = (/** @type {string} */ p) => {
       const chunks = chunkKvsPlainSectionRecords(kvs, p, driveRecordStartRe, 2);
       let any = false;
@@ -4918,6 +4971,8 @@
         /^ayrıntılar$/iu,
         /^ayrintilar$/iu,
         /^information$/i,
+        /^informações$/iu,
+        /^informacoes$/iu,
       ]) || "";
     if (d) return d;
     for (const [k, v] of Object.entries(fields)) {
@@ -4927,6 +4982,9 @@
       const kf = networkFieldKeyAsciiFold(k);
       if (
         kn === "information" ||
+        kn === "informações" ||
+        kn === "informacoes" ||
+        kn === "detalhes" ||
         kn === "ayrıntılar" ||
         kn === "details" ||
         kn === "detalles" ||
@@ -5136,7 +5194,7 @@
       const blob = pathKvs.map((k) => `${k.item}\t${k.value}`).join("\n");
       const bl = blob.toLowerCase();
       if (
-        /hata\s+demeti|olay\s+adı|olay\s+adi|hatalı\s+uygulama|hatali\s+uygulama|fault\s*bucket|problem\s*signature|appcrash|radar_|bex\d|windows\s+error\s+reporting|application\s+error|application\s*hang|uygulama\s+askıda|uygulama\s+askida|windows\s+ile\s+birlikte\s+çalışmayı|windows\s+ile\s+birlikte\s+calismayi|informes?\s+de\s+errores\s+de\s+windows|contenedor\s+de\s+errores|firma\s+del\s+problema|nombre\s+del\s+evento|aplicación\s+con\s+errores|aplicacion\s+con\s+errores|dejó\s+de\s+interactuar|dejo\s+de\s+interactuar|fel\s+på\s+programnamn|fel-bucket|fel\s+bucket|händelsenamn|handelsenamn|windows\s+felrapportering|&#x000d;&#x000a;|&#x000d|&#x000a/i.test(
+        /hata\s+demeti|olay\s+adı|olay\s+adi|hatalı\s+uygulama|hatali\s+uygulama|fault\s*bucket|problem\s*signature|appcrash|radar_|bex\d|windows\s+error\s+reporting|application\s+error|application\s*hang|uygulama\s+askıda|uygulama\s+askida|windows\s+ile\s+birlikte\s+çalışmayı|windows\s+ile\s+birlikte\s+calismayi|informes?\s+de\s+errores\s+de\s+windows|contenedor\s+de\s+errores|firma\s+del\s+problema|nombre\s+del\s+evento|aplicación\s+con\s+errores|aplicacion\s+con\s+errores|dejó\s+de\s+interactuar|dejo\s+de\s+interactuar|fel\s+på\s+programnamn|fel-bucket|fel\s+bucket|händelsenamn|handelsenamn|windows\s+felrapportering|relat[oó]rios?\s+de\s+(?:erros?|problemas)\s+do\s+windows|assinatura\s+do\s+problema|cont[eê]iner\s+de\s+erros|nome\s+do\s+evento|informa[cç][oõ]es\s+sobre\s+o\s+problema|&#x000d;&#x000a;|&#x000d|&#x000a/i.test(
           bl
         )
       )
@@ -5151,11 +5209,14 @@
         if (kn === "typ" || kn === "tür" || kn === "type" || kn === "tipo") typeCol++;
         if (
           kn === "information" ||
+          kn === "informações" ||
+          kn === "informacoes" ||
           kn === "ayrıntılar" ||
           kn === "details" ||
           kn === "détails" ||
           kn === "details" ||
           kn === "detalles" ||
+          kn === "detalhes" ||
           kf === "ayrintilar"
         )
           detailCol++;
@@ -5176,7 +5237,7 @@
         /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
           s
         ) ||
-        /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Informes de errores de Windows|Informe de errores de Windows|Relatórios de problemas|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Relatório de erros|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
+        /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Informes de errores de Windows|Informe de errores de Windows|Relatórios de problemas|Relatórios de erros|Relatório de erros|Ambiente de software.*Relató|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
           s
         );
       if (!hit) return false;
@@ -5216,10 +5277,13 @@
         if (kn === "typ" || kn === "tür" || kn === "type" || kn === "tipo") typeCol++;
         if (
           kn === "information" ||
+          kn === "informações" ||
+          kn === "informacoes" ||
           kn === "ayrıntılar" ||
           kn === "details" ||
           kn === "détails" ||
           kn === "detalles" ||
+          kn === "detalhes" ||
           kf === "ayrintilar"
         )
           detailCol++;
@@ -6920,7 +6984,7 @@
     const problems = [];
     /** MSInfo “Problem Devices” lives under Components; Russian builds often use «Устройства с неполадками». */
     const problemPathRe =
-      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos\s+problem[aá]ticos|Dispositivos com problemas|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス|Sorunlu\s+Aygıtlar|Sorunlu\s+aygıtlar|Sorunlu\s+Cihazlar|Sorunlu\s+cihazlar/i;
+      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos\s+problem[aá]ticos|Dispositivos com problemas|Dispositivos\s+com\s+falhas|Dispositivos\s+defeituosos|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス|Sorunlu\s+Aygıtlar|Sorunlu\s+aygıtlar|Sorunlu\s+Cihazlar|Sorunlu\s+cihazlar/i;
     const pathLooksLikeProblemDevices = (/** @type {string} */ p) => {
       const s = String(p || "");
       if (problemPathRe.test(s)) return true;
@@ -6956,6 +7020,7 @@
       const device =
         f.Device ||
         f.Name ||
+        f.Nome ||
         f.Nombre ||
         f.Item ||
         f.Description ||
@@ -6972,6 +7037,7 @@
           "description",
           "устройство",
           "название",
+          "nome",
           "デバイス名",
           "デバイス",
           "aygıt",
@@ -7049,6 +7115,7 @@
           c === "device" ||
           c === "name" ||
           c === "nombre" ||
+          c === "nome" ||
           c === "item" ||
           c === "gerät" ||
           c === "dispositivo" ||
@@ -7097,7 +7164,8 @@
           c === "hatakodu" ||
           c === "sorun" ||
           /^sorun/.test(c) ||
-          /c[oó]digo\s+de\s+error/i.test(raw)
+          /c[oó]digo\s+de\s+error/i.test(raw) ||
+          /c[oó]digo\s+de\s+erro/i.test(raw)
         );
       };
       for (const k of kvs) {
@@ -9591,6 +9659,15 @@
     ["Produto BaseBoard", "BaseBoard Product"],
     ["Versão da BaseBoard", "BaseBoard Version"],
     ["Processador", "Processor"],
+    ["Fuso horário", "Time Zone"],
+    ["Localidade", "Locale"],
+    ["Memória física disponível", "Available Physical Memory"],
+    ["Memória física total", "Total Physical Memory"],
+    ["Memória virtual disponível", "Available Virtual Memory"],
+    ["Memória virtual total", "Total Virtual Memory"],
+    ["Memória RAM do adaptador", "Adapter RAM"],
+    ["Descrição do adaptador", "Adapter Description"],
+    ["Resolução", "Resolution"],
     ["Versão/data do BIOS", "BIOS Version/Date"],
     ["Modo da BIOS", "BIOS Mode"],
     ["Estado da Inicialização Segura", "Secure Boot State"],

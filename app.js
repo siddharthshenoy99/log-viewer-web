@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.2";
+  const APP_VERSION = "1.5.4";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -479,7 +479,7 @@
     const msinfoDataChildIsItemLike = (/** @type {string} */ localName) => {
       const n = normXmlTag(localName);
       if (
-        /^(item|name|key|eintrag|property|objekt|элемент|elemento|élément|položka|pozycja|öğe|عنصر|στοιχείο|elementti|項目|名称|항목)$/u.test(
+        /^(item|name|key|eintrag|property|objekt|элемент|елемент|elemento|élément|položka|pozycja|öğe|عنصر|στοιχείο|elementti|項目|名称|항목)$/u.test(
           n
         )
       )
@@ -489,7 +489,7 @@
     const msinfoDataChildIsValueLike = (/** @type {string} */ localName) => {
       const n = normXmlTag(localName);
       if (
-        /^(value|val|wert|data|inhalt|värde|значение|valor|valeur|waarde|hodnota|wartość|arvo|érték|valoare|değer|قيمة|τιμή|值|数值|値|값|väärtus)$/u.test(
+        /^(value|val|wert|data|inhalt|värde|значение|значення|valor|valeur|waarde|hodnota|wartość|arvo|érték|valoare|değer|قيمة|τιμή|值|数值|値|값|väärtus)$/u.test(
           n
         )
       )
@@ -4879,13 +4879,28 @@
       /^時刻$/i,
       /^記録日時$/i,
       /^記録された日時$/i,
+      /** pt-BR / pt MSInfo WER table (“Data e hora”, “Carimbo de data/hora”). */
+      /^data\s+e\s+hora$/i,
+      /^carimbo\s+de\s+data\/hora$/i,
+      /^carimbo\s+de\s+data\s+e\s+hora$/i,
+      /^carimbo\s+de\s+data$/i,
     ]);
     if (hit) return hit;
     for (const [k, v] of Object.entries(fields)) {
       const vv = String(v || "").trim();
       if (!vv) continue;
       const kn = msinfoFieldKeyNormLower(k);
-      if (kn === "tid" || kn === "saat" || kn === "time" || kn === "hora" || kn === "durée" || kn === "duree")
+      if (
+        kn === "tid" ||
+        kn === "saat" ||
+        kn === "time" ||
+        kn === "hora" ||
+        kn === "durée" ||
+        kn === "duree" ||
+        kn === "data e hora" ||
+        kn === "data e hora do evento" ||
+        (kn.includes("data") && kn.includes("hora") && kn.length < 48)
+      )
         return vv;
     }
     for (const [k, v] of Object.entries(fields)) {
@@ -4923,13 +4938,23 @@
         /^tipo\s+di\s+problema$/i,
         /^probleemtype$/i,
         /^probleemtypen$/i,
+        /^nome\s+do\s+evento$/i,
+        /^tipo\s+de\s+evento$/i,
       ]) || "";
     if (t) return t;
     for (const [k, v] of Object.entries(fields)) {
       const vv = String(v || "").trim();
       if (!vv) continue;
       const kn = msinfoFieldKeyNormLower(k);
-      if (kn === "typ" || kn === "tür" || kn === "type" || kn === "tipo") return vv;
+      if (
+        kn === "typ" ||
+        kn === "tür" ||
+        kn === "type" ||
+        kn === "tipo" ||
+        kn === "nome do evento" ||
+        kn === "tipo de evento"
+      )
+        return vv;
     }
     const fb = werFirstFieldMatch(fields, [
       /fault/i,
@@ -5075,6 +5100,9 @@
       /^hora$/i,
       /^zeit$/i,
       /^data\s*[\/\u2215]\s*ora$/i,
+      /^data\s+e\s+hora$/i,
+      /^carimbo\s+de\s+data\/hora$/i,
+      /^carimbo\s+de\s+data\s+e\s+hora$/i,
       /** Turkish WER timeline table (“Saat” starts each row in MSInfo). */
       /^saat$/iu,
       /^時間$/i,
@@ -5091,7 +5119,14 @@
       const it = (item || "").trim();
       if (anchorRes.some((re) => re.test(it))) return true;
       const kn = msinfoFieldKeyNormLower(it);
-      return kn === "saat" || kn === "time" || kn === "hora" || kn.startsWith("время");
+      return (
+        kn === "saat" ||
+        kn === "time" ||
+        kn === "hora" ||
+        kn === "data e hora" ||
+        kn.startsWith("время") ||
+        (kn.includes("data") && kn.includes("hora") && kn.length < 48)
+      );
     };
 
     /** @type {Record<string, string>[]} */
@@ -5204,9 +5239,27 @@
         if (!it) continue;
         const kn = msinfoFieldKeyNormLower(it);
         const kf = networkFieldKeyAsciiFold(it);
-        if (kn === "tid" || kn === "saat" || kn === "time" || kn === "hora" || kn === "durée" || kn === "duree")
+        if (
+          kn === "tid" ||
+          kn === "saat" ||
+          kn === "time" ||
+          kn === "hora" ||
+          kn === "durée" ||
+          kn === "duree" ||
+          kn === "data e hora" ||
+          kn === "data e hora do evento" ||
+          (kn.includes("data") && kn.includes("hora") && kn.length < 48)
+        )
           timeCol++;
-        if (kn === "typ" || kn === "tür" || kn === "type" || kn === "tipo") typeCol++;
+        if (
+          kn === "typ" ||
+          kn === "tür" ||
+          kn === "type" ||
+          kn === "tipo" ||
+          kn === "nome do evento" ||
+          kn === "tipo de evento"
+        )
+          typeCol++;
         if (
           kn === "information" ||
           kn === "informações" ||
@@ -5234,10 +5287,10 @@
           s
         ) ||
         /Windows\s*エラー報告|エラー\s*報告|ソフトウェア環境.*エラー|エラー\s*コンテナ/i.test(s) ||
-        /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
+        /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Повідомлення\s+про\s+помилки|звітів\s+про\s+помилки|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
           s
         ) ||
-        /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Informes de errores de Windows|Informe de errores de Windows|Relatórios de problemas|Relatórios de erros|Relatório de erros|Ambiente de software.*Relató|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
+        /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Informes de errores de Windows|Informe de errores de Windows|Relatórios de problemas|Relatórios de erros|Relatório de erros|Relatório de Erros|Informa[cç][oõ]es\s+sobre\s+(?:os\s+)?problemas|Ambiente de software.*Relató|Ambiente de Software.*Relató|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
           s
         );
       if (!hit) return false;
@@ -5272,9 +5325,27 @@
       for (const k of Object.keys(fields)) {
         const kn = msinfoFieldKeyNormLower(k);
         const kf = networkFieldKeyAsciiFold(k);
-        if (kn === "tid" || kn === "saat" || kn === "time" || kn === "hora" || kn === "durée" || kn === "duree")
+        if (
+          kn === "tid" ||
+          kn === "saat" ||
+          kn === "time" ||
+          kn === "hora" ||
+          kn === "durée" ||
+          kn === "duree" ||
+          kn === "data e hora" ||
+          kn === "data e hora do evento" ||
+          (kn.includes("data") && kn.includes("hora") && kn.length < 48)
+        )
           timeCol++;
-        if (kn === "typ" || kn === "tür" || kn === "type" || kn === "tipo") typeCol++;
+        if (
+          kn === "typ" ||
+          kn === "tür" ||
+          kn === "type" ||
+          kn === "tipo" ||
+          kn === "nome do evento" ||
+          kn === "tipo de evento"
+        )
+          typeCol++;
         if (
           kn === "information" ||
           kn === "informações" ||
@@ -5338,11 +5409,11 @@
    */
   const MSINFO_I18N = {
     summaryPath:
-      /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
+      /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|Відомості\s+про\s+систему|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
     softwareEnvPath:
-      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Programvarumiljö|Programmiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービ스|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
+      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Програмне\s+середовище|Programvarumiljö|Programmiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービ스|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
     memoryRowPath:
-      /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumen del sistema|Resumo do sistema|Memory|\bMinne\b|Maskinvaruresurser|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama|Växlingsfil/i,
+      /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumen del sistema|Resumo do sistema|Відомості\s+про\s+систему|Memory|\bMinne\b|Maskinvaruresurser|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama|Växlingsfil/i,
     /** @param {RegExp | RegExp[]} labelRe */
     itemPatterns(labelRe) {
       return Array.isArray(labelRe) ? labelRe : [labelRe];
@@ -5360,6 +5431,7 @@
       .replace(/\s+/g, " ")
       .trim();
     if (MSINFO_I18N.softwareEnvPath.test(s)) return true;
+    if (/Програмне\s+середовище/i.test(s)) return true;
     if (/Yazilim\s+Ortami|Yaz\u0131l\u0131m\s+Ortam\u0131/i.test(s)) return true;
     if (/\bYaz(ilim|ılım)\s+Ortam(i|ı|I|İ)\b/i.test(s)) return true;
     return false;
@@ -5376,7 +5448,7 @@
       .replace(/\s+/g, " ")
       .trim();
     if (MSINFO_I18N.summaryPath.test(s)) return true;
-    return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения|システムの要約|Résumé\s+système|\bSysteminformation\b|Maskinvaruresurser|\bDator\s*\/\s*Systemöversikt/i.test(
+    return /Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Системные сведения|Основные сведения|Общие сведения|Відомості\s+про\s+систему|システムの要約|Résumé\s+système|\bSysteminformation\b|Maskinvaruresurser|\bDator\s*\/\s*Systemöversikt/i.test(
       s
     );
   }
@@ -5524,7 +5596,7 @@
       /\bWindows\s+Error\s+Reporting\b/i.test(String(t || "")) ||
       /\bfault\s+bucket\b/i.test(String(t || ""));
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|à\s+base|processeur|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|à\s+base|processeur|архитектур|рабоч|робоч|настільн|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
@@ -5569,7 +5641,7 @@
       /^application\s+hang$/i.test(String(t || "").trim()) ||
       /\bWindows\s+Error\s+Reporting\b/i.test(String(t || ""));
     const looksLikePcKind = (t) =>
-      /компьютер|на базе|x64|x86|it-based|à\s+base|processeur|архитектур|рабоч|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
+      /компьютер|на базе|x64|x86|it-based|à\s+base|processeur|архитектур|рабоч|робоч|настільн|мобильн|ноутбук|планшет|встраиваем|встроенн|masaüstü|dizüstü|taşınabilir|bilgisayar|temelli|baserad|arbetsstation|skrivbords|stationär|stationar|desktop|laptop|tablet|workstation|\bpc\b|based\s+pc/i.test(
         t
       );
     const looksLikeDriverKind = (t) =>
@@ -5642,6 +5714,7 @@
       /^Procesador$/i,
       /^Processador$/i,
       /^Процессор$/i,
+      /^Процесор$/u,
       /^处理器$/,
       /^プロセッサ$/,
       /^プロセッサー$/,
@@ -5658,7 +5731,7 @@
       if (!v || valueLooksLikeMsInfoProcessorDriverBlob(v)) continue;
       let score = 2;
       if (/^プロセッサ$/.test(it)) score += 8;
-      if (/^(Processor|Процессор)$/i.test(it)) score += 5;
+      if (/^(Processor|Процессор|Процесор)$/i.test(it)) score += 5;
       if (/^İşlemci$/u.test(it)) score += 5;
       if (
         /intel|amd|apple|qualcomm|snapdragon|core|ryzen|xeon|threadripper|インテル|エイジーエス|\.ghz|ghz|mhz|@|ファミリ/i.test(
@@ -6984,7 +7057,7 @@
     const problems = [];
     /** MSInfo “Problem Devices” lives under Components; Russian builds often use «Устройства с неполадками». */
     const problemPathRe =
-      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos\s+problem[aá]ticos|Dispositivos com problemas|Dispositivos\s+com\s+falhas|Dispositivos\s+defeituosos|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス|Sorunlu\s+Aygıtlar|Sorunlu\s+aygıtlar|Sorunlu\s+Cihazlar|Sorunlu\s+cihazlar/i;
+      /Problem Devices|Problemtreiber|Probleemapparaten|Dispositivos con problemas|Dispositivos\s+problem[aá]ticos|Dispositivos com problemas|Dispositivos\s+com\s+falhas|Dispositivos\s+defeituosos|Пристрої\s+з\s+неполадками|Проблемные устройства|Устройства с проблемами|Устройства с неполадками|Устройства с ошибками|Неисправные устройства|appareils problématiques|appareils avec des problèmes|dispositivi con problemi|probleem apparaten|problemhardware|设备有问题|問題のあるデバイス|不具合のあるデバイス|故障したデバイス|問題デバイス|問題のデバイス|Sorunlu\s+Aygıtlar|Sorunlu\s+aygıtlar|Sorunlu\s+Cihazlar|Sorunlu\s+cihazlar/i;
     const pathLooksLikeProblemDevices = (/** @type {string} */ p) => {
       const s = String(p || "");
       if (problemPathRe.test(s)) return true;
@@ -8423,6 +8496,20 @@
   }
 
   /**
+   * Ukrainian (uk-UA) MSInfo — distinct from Russian ({@code і}/{@code ї}/{@code є}, {@code Елемент}/{@code Значення} tags, {@code Відомості про систему}).
+   * @param {string} s
+   */
+  function looksLikeUkrainianWindowsCyrillicHint(s) {
+    const u = String(s || "");
+    return (
+      /\bВідомості\s+про\s+систему\b|\bПрограмне\s+середовище\b|\bНазва\s+ОС\b|\bУстановлена\s+фізична\s+пам/i.test(u) ||
+      /\bРобочий\s+стіл\b|\bЗбірка\b|\bНедоступно\b|\bСистемні\s+драйвери\b|\bЗмінні\s+оточення\b|\bМережеві\s+підключення\b/i.test(u) ||
+      /\bядер\s+\d+,\s*логічних\s+процесорів\b|\bлогічних\s+процесорів\b|\bелемент\b|\bзначення\b/i.test(u) ||
+      /\bПристрої\s+з\s+неполадками\b|\bКомпоненти\b|\bЗберігання\b/i.test(u)
+    );
+  }
+
+  /**
    * Best-effort offline UI language guess for MSInfo / Windows strings (no network). Scripts first, then Latin locales.
    * @param {string} blob
    * @returns {{ code: string, name: string, confidence: number }}
@@ -8434,7 +8521,10 @@
     if (/[\u0590-\u05FF]/.test(b)) return { code: "he", name: "Hebrew", confidence: 0.95 };
     if (/[\u3040-\u30FF\u31F0-\u31FF]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
     if (/[\uAC00-\uD7AF]/.test(b)) return { code: "ko", name: "Korean", confidence: 0.99 };
-    if (/[\u0400-\u04FF]/.test(b)) return { code: "ru", name: "Russian", confidence: 0.99 };
+    if (/[\u0400-\u04FF]/.test(b)) {
+      if (looksLikeUkrainianWindowsCyrillicHint(b)) return { code: "uk", name: "Ukrainian", confidence: 0.92 };
+      return { code: "ru", name: "Russian", confidence: 0.99 };
+    }
     if (/[\u0370-\u03FF]/.test(b)) return { code: "el", name: "Greek", confidence: 0.95 };
     if (/[\u0E00-\u0E7F]/.test(b)) return { code: "th", name: "Thai", confidence: 0.95 };
     if (/[\u0E80-\u0EFF]/.test(b)) return { code: "lo", name: "Lao", confidence: 0.9 };
@@ -8477,6 +8567,7 @@
     ja: "Japanese",
     ko: "Korean",
     ru: "Russian",
+    uk: "Ukrainian",
     el: "Greek",
     th: "Thai",
     lo: "Lao",
@@ -8757,6 +8848,93 @@
         ["Кб", "KB"],
         ["Нет", "No"],
         ["Да", "Yes"],
+  ];
+
+  /**
+   * Ukrainian (uk-UA) MSInfo / Windows UI → English (offline phrase map).
+   * @type {readonly (readonly [string, string])[]}
+   */
+  const LOCALE_PAIRS_MSINFO_UK = [
+    [
+      "Безпека на основі віртуалізації: обов’язкові властивості безпеки",
+      "Virtualization-based security Required Security Properties",
+    ],
+    [
+      "Безпека на основі віртуалізації: доступні властивості безпеки",
+      "Virtualization-based security Available Security Properties",
+    ],
+    ["Безпека на основі віртуалізації: налаштовані служби", "Virtualization-based security Configured Services"],
+    ["Безпека на основі віртуалізації: запущені служби", "Virtualization-based security Running Services"],
+    ["Безпека на основі віртуалізації", "Virtualization-based security"],
+    [
+      "Виявлено гіпервізор. Функції, що потребують Hyper-V, не відображатимуться.",
+      "A hypervisor has been detected. Features required for Hyper-V will not be displayed.",
+    ],
+    [
+      "Підтримка автоматичного шифрування пристрою",
+      "Automatic device encryption support",
+    ],
+    [
+      "Політика режиму користувача служби керування програмами для бізнесу",
+      "Enterprise Application Control user mode policy",
+    ],
+    ["Політика керування програмами для бізнесу", "Enterprise Application Control policy"],
+    ["Захист ПДП ядра", "Kernel DMA Protection"],
+    ["Гігагайта", "gigabytes"],
+    ["Гігабайт", "gigabyte"],
+    ["Мегабайта", "megabytes"],
+    ["Мегабайт", "megabyte"],
+    ["Терабайта", "terabytes"],
+    ["Терабайт", "terabyte"],
+    ["Кілобайта", "kilobytes"],
+    ["Кілобайт", "kilobyte"],
+    ["Установлена фізична пам’ять (ОЗП)", "Installed Physical Memory (RAM)"],
+    ["Установлена фізична память (ОЗП)", "Installed Physical Memory (RAM)"],
+    ["Загальний обсяг фізичної пам'яті", "Total Physical Memory"],
+    ["Доступно фізичної пам'яті", "Available Physical Memory"],
+    ["Усього віртуальної пам'яті", "Total Virtual Memory"],
+    ["Доступно віртуальної пам'яті", "Available Virtual Memory"],
+    ["Розмір файлу довантаження", "Page File Space"],
+    ["Файл довантаження", "Page File"],
+    ["Апаратнозалежний рівень (HAL)", "Hardware Abstraction Layer"],
+    ["Версія BIOS/Дата", "BIOS Version/Date"],
+    ["Модель BIOS", "BIOS Mode"],
+    ["Стан безпечного завантаження", "Secure Boot State"],
+    ["Конфігурація PCR7", "PCR7 Configuration"],
+    ["Папка Windows", "Windows Directory"],
+    ["Системна папка", "System Directory"],
+    ["Пристрій завантаження", "Boot Device"],
+    ["Часовий пояс", "Time Zone"],
+    ["Ім'я користувача", "User Name"],
+    ["Виробник ОС", "OS Manufacturer"],
+    ["Назва ОС", "OS Name"],
+    ["Назва системи", "System Name"],
+    ["Виробник", "Manufacturer"],
+    ["Інший опис ОС", "Other OS Description"],
+    ["Обліковий номер системи", "System SKU"],
+    ["Мова", "Locale"],
+    ["версія вбудованого контролера", "Embedded Controller Version"],
+    ["Версія SMBIOS", "SMBIOS Version"],
+    ["Тип системної плати", "BaseBoard Product"],
+    ["Виробник системної плати", "BaseBoard Manufacturer"],
+    ["Версія системної плати", "BaseBoard Version"],
+    ["Роль платформи", "Platform Role"],
+    ["Робочий стіл", "Desktop"],
+    ["Недоступно", "Not available"],
+    ["Увімкнути", "On"],
+    ["Вимкнути", "Off"],
+    ["Запущено", "Running"],
+    ["Застосовано", "Enforced"],
+    ["Аудит", "Audit"],
+    ["Прив'язка неможлива", "Cannot bind"],
+    ["логічних процесорів", "logical processors"],
+    ["Корпорація Майкрософт", "Microsoft Corporation"],
+    ["Програмне середовище / Повідомлення про помилки Windows", "Software Environment / Windows Error Reporting"],
+    ["Повідомлення про помилки Windows", "Windows Error Reporting"],
+    ["Програмне середовище", "Software Environment"],
+    ["Збірка", "Build"],
+    ["Версія", "Version"],
+    ["Процесор", "Processor"],
   ];
 
   /**
@@ -10582,6 +10760,7 @@
     /** @type {readonly (readonly [string, string])[]} */ (
       [
         ...LOCALE_PAIRS_MSINFO_RU,
+        ...LOCALE_PAIRS_MSINFO_UK,
         ...LOCALE_PAIRS_MSINFO_INTL,
         ...LOCALE_PAIRS_MSINFO_TR_SERVICES,
         ...LOCALE_PAIRS_MSINFO_PT_SERVICES,
@@ -10849,6 +11028,11 @@
       .replace(/(\d+)\s*N[uú]cleo\(s\)/giu, "$1 cores")
       .replace(/\b(\d+)\s+processadores\s+l[oó]gicos\b/giu, "$1 logical processors")
       .replace(/\b(\d+)\s+n[uú]cleos\b/giu, "$1 cores")
+      /** Ukrainian MSInfo — processor line “3800 МГц, ядер 8, логічних процесорів 16”; OS “10.0.26200 Збірка 26200”. */
+      .replace(/,\s*ядер\s+(\d+),\s*логічних\s+процесорів\s+(\d+)/giu, ", $1 cores, $2 logical processors")
+      .replace(/\bМГц\b/giu, "MHz")
+      .replace(/\bГГц\b/giu, "GHz")
+      .replace(/(\d+\.\d+\.\d+)\s+Збірка\s+(\d+)/giu, "$1 Build $2")
       /** Spanish WER (Problem Reports) — labels vary by build; regex covers spacing / short forms. */
       .replace(/\bNombre\s+de\s+evento\s*:/giu, "Event name:")
       .replace(/\bId\.\s*de\s+informe\s*:/giu, "Report identifier:")
@@ -11326,7 +11510,7 @@
    */
   function renderWindowsErrorReportsBody(entries, esc, i18nOpts) {
     if (!entries || entries.length === 0) {
-      return `<p class="summary-empty">No Windows Error Reporting / Problem Reports entries found in this export.</p>`;
+      return `<p class="summary-empty">No Windows Error Reporting / Problem Reports rows found in this export. MSInfo often <strong>omits</strong> the whole <strong>Software Environment → Windows Error Reporting</strong> branch when there are no archived problem reports, so there is nothing for this viewer to parse. Open the same <code>.nfo</code> in <strong>msinfo32</strong> and confirm that section exists; if it does not appear there either, export again after a problem is logged or check Windows build behavior.</p>`;
     }
     const uid = `w${Math.random().toString(36).slice(2, 10)}`;
     const analysis = werAnalyze(entries);
@@ -11510,11 +11694,19 @@
   }
 
   /**
+   * Heuristic: Ukrainian (uk-UA) {@code msinfo32} export — Cyrillic; distinct paths/tags vs Russian.
+   * @param {NonNullable<ReturnType<typeof extractSystemSummary>>} sum
+   */
+  function msinfoExportLooksUkrainian(sum) {
+    return looksLikeUkrainianWindowsCyrillicHint(msinfoExportTextBlobForLocale(sum));
+  }
+
+  /**
    * {@code <dt>} label: always English by default (values can still be toggled via Translate).
    * @param {string} enLabel
    * @param {string} esLabel
    * @param {string} frLabel
-   * @param {"es" | "fr" | "pt" | "tr" | null} summaryLoc
+   * @param {"es" | "fr" | "pt" | "tr" | "uk" | null} summaryLoc
    * @param {(s: string) => string} escFn
    * @param {{ forceI18nSpan?: boolean } | undefined} i18nOpts
    */
@@ -11561,8 +11753,20 @@
     const turkishExport = !frHit && msinfoExportLooksTurkish(sum);
     const portugueseExport = !frHit && !turkishExport && msinfoExportLooksPortuguese(sum);
     const spanishExport = !frHit && !turkishExport && !portugueseExport && msinfoExportLooksSpanish(sum);
-    const summaryLoc = frHit ? "fr" : turkishExport ? "tr" : portugueseExport ? "pt" : spanishExport ? "es" : null;
-    /** When the export is Spanish, French, or Turkish, force {@code .sum-i18n} on values so section Translate can update cells. */
+    const ukrainianExport =
+      !frHit && !turkishExport && !portugueseExport && !spanishExport && msinfoExportLooksUkrainian(sum);
+    const summaryLoc = frHit
+      ? "fr"
+      : turkishExport
+        ? "tr"
+        : portugueseExport
+          ? "pt"
+          : spanishExport
+            ? "es"
+            : ukrainianExport
+              ? "uk"
+              : null;
+    /** When the export is localized (incl. Ukrainian Cyrillic), force {@code .sum-i18n} on values so section Translate can update cells. */
     const summaryLblOpts = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
     const sumI18nSummary = summaryLoc ? summaryLblOpts : undefined;
 
@@ -11664,7 +11868,9 @@
       ? `<thead><tr><th scope="col">Nombre</th><th scope="col">Comando</th><th scope="col">Ubicación</th><th scope="col">Usuario</th></tr></thead>`
       : portugueseExport
         ? `<thead><tr><th scope="col">Nome</th><th scope="col">Comando</th><th scope="col">Localização</th><th scope="col">Usuário</th></tr></thead>`
-        : `<thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead>`;
+        : ukrainianExport
+          ? `<thead><tr><th scope="col">Ім'я</th><th scope="col">Команда</th><th scope="col">Розташування</th><th scope="col">Користувач</th></tr></thead>`
+          : `<thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead>`;
     const startupBody =
       startups.length > 0
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Startup programs">${_startupHead}<tbody>${startups
@@ -11692,7 +11898,9 @@
         ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicio", esc, undefined, svcI18nOpts)}</th></tr></thead>`
         : portugueseExport && svcI18nOpts
           ? `<thead><tr><th scope="col">${sumI18nSpan("Nome", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicialização", esc, undefined, svcI18nOpts)}</th></tr></thead>`
-          : `<thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead>`;
+          : ukrainianExport && svcI18nOpts
+            ? `<thead><tr><th scope="col">${sumI18nSpan("Назва", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Стан", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Тип запуску", esc, undefined, svcI18nOpts)}</th></tr></thead>`
+            : `<thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead>`;
     const svcRows = (list) =>
       list.length > 0
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="${esc("Services")}">${svcTableHead}<tbody>${list
@@ -11709,7 +11917,7 @@
       icon: "services",
       alwaysOfferTranslate: svcOfferTranslate,
     });
-    const servicesRunMsg = `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Em execução</em>, <em>Çalışıyor</em>, <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
+    const servicesRunMsg = `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Em execução</em>, <em>Çalışıyor</em>, <em>Виконується</em>, <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
     const runningBody = runningList.length > 0 ? svcRows(runningList) : servicesRunMsg;
     const runningHtml = renderReportCategoryAccordion("Running Services", runningBody, esc, {
       count: runningList.length || null,

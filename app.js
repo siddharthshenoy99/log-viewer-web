@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.8";
+  const APP_VERSION = "1.5.9";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -2616,6 +2616,93 @@
       out.push(d);
     }
     return out;
+  }
+
+  /**
+   * Lightweight fallback: collect every adapter row we can identify so the Network section can show
+   * something even when no adapter has a usable IPv4/IPv6 in the export ({@code Не доступно} everywhere).
+   * @param {{ path: string, item: string, value: string }[]} kvs
+   * @param {{ path: string, fields: Record<string, string> }[]} rows
+   * @returns {{ name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string }[]}
+   */
+  function extractAllNetworkAdaptersFallback(kvs, rows) {
+    /** @type {{ name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string }[]} */
+    const out = [];
+    const seenNames = new Set();
+    /** Scan flat path-keyed kvs so we can also rebuild adapters from sequential Item/Value rows. */
+    /** @type {Map<string, { name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string }>} */
+    const lastByPath = new Map();
+    /** @type {Map<string, { path: string, item: string, value: string }[]>} */
+    const kvsByPath = new Map();
+    for (const k of kvs) {
+      if (!pathLooksLikeNetworkSection(k.path)) continue;
+      if (!kvsByPath.has(k.path)) kvsByPath.set(k.path, []);
+      kvsByPath.get(k.path).push(k);
+    }
+    /** @param {Record<string, string>} f */
+    const pickFromFields = (f) => {
+      if (!f) return null;
+      const name = String(
+        f["Ім'я"] || f["Імʼя"] || f["Ім_я"] || f.Name || f.Namn || f.Nombre || f.Nome || f["名前"] || f.Имя || ""
+      ).trim();
+      const productType = String(
+        f["Тип продукту"] || f["Тип_продукту"] || f["Product Type"] || f["Тип продукции"] || f["Тип продукта"] || ""
+      ).trim();
+      const dhcpEnabled = String(
+        f["DHCP увімк."] || f["DHCP_увімк_"] || f["DHCP Enabled"] || f["DHCP включен"] || ""
+      ).trim();
+      const macAddress = String(
+        f["MAC-адреса"] || f["MAC_адреса"] || f["MAC Address"] || f["MAC-адрес"] || ""
+      ).trim();
+      const serviceName = String(
+        f["Ім'я служби"] || f["Імʼя служби"] || f["Ім_я_служби"] || f["Service Name"] || f["Имя службы"] || ""
+      ).trim();
+      if (!name && !productType && !macAddress && !serviceName) return null;
+      return { name: name || productType, productType, dhcpEnabled, macAddress, serviceName };
+    };
+    for (const r of rows) {
+      if (!pathLooksLikeNetworkSection(r.path)) continue;
+      const e = pickFromFields(r.fields);
+      if (!e) continue;
+      const key = `${r.path}\u0001${e.name.toLowerCase()}`;
+      if (e.name && seenNames.has(key)) continue;
+      seenNames.add(key);
+      out.push(e);
+    }
+    /** @type {Map<string, { lab: string, val: string }[]>} */
+    const groupsByPath = new Map();
+    for (const [path, list] of kvsByPath) {
+      /** @type {{ name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string } | null} */
+      let cur = null;
+      for (const k of list) {
+        const it = String(k.item || "").trim();
+        const v = String(k.value || "").trim();
+        const itLower = it.toLowerCase();
+        if (/^(ім['ʼ]я|name|namn|nombre|nome|имя)$/iu.test(it)) {
+          if (cur && cur.name) out.push(cur);
+          cur = { name: v, productType: "", dhcpEnabled: "", macAddress: "", serviceName: "" };
+          continue;
+        }
+        if (!cur) continue;
+        if (/^(тип продукту|product type|тип продукции|тип продукта)$/iu.test(it)) cur.productType = v;
+        else if (/^(dhcp увімк\.|dhcp enabled|dhcp включен)$/iu.test(it)) cur.dhcpEnabled = v;
+        else if (/^(mac-адреса|mac address|mac-адрес)$/iu.test(it)) cur.macAddress = v;
+        else if (/^(ім['ʼ]я служби|service name|имя службы)$/iu.test(it)) cur.serviceName = v;
+        void itLower;
+        void groupsByPath;
+        void lastByPath;
+      }
+      if (cur && cur.name) {
+        const key = `${path}\u0001${cur.name.toLowerCase()}`;
+        if (!seenNames.has(key)) {
+          seenNames.add(key);
+          out.push(cur);
+        }
+      }
+    }
+    /** Filter out clearly virtual / placeholder entries (Kernel Debug, WAN Miniport variants) when something better exists. */
+    const realish = out.filter((a) => !/Kernel\s+Debug|WAN\s+Miniport|Microsoft\s+ISATAP|Microsoft\s+Teredo|6to4/i.test(a.name));
+    return realish.length ? realish : out;
   }
 
   /**
@@ -7484,6 +7571,7 @@
     }
 
     const networkAdapters = summarizeNetworkAdapters(kvs, rows);
+    const allNetworkAdapters = extractAllNetworkAdaptersFallback(kvs, rows);
 
     /** @param {RegExp | RegExp[]} labelRe */
     const pickSummaryMemory = (labelRe) => pickSummaryMemoryI18n(labelRe, kvs, rows);
@@ -7783,6 +7871,7 @@
       },
       problems,
       networkAdapters,
+      allNetworkAdapters,
     };
   }
 
@@ -9153,6 +9242,92 @@
     ["ГГц", "GHz"],
     ["гГц", "GHz"],
     ["Гц", "Hz"],
+    /** Ukrainian display / GPU adapter strings ("…-сумісний"). */
+    ["NVIDIA-сумісний", "NVIDIA-compatible"],
+    ["AMD-сумісний", "AMD-compatible"],
+    ["Intel-сумісний", "Intel-compatible"],
+    ["Direct3D-сумісний", "Direct3D-compatible"],
+    ["Advanced Micro Devices, Inc.-сумісний", "Advanced Micro Devices, Inc.-compatible"],
+    ["сумісний відеоадаптер", "compatible video adapter"],
+    ["сумісний", "compatible"],
+    /** Ukrainian Windows Error Reporting (WER) detail labels seen in this MSInfo file. */
+    ["Сегмент пам'яті з помилкою", "Faulting bucket"],
+    ["Сегмент пам’яті з помилкою", "Faulting bucket"],
+    ["Гешований сегмент пам'яті", "Hashed container"],
+    ["Гешований сегмент пам’яті", "Hashed container"],
+    ["Ім'я події", "Event name"],
+    ["Ім’я події", "Event name"],
+    ["Імʼя події", "Event name"],
+    ["Відповідь:", "Response:"],
+    ["Відповідь", "Response"],
+    ["Код CAB-файлу", "CAB file ID"],
+    ["GUID CAB-файлу", "CAB file GUID"],
+    ["Підпис проблеми", "Problem signature"],
+    ["Вкладені файли", "Attached files"],
+    ["Можливе розташування файлів", "Files that may be available"],
+    ["Символ аналізу", "Analysis symbol"],
+    ["Повторний пошук рішення", "Re-checking for a solution"],
+    ["Код звіту", "Report ID"],
+    ["Стан звіту", "Report status"],
+    ["Звітування про критичні помилки Windows", "Windows Error Reporting"],
+    /** Ukrainian Windows service display names (from language-adder export). */
+    ["Антивірус для Microsoft Defender", "Microsoft Defender Antivirus"],
+    ["Брандмауер для Захисника Windows", "Windows Defender Firewall"],
+    ["Служба мережевої перевірки Антивірусу для Microsoft Defender", "Microsoft Defender Antivirus Network Inspection Service"],
+    ["Основна служба Microsoft Defender", "Microsoft Defender Core Service"],
+    ["Служба \"Безпека у Windows\"", "Windows Security Service"],
+    ["Служба настроювання мережі", "Network Setup Service"],
+    ["Служба сховища", "Storage Service"],
+    ["Служба списку мереж", "Network List Service"],
+    ["Служба телефонного зв’язку", "Telephony"],
+    ["Служба телефонного зв'язку", "Telephony"],
+    ["Служба HID", "Human Interface Device Service"],
+    ["Служба інсталяції Microsoft Store", "Microsoft Store Install Service"],
+    ["Служба користувача сповіщень Windows", "Windows Push Notifications User Service"],
+    ["Служба користувачів буфера обміну", "Clipboard User Service"],
+    ["Служба підтримки користувача Bluetooth", "Bluetooth User Support Service"],
+    ["Служба ліцензій клієнта (ClipSVC)", "Client License Service (ClipSVC)"],
+    ["Служба завантаження зображень Windows", "Windows Image Acquisition (WIA)"],
+    ["Служба оцінювання Windows", "Windows Assessment Service"],
+    ["Служба спільного доступу до мережі медіапрогравача Windows", "Windows Media Player Network Sharing Service"],
+    ["Служба Windows \"Мобільна точка доступу\"", "Windows Mobile Hotspot Service"],
+    ["Служба Оновлення ASUS (asus)", "ASUS Update Service (asus)"],
+    ["Служба Оновлення ASUS (asusm)", "ASUS Update Service (asusm)"],
+    ["Внутрішній сервіс оновлення Google", "Google Updater Internal Service"],
+    ["Сервіс оновлення Google", "Google Updater Service"],
+    ["Windows Connect Now – реєстрація настройок", "Windows Connect Now - Config Registrar"],
+    ["Автонастроювання WLAN", "WLAN AutoConfig"],
+    ["Автоконфігурування проводових підключень", "Wired AutoConfig"],
+    ["Батьківський контроль", "Parental Controls"],
+    ["Визначення устаткування оболонки", "Shell Hardware Detection"],
+    ["Використання даних", "Data Usage"],
+    ["Диспетчер облікових даних", "Credential Manager"],
+    ["Доступ до даних користувача", "User Data Access"],
+    ["Зберігання даних користувача", "User Data Storage"],
+    ["Контактні дані", "Contact Data"],
+    ["Контейнер Microsoft Passport", "Microsoft Passport Container"],
+    ["Клієнт групової політики", "Group Policy Client"],
+    ["Мережні підключення", "Network Connections"],
+    ["Мережева служба Xbox Live", "Xbox Live Networking Service"],
+    ["Збереження гри в Xbox Live", "Xbox Live Game Save"],
+    ["Планувальник завдань", "Task Scheduler"],
+    ["Функціональні можливості для підключених користувачів і телеметрія", "Connected User Experiences and Telemetry"],
+    ["Відомості про мережеве розташування", "Network Location Awareness"],
+    ["Диспетчер завантажених карт", "Downloaded Maps Manager"],
+    ["Додатковий вхід", "Secondary Logon"],
+    ["Засіб відображення топології канального рівня", "Link-Layer Topology Discovery Mapper"],
+    ["Інсталятор Windows", "Windows Installer"],
+    ["Керування застосунками", "Application Management"],
+    ["Оптимізація роботи дисків", "Optimize drives"],
+    ["Передавання сертифікатів", "Certificate Propagation"],
+    ["Переривання SNMP", "SNMP Trap"],
+    ["Переспрямовувач портів для режиму користувача служб віддалених робочих столів", "Remote Desktop Services UserMode Port Redirector"],
+    ["Підтримка панелі керування \"Звіти про неполадки\"", "Problem Reports Control Panel Support"],
+    ["Політика видалення смарт-картки", "Smart Card Removal Policy"],
+    ["Рекомендована служба усунення неполадок", "Recommended Troubleshooting Service"],
+    ["Розширення та сповіщення принтера", "Printer Extensions and Notifications"],
+    ["Смарт-картка", "Smart Card"],
+    ["Телефонія", "Telephony"],
     ["Установлена фізична пам’ять (ОЗП)", "Installed Physical Memory (RAM)"],
     ["Установлена фізична память (ОЗП)", "Installed Physical Memory (RAM)"],
     ["Загальний обсяг фізичної пам'яті", "Total Physical Memory"],
@@ -11423,6 +11598,19 @@
       .replace(/\bГГц\b/giu, "GHz")
       .replace(/(\d+\.\d+\.\d+)\s+Збірка\s+(\d+)/giu, "$1 Build $2")
       .replace(/\bРобочий\s+стіл\b/giu, "Desktop")
+      /** Ukrainian byte-suffix forms: “байтів / байтiв / байт” (handle longest first to avoid “bytesів”). */
+      .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?:і|i)в/giu, "$1 bytes")
+      .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?=[\s),]|$)/giu, "$1 bytes")
+      /** Ukrainian display / GPU adapter strings ("…-сумісний"). */
+      .replace(/\bNVIDIA-сумісний\b/giu, "NVIDIA-compatible")
+      .replace(/\bAMD-сумісний\b/giu, "AMD-compatible")
+      .replace(/\bIntel-сумісний\b/giu, "Intel-compatible")
+      .replace(/-сумісний\b/giu, "-compatible")
+      .replace(/\bсумісний\b/giu, "compatible")
+      /** Ukrainian misc UI strings. {@code \b} is ASCII-only in JS — use Unicode boundaries (start/space/punct). */
+      .replace(/(^|[\s,;:()\[\]"'])Недоступно([\s,;:()\[\]"'.]|$)/gu, "$1Not available$2")
+      .replace(/(^|[\s,;:()\[\]"'])Так([\s,;:()\[\]"'.]|$)/gu, "$1Yes$2")
+      .replace(/(^|[\s,;:()\[\]"'])Ні([\s,;:()\[\]"'.]|$)/gu, "$1No$2")
       /** Spanish WER (Problem Reports) — labels vary by build; regex covers spacing / short forms. */
       .replace(/\bNombre\s+de\s+evento\s*:/giu, "Event name:")
       .replace(/\bId\.\s*de\s+informe\s*:/giu, "Report identifier:")
@@ -12202,6 +12390,29 @@
           </li>`;
         })
         .join("")}</ul>`;
+    } else if (Array.isArray(sum.allNetworkAdapters) && sum.allNetworkAdapters.length) {
+      /** Fallback: this MSInfo export reports the adapters but with no usable IPv4/IPv6 (e.g. "Not Available"). Show them anyway with a hint. */
+      netBody = `<p class="summary-lede">No adapter in this export reported a usable IPv4 / IPv6 — showing the raw entries from <strong>Components → Network → Adapter</strong>. Open MSInfo on the live system for current addresses.</p><ul class="network-adapters">${sum.allNetworkAdapters
+        .map((a) => {
+          const name = String(a.name || "(unnamed adapter)");
+          const productType = String(a.productType || "");
+          const dhcpEnabled = String(a.dhcpEnabled || "");
+          const macAddr = String(a.macAddress || "");
+          const serviceName = String(a.serviceName || "");
+          const meta = [
+            productType ? `<div class="network-adapter__meta"><span class="muted-label">Product type</span> <span>${sumI18nSpan(productType, esc, undefined, netI18nOpts)}</span></div>` : "",
+            macAddr ? `<div class="network-adapter__meta"><span class="muted-label">MAC address</span> <span>${esc(macAddr)}</span></div>` : "",
+            dhcpEnabled ? `<div class="network-adapter__meta"><span class="muted-label">DHCP enabled</span> <span>${sumI18nSpan(dhcpEnabled, esc, undefined, netI18nOpts)}</span></div>` : "",
+            serviceName ? `<div class="network-adapter__meta"><span class="muted-label">Service name</span> <span>${esc(serviceName)}</span></div>` : "",
+          ]
+            .filter(Boolean)
+            .join("");
+          return `<li class="network-adapter">
+            <div class="network-adapter__name">${sumI18nSpan(name, esc, undefined, netI18nOpts)}</div>
+            ${meta}
+          </li>`;
+        })
+        .join("")}</ul>`;
     } else {
       netBody =
         '<p class="summary-empty">No matching adapters (usable IPv4 or global IPv6, plus DNS or gateway/DHCP server in the export). Bluetooth and PAN are ignored.</p>';
@@ -12366,11 +12577,15 @@
       alwaysOfferTranslate: gpuCount > 0,
       defaultTranslateOn,
     });
-    const netCount = Array.isArray(sum.networkAdapters) ? sum.networkAdapters.length : 0;
+    const netCount =
+      (Array.isArray(sum.networkAdapters) ? sum.networkAdapters.length : 0) ||
+      (Array.isArray(sum.allNetworkAdapters) ? sum.allNetworkAdapters.length : 0);
     const networkHtml = renderReportCategoryAccordion("Network (Internet)", netBody, esc, {
       count: netCount || null,
       icon: "network",
-      alwaysOfferTranslate: !!(sum.networkAdapters && sum.networkAdapters.length),
+      alwaysOfferTranslate:
+        !!(sum.networkAdapters && sum.networkAdapters.length) ||
+        !!(sum.allNetworkAdapters && sum.allNetworkAdapters.length),
       defaultTranslateOn,
     });
 

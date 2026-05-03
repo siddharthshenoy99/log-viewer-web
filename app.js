@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.6";
+  const APP_VERSION = "1.5.7";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -762,6 +762,8 @@
       /^versi[oó]n\s+del\s+software\s+del\s+controlador$/i.test(it) ||
       /^versi[oó]n\s+del\s+driver$/i.test(it) ||
       /^версия\s*драйвера$/i.test(it) ||
+      /** Ukrainian (uk-UA) — {@code Версія драйвера}. */
+      /^версія\s*драйвера$/iu.test(it) ||
       /^sürücü\s+sürümü$/iu.test(it) ||
       /^sürücü\s+versiyonu$/iu.test(it) ||
       /^vers[aã]o\s+do\s+driver$/iu.test(it) ||
@@ -787,6 +789,10 @@
       /^nome\s+do\s+adaptador$/iu.test(it) ||
       /^nome\s+do\s+dispositivo$/iu.test(it) ||
       /^имя$/i.test(it) ||
+      /** Ukrainian (uk-UA) — {@code Ім'я}. */
+      /^ім'я$/iu.test(it) ||
+      /^імʼя$/iu.test(it) ||
+      /^назва$/iu.test(it) ||
       /^наименование$/i.test(it) ||
       /^ad$/iu.test(it) ||
       /^adı$/iu.test(it) ||
@@ -807,6 +813,10 @@
         "Nom",
         "Имя",
         "Наименование",
+        /** Ukrainian (uk-UA) — {@code Ім'я} (XML serializes as raw text in Cyrillic apostrophe). */
+        "Ім'я",
+        "Імʼя",
+        "Назва",
         "Ad",
         "Adı",
         "İsim",
@@ -821,6 +831,9 @@
           fields.Nom ||
           fields.Имя ||
           fields["Наименование"] ||
+          fields["Ім'я"] ||
+          fields["Імʼя"] ||
+          fields["Назва"] ||
           fields.Ad ||
           fields["Adı"] ||
           fields["İsim"] ||
@@ -842,6 +855,8 @@
       /^nuvarande\s+uppl[öo]sning$/iu.test(it) ||
       /^resoluci[oó]n(\s+actual)?$/i.test(it) ||
       /^разрешение$/i.test(it) ||
+      /** Ukrainian (uk-UA) — {@code Роздільна здатність}. */
+      /^роздільна\s+здатність$/iu.test(it) ||
       /^çözünürlük$/iu.test(it) ||
       /^geçerli\s+çözünürlük$/iu.test(it) ||
       /^resolu(ção|cao)$/iu.test(it) ||
@@ -1099,6 +1114,8 @@
         "Mémoire vive sur la carte",
         "ОЗУ адаптера",
         "Память адаптера",
+        /** Ukrainian (uk-UA) — {@code ОЗП адаптера}. */
+        "ОЗП адаптера",
         "Bağdaştırıcı RAM",
         "Bağdaştırıcı RAM'i",
         "Bağdaştırıcı RAMi",
@@ -1153,6 +1170,10 @@
     const fromLabels = displayFieldByLabels(fields, [
       "PNP Device ID",
       "PNP_Device_ID",
+      /** Ukrainian (uk-UA) — {@code Код PNP-пристрою}. */
+      "Код PNP-пристрою",
+      "Код_пристрою_PNP",
+      "Код пристрою PNP",
       "ID de périphérique Plug-and-Play",
       "ID du périphérique Plug-and-Play",
       "ID de périphérique Plug and Play",
@@ -1199,10 +1220,10 @@
   /** @param {string} path */
   function isMsInfoDisplayRelatedPath(path) {
     return (
-      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Affichage|Carte\s+graphique|Cartes\s+graphiques|Contr[oô]leur\s+vid[eé]o|Contr[oô]leurs\s+vid[eé]o|Écran|Ecran|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|Görüntü|Ekran|Grafik|Grafikler|Bileşenler.*Görüntü|Bildskärm|Grafikkort|Skärm|Komponenter.*(?:Bildskärm|Grafik|Grafikkort)|Exibi[cç][aã]o|Exibicao|V[ií]deo|Pantalla|Tarjeta\s+gr[aá]fica|Placa\s+de\s+v[ií]deo|Componentes.*(?:Exibi|V[ií]deo|Monitor|Pantalla)|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
+      /Display|Monitor|Graphics|Video|VideoController|Videocontroller|Affichage|Carte\s+graphique|Cartes\s+graphiques|Contr[oô]leur\s+vid[eé]o|Contr[oô]leurs\s+vid[eé]o|Écran|Ecran|Дисплей|Экран|Видео|Монитор|Видеоконтроллер|Видеоадапт|Екран|Дисплей|Відеоадаптер|Відеоконтролер|Відеокарта|Görüntü|Ekran|Grafik|Grafikler|Bileşenler.*Görüntü|Bildskärm|Grafikkort|Skärm|Komponenter.*(?:Bildskärm|Grafik|Grafikkort)|Exibi[cç][aã]o|Exibicao|V[ií]deo|Pantalla|Tarjeta\s+gr[aá]fica|Placa\s+de\s+v[ií]deo|Componentes.*(?:Exibi|V[ií]deo|Monitor|Pantalla)|表示|ディスプレイ|グラフィック|グラフィックス|ビデオ|モニター|モニタ|ビデオアダプタ|ビデオ\s*コントローラ/i.test(
         path
       ) &&
-      !/USB.*Audio|Sound Driver|Audio Device|Périphérique\s+audio|Périphériques\s+audio|P[ée]riph[ée]rique\s+audio|P[ée]riph[ée]riques\s+audio|Звук|аудио|オーディオ|サウンド/i.test(
+      !/USB.*Audio|Sound Driver|Audio Device|Périphérique\s+audio|Périphériques\s+audio|P[ée]riph[ée]rique\s+audio|P[ée]riph[ée]riques\s+audio|Звук|аудио|Звуковий\s+пристрій|オーディオ|サウンド/i.test(
         path
       )
     );
@@ -1637,6 +1658,8 @@
           "Versão do driver",
           "Versão do Driver",
           "Версия драйвера",
+          /** Ukrainian (uk-UA) — {@code Версія драйвера}. */
+          "Версія драйвера",
           "Sürücü Sürümü",
           "Sürücü Versiyonu",
           "ドライバーのバージョン",
@@ -1655,6 +1678,8 @@
           "Tipo de Adaptador",
           "Тип адаптера",
           "Описание адаптера",
+          /** Ukrainian (uk-UA) — {@code Тип адаптера} / {@code Опис адаптера}. */
+          "Опис адаптера",
           "Bağdaştırıcı Türü",
           "アダプターの種類",
           "アダプター種類",
@@ -1691,6 +1716,8 @@
           "Versão do driver",
           "Versão do Driver",
           "Версия драйвера",
+          /** Ukrainian (uk-UA) — {@code Версія драйвера}. */
+          "Версія драйвера",
           "Sürücü Sürümü",
           "Sürücü Versiyonu",
           "ドライバーのバージョン",
@@ -1709,6 +1736,8 @@
           "Tipo de Adaptador",
           "Тип адаптера",
           "Описание адаптера",
+          /** Ukrainian (uk-UA) — {@code Тип адаптера} / {@code Опис адаптера}. */
+          "Опис адаптера",
           "Bağdaştırıcı Türü",
           "アダプターの種類",
           "アダプター種類",
@@ -1834,6 +1863,11 @@
       fields.Nom ||
       fields["Adı"] ||
       fields.Имя ||
+      /** Ukrainian (uk-UA) — XML tag {@code <Ім_я>} or text {@code Ім'я}. */
+      fields["Ім_я"] ||
+      fields["Ім'я"] ||
+      fields["Імʼя"] ||
+      fields["Назва"] ||
       fields["名前"] ||
       fields["デバイス名"] ||
       fields.Device ||
@@ -2289,6 +2323,7 @@
       /\bAdaptadores\s+de\s+red\b|\bConexiones\s+de\s+red\b|Componentes\s*\/\s*Red(?:\s*\/|\s*$)/i.test(p) ||
       /ağ\s*bağdaştırıcıları|ağ\s*bağlantıları|bağdaştırıcı|Bileşenler.*Ağ|Bileşenler.*ağ/i.test(p) ||
       /\bсеть\b|сетев|адаптер|tcp\s*\/\s*ip|беспровод|подключен|удаленн|компоненты.*сеть|сеть.*адапт/i.test(p) ||
+      /Мережа|Мережев|Бездротов|Підключенн|Адаптер|Компоненти.*Мережа|Мережев.*адаптер|Мережеві\s+підключення/iu.test(p) ||
       /\b(red|netwerk|netværk|nettverk|verkko|sieć|síť|rețea|ağ|δίκτυο|võrk|网络|網路|ネットワーク|네트워크|شبكة)\b/i.test(
         p
       ) ||
@@ -2955,6 +2990,12 @@
     if (m) return m[1];
     m = s.match(/\bCompila[cç][aã]o\s+(\d{4,6})\b/i);
     if (m) return m[1];
+    /** Ukrainian (uk-UA) — {@code Збірка}. */
+    m = s.match(/Збірка\s+(\d{4,6})/iu);
+    if (m) return m[1];
+    /** Russian — {@code Сборка}. */
+    m = s.match(/Сборка\s+(\d{4,6})/iu);
+    if (m) return m[1];
     m = s.match(/\b10\.0\.(\d{4,6})\b/);
     if (m) return m[1];
     m = s.match(/\b11\.0\.(\d{4,6})\b/);
@@ -3197,9 +3238,12 @@
       );
     };
 
-    /** Swedish MSInfo lists bytes after parentheses; derive used when “Använt utrymme” is absent. */
+    /** Swedish/Ukrainian/Russian MSInfo lists bytes after parentheses; derive used when “Used” is absent. */
     const parseMsinfoParenBytes = (/** @type {string} */ s) => {
-      const m = String(s || "").match(/\(([\d\s\u00A0\u202F]+)\s*(?:byte|bytes|octets)\)/i);
+      /** Ukrainian {@code байтів}, Russian {@code байт/байтов}, Turkish {@code bayt}. */
+      const m = String(s || "").match(
+        /\(([\d\s\u00A0\u202F]+)\s*(?:byte|bytes|octets|bayt|байт(?:і?в|а|ов)?)\)/iu
+      );
       if (!m) return null;
       const digits = m[1].replace(/[\s\u00A0\u202F]/g, "").replace(/\u2212/g, "-");
       try {
@@ -3219,13 +3263,13 @@
       const spaced = String(ub).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
       if (n >= 1e12) {
         const t = n / 1e12;
-        return `${String(t.toFixed(2)).replace(".", ",")} TB (${spaced} byte)`;
+        return `${String(t.toFixed(2)).replace(".", ",")} TB (${spaced} bytes)`;
       }
       if (n >= 1e9) {
         const g = n / 1e9;
-        return `${String(g.toFixed(2)).replace(".", ",")} GB (${spaced} byte)`;
+        return `${String(g.toFixed(2)).replace(".", ",")} GB (${spaced} bytes)`;
       }
-      return `${spaced} byte`;
+      return `${spaced} bytes`;
     };
 
     const driveKeyNorm = (/** @type {string} */ k) => msinfoFieldKeyNormLower(String(k || ""));
@@ -3889,6 +3933,10 @@
       "Программа",
       "Элемент",
       "Элемент автозагрузки",
+      /** Ukrainian (uk-UA) MSInfo Startup Programs row tags. */
+      "Програма",
+      "Назва",
+      "Елемент автозавантаження",
       "启动项",
       "啟動項目",
       "スタートアップ項目",
@@ -3899,6 +3947,8 @@
     for (const [k, v] of Object.entries(f)) {
       const kt = String(k || "").trim();
       if (/^программ/i.test(kt) && String(v || "").trim()) return String(v).trim();
+      /** Ukrainian XML tags use underscores (e.g. {@code Програма}). */
+      if (/^програм/i.test(kt) && String(v || "").trim()) return String(v).trim();
     }
     return "";
   }
@@ -3942,6 +3992,9 @@
       "Команда",
       "Строка команды",
       "Параметры",
+      /** Ukrainian — same word as Russian but appears as a sibling tag in {@code <Data>}. */
+      "Команда запуску",
+      "Командний рядок",
       "启动命令",
       "啟動命令",
       "コマンド",
@@ -3993,6 +4046,9 @@
       "Раздел реестра",
       "Размещение",
       "Ключ",
+      /** Ukrainian (uk-UA) startup programs Location column. */
+      "Розташування",
+      "Розміщення",
       "注册表项",
       "登錄機碼",
       "レジストリ キー",
@@ -4003,6 +4059,8 @@
     for (const [k, v] of Object.entries(f)) {
       const kt = String(k || "").trim();
       if (/^размещ/i.test(kt) && String(v || "").trim()) return String(v).trim();
+      if (/^розташ/i.test(kt) && String(v || "").trim()) return String(v).trim();
+      if (/^розміщ/i.test(kt) && String(v || "").trim()) return String(v).trim();
     }
     return "";
   }
@@ -4032,6 +4090,10 @@
       "Kullanıcı",
       "Пользователь",
       "Имя пользователя",
+      /** Ukrainian (uk-UA) startup programs User column. */
+      "Користувач",
+      "Ім'я користувача",
+      "Імʼя користувача",
       "用户",
       "使用者",
       "ユーザー",
@@ -4042,6 +4104,7 @@
     for (const [k, v] of Object.entries(f)) {
       const kt = String(k || "").trim();
       if (/^пользо/i.test(kt) && String(v || "").trim()) return String(v).trim();
+      if (/^користув/i.test(kt) && String(v || "").trim()) return String(v).trim();
     }
     return "";
   }
@@ -4203,10 +4266,10 @@
       const s = String(p || "");
       const leaf = startupLeafName(s);
       const startupHint =
-        /Startup Programs|Startup\s*Command|Autostart|Autostartprogramme|Programme beim Start|Programmes au démarrage|Programmes de démarrage|Programas de inicio|Programas de inicialização|Programas de arranque|Programmi di avvio|Autostart-programmer|Autostartprogrammer|Oppstartsprogrammer|Käynnistysohjelmat|Opstartprogramma|Opstartprogramma's|Programy startowe|Başlangıç programları|自動実行|スタートアップ\s*プログラム|スタートアッププログラム|スタートアップ|啟動|启动|자동 실행|Käivitusprogrammid|Rendszerindító|Program de pornire|Spouštěcí programy|Spouštěcí aplikace|Автозагрузка|автозагруз|элементы автозагруз|элемент автозагруз|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Запуск программ|启动程序|CurrentVersion\s*[/\\]\s*Run|\/\s*Run\s*(\/|$)/i.test(
+        /Startup Programs|Startup\s*Command|Autostart|Autostartprogramme|Programme beim Start|Programmes au démarrage|Programmes de démarrage|Programas de inicio|Programas de inicialização|Programas de arranque|Programmi di avvio|Autostart-programmer|Autostartprogrammer|Oppstartsprogrammer|Käynnistysohjelmat|Opstartprogramma|Opstartprogramma's|Programy startowe|Başlangıç programları|自動実行|スタートアップ\s*プログラム|スタートアッププログラム|スタートアップ|啟動|启动|자동 실행|Käivitusprogrammid|Rendszerindító|Program de pornire|Spouštěcí programy|Spouštěcí aplikace|Автозагрузка|автозагруз|элементы автозагруз|элемент автозагруз|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Запуск программ|Автоматично\s+завантажувані\s+програми|автозавантаж|Автозавантаження|启动程序|CurrentVersion\s*[/\\]\s*Run|\/\s*Run\s*(\/|$)/i.test(
           s
         ) ||
-        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe|スタートアップ\s*プログラム|スタートアッププログラム)$/i.test(
+        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Автоматично\s+завантажувані\s+програми|Автозавантаження|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe|スタートアップ\s*プログラム|スタートアッププログラム)$/i.test(
           leaf
         );
       if (!startupHint) return false;
@@ -4223,14 +4286,15 @@
       return (
         MSINFO_I18N.softwareEnvPath.test(s) ||
         startupPathMentionsRunKey(s) ||
-        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe|スタートアップ\s*プログラム|スタートアッププログラム)$/i.test(
+        /^(Элементы автозагрузки|Элемент автозагрузки|Программы в автозагрузке|Программы автозагрузки|Автозагрузка|Запуск программ|Автоматично\s+завантажувані\s+програми|Автозавантаження|Startup Programs|Autostart|Käynnistysohjelmat|Opstartprogramma|Programy startowe|スタートアップ\s*プログラム|スタートアッププログラム)$/i.test(
           leaf
         )
       );
     };
 
+    /** Ukrainian XML uses {@code <Програма>} (no underscore) as the first sibling element of {@code <Data>}. */
     const startupRecordStartRe =
-      /^(名前|名称|表示名|スタートアップ項目|スタートアップ\s*項目|Startup\s*Item|Item|Program|Programme|Nombre|Elemento|プログラム)$/i;
+      /^(名前|名称|表示名|スタートアップ項目|スタートアップ\s*項目|Startup\s*Item|Item|Program|Programme|Nombre|Elemento|プログラム|Програма|Назва)$/i;
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!startupContext(p)) continue;
@@ -4332,6 +4396,9 @@
         f["Aktueller Status"] ||
         f.Zustand ||
         f["Состояние"] ||
+        /** Ukrainian (uk-UA) MSInfo services row tag. */
+        f["Стан"] ||
+        f["Поточний стан"] ||
         f["Статус"] ||
         f["Текущее состояние"] ||
         f["Текущий статус"] ||
@@ -4380,6 +4447,8 @@
         )
           return vv;
         if (/^состоян/i.test(ktn) && !/шаблон|template/i.test(ktn)) return vv;
+        /** Ukrainian (uk-UA) — {@code Стан} / {@code Поточний стан}. */
+        if (/^стан$/iu.test(ktn) || /^поточний\s+стан$/iu.test(ktn)) return vv;
       }
       const ovSt = rowLabelValueFromMsInfoFields(f);
       if (ovSt.lab && ovSt.val) {
@@ -4452,6 +4521,11 @@
         f["スタートの種類"] ||
         f["スタートのモード"] ||
         f["نوع بدء التشغيل"] ||
+        /** Ukrainian (uk-UA) startup type tag (XML uses underscores). */
+        f["Режим_запуску"] ||
+        f["Режим запуску"] ||
+        f["Тип запуску"] ||
+        f["Тип_запуску"] ||
         "";
       const d = String(direct || "").trim();
       if (d && !/^недоступно$/i.test(d)) return d;
@@ -4468,6 +4542,9 @@
         if (/起動/.test(kt) && /(種類|モード|タイプ)/.test(kt)) return vv;
         if (/^режим/i.test(kt) && /запуск/i.test(kt)) return vv;
         if (/^тип/i.test(kt) && /запуск/i.test(kt)) return vv;
+        /** Ukrainian XML tag with underscores (e.g. {@code Режим_запуску}). */
+        const ktNorm = kt.replace(/_/g, " ");
+        if (/^режим\s+запуску$/iu.test(ktNorm) || /^тип\s+запуску$/iu.test(ktNorm)) return vv;
       }
       /** pt-BR / intl.: column title may be truncated ({@code Modo_i…}) or differ; match known startup *values* on plausible keys. */
       const looksLikeWinServiceStartModeVal = (/** @type {string} */ vv) =>
@@ -4518,6 +4595,13 @@
           f["Gorunen_Ad"] ||
           f["Выводимое_имя"] ||
           f["Выводимое имя"] ||
+          /** Ukrainian (uk-UA) services row tags. {@code Коротке_ім_я} is the localized "Display name". */
+          f["Коротке_ім_я"] ||
+          f["Коротке ім'я"] ||
+          f["Коротке імʼя"] ||
+          f["Відображуване ім'я"] ||
+          f["Відображуване імʼя"] ||
+          f["Відображуване_ім_я"] ||
           f["Display Name"] ||
           f["Anzeigename"] ||
           f["Weergavenaam"] ||
@@ -4616,6 +4700,11 @@
         f["Nome"] ||
         f["Nombre"] ||
         f["Имя"] ||
+        /** Ukrainian (uk-UA) MSInfo {@code Ім_я} key column. */
+        f["Ім_я"] ||
+        f["Ім'я"] ||
+        f["Імʼя"] ||
+        f["Назва"] ||
         f["サービス名"] ||
         f["服务名称"] ||
         f["服務名稱"] ||
@@ -4639,6 +4728,10 @@
         /\brunning\b/i.test(s) ||
         /\bRUNNING\b/.test(s) ||
         /^started$/i.test(s) ||
+        /\bпрацює\b/i.test(s) ||
+        /\bвиконується\b/i.test(s) ||
+        /\bзапущено\b/i.test(s) ||
+        /\bактивна\b/i.test(s) ||
         /\bgestartet\b/i.test(s) ||
         /\bwird ausgeführt\b/i.test(s) ||
         /\bläuft\b/i.test(s) ||
@@ -4696,20 +4789,20 @@
     const isServicesSectionPath = (/** @type {string} */ p) => {
       if (!msinfoPathLooksLikeSoftwareEnvironment(p)) return false;
       if (
-        /startup|autostart|автозагруз|планировщик|task\s*scheduler|scheduled\s*tasks|tâches planifiées|geplante tasks|スタートアップ\s*プログラム|スタートアッププログラム/i.test(
+        /startup|autostart|автозагруз|автоматично завантажувані|планировщик|task\s*scheduler|scheduled\s*tasks|tâches planifiées|geplante tasks|スタートアップ\s*プログラム|スタートアッププログラム/i.test(
           p
         )
       )
         return false;
       if (/print\s*spooler\s*drivers|enumerators|принтер|spooler|druckertreiber/i.test(p)) return false;
-      if (/системные драйверы|system\s*drivers/i.test(p)) return false;
+      if (/системные драйверы|системні драйвери|system\s*drivers/i.test(p)) return false;
       if (/Drivers$|Druckertreiber$/i.test(p)) return false;
       const parts = pathParts(p);
       const isServicesLeafSegment = (/** @type {string} */ seg) => {
         const s0 = String(seg || "").trim();
         if (!s0) return false;
         if (
-          /^(services|dienste|servicios|serviços|servizi|службы|сервисы|запущенные\s+службы|работающие\s+службы|palvelut|tjenester|tjänster|usługi|الخدمات|服务|服務|서비스|サービス|実行中のサービス|起動しているサービス|teenused|υπηρεσίες|szolgáltatások|servicii|služby|käynnissä\s+olevat\s+palvelut|uruchomione\s+usługi|Körande\s+tjänster|Kör\s+tjänster)$/iu.test(
+          /^(services|dienste|servicios|serviços|servizi|службы|сервисы|запущенные\s+службы|работающие\s+службы|служби|palvelut|tjenester|tjänster|usługi|الخدمات|服务|服務|서비스|サービス|実行中のサービス|起動しているサービス|teenused|υπηρεσίες|szolgáltatások|servicii|služby|käynnissä\s+olevat\s+palvelut|uruchomione\s+usługi|Körande\s+tjänster|Kör\s+tjänster)$/iu.test(
             s0
           )
         )
@@ -4722,9 +4815,9 @@
       return idx >= 0;
     };
 
-    /** Some pt-BR exports use column tags like {@code Nome_para_exibição} (underscores) instead of spaces. */
+    /** Some pt-BR exports use column tags like {@code Nome_para_exibição} (underscores) instead of spaces. Ukrainian uses {@code Коротке_ім_я}. */
     const serviceRecordStartRe =
-      /^(表示名|サービス名|Display Name|Service Name|サービス\s*名|Отображаемое имя|Имя службы|Имя\s*службы|Dienstname|Nom du service|Nom d['\u2019]affichage|Nom_complet|Nom\s+complet|Nombre del servicio|Nome de exibição|Nome de Exibição|Nome_para_exibição|Nome_para_exibicao|Nome_de_exibição|Nome_de_exibicao|Görünen_Ad|Görünen_ad|Gorunen_Ad|Görünen\s+Ad|Görünen\s+ad|Görüntülenen\s+Ad|Hizmet\s+Adı|Hizmet\s+adı|Hizmetin\s+görüntülenen\s+adı|Visningsnamn|Visnings\s+namn|Tjänstnamn|Tjanstnamn)$/iu;
+      /^(表示名|サービス名|Display Name|Service Name|サービス\s*名|Отображаемое имя|Имя службы|Имя\s*службы|Коротке_ім_я|Коротке\s+ім'я|Коротке\s+імʼя|Відображуване\s+ім'я|Відображуване_ім_я|Dienstname|Nom du service|Nom d['\u2019]affichage|Nom_complet|Nom\s+complet|Nombre del servicio|Nome de exibição|Nome de Exibição|Nome_para_exibição|Nome_para_exibicao|Nome_de_exibição|Nome_de_exibicao|Görünen_Ad|Görünen_ad|Gorunen_Ad|Görünen\s+Ad|Görünen\s+ad|Görüntülenen\s+Ad|Hizmet\s+Adı|Hizmet\s+adı|Hizmetin\s+görüntülenen\s+adı|Visningsnamn|Visnings\s+namn|Tjänstnamn|Tjanstnamn)$/iu;
 
     for (const p of [...new Set(kvs.map((k) => k.path))]) {
       if (!isServicesSectionPath(p)) continue;
@@ -4912,6 +5005,8 @@
       /^время$/i,
       /^время_/i,
       /^время\b/i,
+      /** Ukrainian (uk-UA) WER row tag — XML element name {@code <Час>}. */
+      /^час$/iu,
       /^czas$/i,
       /^čas$/i,
       /^tid$/i,
@@ -4940,6 +5035,7 @@
         kn === "saat" ||
         kn === "time" ||
         kn === "hora" ||
+        kn === "час" ||
         kn === "durée" ||
         kn === "duree" ||
         kn === "data e hora" ||
@@ -4972,6 +5068,8 @@
         /^тип$/i,
         /^тип_/i,
         /^тип\b/i,
+        /** Ukrainian (uk-UA) WER row tag (also matched generically below as {@code тип}). */
+        /^тип$/iu,
         /^fehlertyp$/i,
         /^fault\s*bucket$/i,
         /^bucket\s*id$/i,
@@ -5040,6 +5138,10 @@
         /** Turkish MSInfo — “Details” column (not {@code Açıklama}). */
         /^ayrıntılar$/iu,
         /^ayrintilar$/iu,
+        /** Ukrainian (uk-UA) WER row tag — {@code <Докладно>}. */
+        /^докладно$/iu,
+        /^відомості$/iu,
+        /^інформація$/iu,
         /^information$/i,
         /^informações$/iu,
         /^informacoes$/iu,
@@ -5058,6 +5160,9 @@
         kn === "ayrıntılar" ||
         kn === "details" ||
         kn === "detalles" ||
+        kn === "докладно" ||
+        kn === "відомості" ||
+        kn === "інформація" ||
         kf === "ayrintilar"
       )
         return vv;
@@ -5289,6 +5394,7 @@
           kn === "saat" ||
           kn === "time" ||
           kn === "hora" ||
+          kn === "час" ||
           kn === "durée" ||
           kn === "duree" ||
           kn === "data e hora" ||
@@ -5301,6 +5407,7 @@
           kn === "tür" ||
           kn === "type" ||
           kn === "tipo" ||
+          kn === "тип" ||
           kn === "nome do evento" ||
           kn === "tipo de evento"
         )
@@ -5315,6 +5422,9 @@
           kn === "details" ||
           kn === "detalles" ||
           kn === "detalhes" ||
+          kn === "докладно" ||
+          kn === "відомості" ||
+          kn === "інформація" ||
           kf === "ayrintilar"
         )
           detailCol++;
@@ -5332,7 +5442,7 @@
           s
         ) ||
         /Windows\s*エラー報告|エラー\s*報告|ソフトウェア環境.*エラー|エラー\s*コンテナ/i.test(s) ||
-        /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Повідомлення\s+про\s+помилки|звітів\s+про\s+помилки|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|диагностическ/i.test(
+        /Отчеты об ошибках|Отчёт об ошибках|отчетов об ошибках|Сообщения об ошибках|сообщения об ошибках|Повідомлення\s+про\s+помилки|Звітування\s+про\s+критичні\s+помилки|звітів\s+про\s+помилки|Журнал ошибок Windows|архив отчетов|архив отчётов|надежност|діагностичн|діагност|діагностич|діагностичн|діагностики/i.test(
           s
         ) ||
         /Rapportering av feil|Feilrapportering|Fejlrapportering|Fejlrapport|Problemrapporter|Rapports de problèmes|Rapporti di problemi|Segnalazione problemi|Informes de problemas|Informes de errores de Windows|Informe de errores de Windows|Relatórios de problemas|Relatórios de erros|Relatório de erros|Relatório de Erros|Informa[cç][oõ]es\s+sobre\s+(?:os\s+)?problemas|Ambiente de software.*Relató|Ambiente de Software.*Relató|Probleemrapporten|Foutrapportage|Windows-foutrapportage|Zgłaszanie błędów|Raportowanie błędów|Vianmääritys|Virheraportointi|Fejlfindingsrapport|Problémabehandler|Hibajelentések|Raportare erori|Windows hibajelentések|Windows-fouten|Raporty o błędach|Relatórios de erros do Windows|Windows-felrapportering|Rapportering av Windows|Windows-probleemrapporten|تقارير المشكلات|تقارير الأخطاء|问题报告|問題報告|問題のレポート|Windows 오류 보고|Αναφορές σφαλμάτων|Aruanded|Windowsi veateated/i.test(
@@ -5375,6 +5485,7 @@
           kn === "saat" ||
           kn === "time" ||
           kn === "hora" ||
+          kn === "час" ||
           kn === "durée" ||
           kn === "duree" ||
           kn === "data e hora" ||
@@ -5387,6 +5498,7 @@
           kn === "tür" ||
           kn === "type" ||
           kn === "tipo" ||
+          kn === "тип" ||
           kn === "nome do evento" ||
           kn === "tipo de evento"
         )
@@ -5456,7 +5568,7 @@
     summaryPath:
       /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumo do sistema|Resumen del sistema|Informações do sistema|Informazioni di sistema|Informace o systému|Podsumowanie systemu|Přehled systému|Systemoversigt|Systeemoverzicht|Systemöversikt|Systemoversikt|Järjestelmäyhteenveto|Süsteemi kokkuvõte|Zusammenfassung|Rendszerösszefoglaló|Rezumat sistem|Sistem özeti|Відомості\s+про\s+систему|ملخص النظام|系统摘要|系統摘要|システムの要約|システムの概要|システム概要|시스템 요약|Επισκόπηση συστήματος|Σύνοψη συστήματος|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|Основные сведения|Общие сведения/i,
     softwareEnvPath:
-      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Програмне\s+середовище|Programvarumiljö|Programmiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービ스|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/i,
+      /Software Environment|Softwareumgebung|Software-omgeving|Softwareomgeving|Environnement logiciel|Entorno de software|Ambiente de software|Ambiente software|Програмне\s+середовище|Служби|Системні\s+драйвери|Автоматично\s+завантажувані\s+програми|Programvarumiljö|Programmiljö|Softwaremiljø|Softwarové prostředí|Środowisko programowe|Szoftverkörnyezet|Yazılım ortamı|Yazılım\s+Ortamı|Yazilim\s+Ortami|Tarkvara keskkond|Mediu software|Ohjelmistoympäristö|Περιβάλλον λογισμικού|بيئة البرامج|软件环境|軟體環境|ソフトウェア環境|ソフトウェア\s*環境|スタートアップ\s*プログラム|スタートアッププログラム|サービス|実行中のサービス|起動しているサービ스|소프트웨어 환경|Программная среда|Программное обеспечение|Сведения о программном обеспечении|Среда программ|Элементы автозагрузки|Программы в автозагрузке|Программы автозагрузки|Программ автозагрузки|Автозагрузка программ|Автозагрузка/iu,
     memoryRowPath:
       /System Summary|Systemübersicht|Résumé du système|Résumé\s+système|Resumen del sistema|Resumo do sistema|Відомості\s+про\s+систему|Memory|\bMinne\b|Maskinvaruresurser|Arbeitsspeicher|Mémoire|Memoria|Memória|Virtual Memory|Virtueller Arbeitsspeicher|Mémoire virtuelle|Memoria virtual|Memória virtual|Virtueel geheugen|Virtuellt minne|Virtuel hukommelse|Virtuaalinen muisti|Virtuaalimuisti|Wirtualna pamięć|Sanal bellek|Memorie virtuală|Virtuaalmälu|virtuální paměť|虚拟内存|虛擬記憶體|仮想メモリ|メモリの要約|メモリ\s*リソース|가상 메모리|Виртуальная память|Память|Оперативная память|Физическая память|Сводка о системе|Сведения о системе|Сводка системы|Сведения системы|Информация о системе|Обзор системы|Системные сведения|系统摘要|系統摘要|Järjestelmäyhteenveto|Podsumowanie systemu|Přehled systému|Systeemoverzicht|Systemoversigt|Systemöversikt|Systemoversikt|Süsteemi kokkuvõte|Informazioni di sistema|Sistem özeti|ملخص النظام|システムの要約|システムの概要|시스템 요약|Σύνοψη συστήματος|Επισκόπηση συστήματος|Pagineringssökväg|Auslagerungsdatei|分页文件|Sayfalama|sayfalama|Växlingsfil/i,
     /** @param {RegExp | RegExp[]} labelRe */
@@ -5805,9 +5917,9 @@
     const boardPathRe =
       /Motherboard|Base\s*Board|BaseBoard|System Board|Mainboard|Main Board|Anakart|Temel\s*Kart|Moderkort|Baskort|Basplatta/i;
     const boardItemPrefixRe = /^(BaseBoard|Base\s*Board|Temel\s+Kart|Anakart|Moderkort|Baskort|Basplatta)\b/i;
-    /** pt-BR/es/de: “Fabricante da BaseBoard” / “Produto BaseBoard” live under System Summary without a {@code BaseBoard …} item prefix — include them for {@link pickBoard}. */
+    /** pt-BR/es/de/uk: “Fabricante da BaseBoard” / “Produto BaseBoard” / “Виробник системної плати” live under System Summary without a {@code BaseBoard …} item prefix — include them for {@link pickBoard}. */
     const summaryBaseBoardItemRe =
-      /^(Fabricante\s+da\s+BaseBoard|Produto\s+BaseBoard|Vers[aã]o\s+da\s+BaseBoard|Fabricante\s+da\s+placa\s+m[aã]e|Produto\s+da\s+placa\s+m[aã]e|Fabricante\s+de\s+la\s+placa\s+base|Producto\s+de\s+placa\s+base|Versi[oó]n\s+de\s+la\s+placa\s+base|Fabricant\s+de\s+la\s+carte\s+de\s+base|Produit\s+de\s+la\s+carte\s+de\s+base|Version\s+de\s+la\s+carte\s+de\s+base|Num[eé]ro\s+de\s+s[eé]rie\s+de\s+la\s+carte\s+de\s+base|Moderkortstillverkare|Moderkortsprodukt|Moderkortsversion|Moderkortsmodell|Tillverkare\s+för\s+moderkort|Produkt\s+för\s+moderkort|Version\s+för\s+moderkort|Baskortstillverkare|Baskortsprodukt|Baskortets\s+tillverkare|Baskortets\s+produkt|Baskortets\s+version)$/i;
+      /^(Fabricante\s+da\s+BaseBoard|Produto\s+BaseBoard|Vers[aã]o\s+da\s+BaseBoard|Fabricante\s+da\s+placa\s+m[aã]e|Produto\s+da\s+placa\s+m[aã]e|Fabricante\s+de\s+la\s+placa\s+base|Producto\s+de\s+placa\s+base|Versi[oó]n\s+de\s+la\s+placa\s+base|Fabricant\s+de\s+la\s+carte\s+de\s+base|Produit\s+de\s+la\s+carte\s+de\s+base|Version\s+de\s+la\s+carte\s+de\s+base|Num[eé]ro\s+de\s+s[eé]rie\s+de\s+la\s+carte\s+de\s+base|Moderkortstillverkare|Moderkortsprodukt|Moderkortsversion|Moderkortsmodell|Tillverkare\s+för\s+moderkort|Produkt\s+för\s+moderkort|Version\s+för\s+moderkort|Baskortstillverkare|Baskortsprodukt|Baskortets\s+tillverkare|Baskortets\s+produkt|Baskortets\s+version|Виробник\s+системної\s+плати|Тип\s+системної\s+плати|Версія\s+системної\s+плати|Модель\s+системної\s+плати)$/iu;
     /** Normalize WMI-style {@code Fabricante_da_BaseBoard} tags and odd spacing so labels match {@link pickBoardML} entries. */
     const normBoardItem = (/** @type {string} */ s) =>
       String(s ?? "")
@@ -5909,6 +6021,9 @@
         "Fabricant",
         "Fabricante",
         "Производитель",
+        /** Ukrainian (uk-UA) — {@code Виробник системної плати}. */
+        "Виробник системної плати",
+        "Виробник",
         "制造商",
         "Üretici",
         "Tillverkare för basplatta",
@@ -5945,6 +6060,9 @@
         "Modelo",
         "Nombre de producto",
         "Продукт",
+        /** Ukrainian (uk-UA) — {@code Тип системної плати}. */
+        "Тип системної плати",
+        "Модель системної плати",
         "型号",
         "Ürün",
         "Produkt för basplatta",
@@ -5973,6 +6091,9 @@
         "Numéro de série",
         "Número de serie",
         "Версия",
+        /** Ukrainian (uk-UA) — {@code Версія системної плати}. */
+        "Версія системної плати",
+        "Версія",
         "版本",
         "Seri Numarası",
         "Version för basplatta",
@@ -6250,6 +6371,10 @@
           /^Nom du système$/i,
           /^Название ОС$/i,
           /^Имя ОС$/i,
+          /** Ukrainian (uk-UA) — {@code Назва ОС}. */
+          /^Назва\s+ОС$/iu,
+          /^Назва\s+операційної\s+системи$/iu,
+          /^Ім'я\s+ОС$/iu,
           /^操作系统名称$/i,
           /^OS\s*名$/,
           /^OS名$/,
@@ -6263,6 +6388,7 @@
           /^Betriebssystemname$/i,
           /^Имя ОС$/i,
           /^Название ОС$/i,
+          /^Назва\s+ОС$/iu,
           /^OS\s*名$/,
           /^OS名$/,
           /^Nombre del SO$/i,
@@ -6280,6 +6406,7 @@
           /^Nombre del SO$/i,
           /^Название ОС$/i,
           /^Имя ОС$/i,
+          /^Назва\s+ОС$/iu,
           /^OS\s*名$/,
           /^OS名$/,
           /^İşletim Sistemi Adı$/u,
@@ -6296,6 +6423,9 @@
           /** Spanish single-column “Version” row (often includes build text). */
           /^Versión$/i,
           /^Versão$/i,
+          /** Ukrainian (uk-UA) — {@code Версія}. */
+          /^Версія$/iu,
+          /^Версія\s+ОС$/iu,
           /^Betriebssystemversion$/i,
           /^Version du système$/i,
           /^Version du système d[\u2019']exploitation$/i,
@@ -6318,6 +6448,7 @@
           /^Version du système d[\u2019']exploitation$/i,
           /^Версия$/i,
           /^Версия ОС$/i,
+          /^Версія$/iu,
           /^バージョン$/,
           /^OS\s*バージョン$/,
           /^Versión$/i,
@@ -6335,6 +6466,7 @@
           /^Version du système d[\u2019']exploitation$/i,
           /^Версия$/i,
           /^Версия ОС$/i,
+          /^Версія$/iu,
           /^バージョン$/,
           /^OS\s*バージョン$/,
           /^Versión$/i,
@@ -6357,10 +6489,11 @@
           /^Versão$/i.test(it) ||
           /^Versão do sistema operacional$/i.test(it) ||
           /^İşletim Sistemi Sürümü$/u.test(it) ||
-          /^Sürüm$/u.test(it);
+          /^Sürüm$/u.test(it) ||
+          /^Версія$/iu.test(it);
         return (
           versionish &&
-          /\b(10|11)\.0\.\d+|Microsoft Windows|Майкрософт Windows|Windows \d+|\bСборка\s*\d+|\bDerleme\s*\d+|\bCompilação\s*\d+/i.test(
+          /\b(10|11)\.0\.\d+|Microsoft Windows|Майкрософт Windows|Windows \d+|\bСборка\s*\d+|\bЗбірка\s*\d+|\bDerleme\s*\d+|\bCompilação\s*\d+/i.test(
             k.value || ""
           )
         );
@@ -6369,9 +6502,9 @@
     }
     if (!osVersionLine) {
       osVersionLine =
-        kvValI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Versão$/i, /^Sürüm$/u], kvs) ||
+        kvValI18n([/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Версія$/iu, /^Versão$/i, /^Sürüm$/u], kvs) ||
         fieldFromRowsI18n(
-          [/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Versão$/i, /^Sürüm$/u],
+          [/^Version$/i, /^Betriebssystemversion$/i, /^Версия$/i, /^Версія$/iu, /^Versão$/i, /^Sürüm$/u],
           rows
         );
     }
@@ -6938,6 +7071,10 @@
         /^Версия BIOS\/дата$/i.test(it) ||
         /^Версия\s+BIOS\s*\/\s*дата$/i.test(it) ||
         /^Версия\s*BIOS$/i.test(it) ||
+        /** Ukrainian (uk-UA) — {@code Версія BIOS/Дата}. */
+        /^Версія\s*BIOS\s*\/\s*Дата$/iu.test(it) ||
+        /^Версія\s*BIOS\/Дата$/iu.test(it) ||
+        /^Версія\s*BIOS$/iu.test(it) ||
         /^BIOS版本\/日期$/i.test(it) ||
         /^BIOS\s+Sürümü\s*\/\s*Tarihi$/iu.test(it) ||
         /^BIOS\s+Sürümü\/Tarihi$/iu.test(it) ||
@@ -7163,6 +7300,9 @@
         f.Gerät ||
         f.Dispositivo ||
         f.Устройство ||
+        /** Ukrainian (uk-UA) MSInfo Problem Devices row tag — XML element {@code <Пристрій>}. */
+        f["Пристрій"] ||
+        f["Пристрiй"] ||
         f.デバイス ||
         f["デバイス名"] ||
         rowValueByCompactKeys(f, [
@@ -7172,6 +7312,8 @@
           "item",
           "description",
           "устройство",
+          "пристрій",
+          "пристрiй",
           "название",
           "nome",
           "デバイス名",
@@ -7185,6 +7327,9 @@
         f["PNP_Device_ID"] ||
         f["Код_устройства_PNP"] ||
         f["Код устройства PNP"] ||
+        /** Ukrainian XML element {@code <Код_пристрою_PNP>}. */
+        f["Код_пристрою_PNP"] ||
+        f["Код пристрою PNP"] ||
         f["PNP デバイス ID"] ||
         f["PNPデバイス ID"] ||
         f["Tak ve Çalıştır Aygıt Kimliği"] ||
@@ -7192,6 +7337,7 @@
         rowValueByCompactKeys(f, [
           "pnpdeviceid",
           "кодустройстваpnp",
+          "кодпристроюpnp",
           "pnpデバイスid",
           "plugandplayデバイスid",
           "takveçalıştıraygıtkimliği",
@@ -7210,6 +7356,9 @@
         f["Problem Code"] ||
         f["Код_ошибки"] ||
         f["Код ошибки"] ||
+        /** Ukrainian XML element {@code <Код_помилки>}. */
+        f["Код_помилки"] ||
+        f["Код помилки"] ||
         f["問題"] ||
         f["問題のコード"] ||
         f["問題コード"] ||
@@ -7218,6 +7367,7 @@
           "problem",
           "problemcode",
           "кодошибки",
+          "кодпомилки",
           "error",
           "status",
           "fehler",
@@ -7258,6 +7408,8 @@
           c === "dispositif" ||
           c === "apparaat" ||
           c === "устройство" ||
+          c === "пристрій" ||
+          c === "пристрiй" ||
           c === "название" ||
           c === "デバイス名" ||
           c === "デバイス" ||
@@ -7272,6 +7424,7 @@
           c === "pnpdeviceid" ||
           c === "pnp_device_id" ||
           c === "кодустройстваpnp" ||
+          c === "кодпристроюpnp" ||
           c === "pnpデバイスid" ||
           c === "plugandplayデバイスid" ||
           c === "takveçalıştıraygıtkimliği" ||
@@ -7286,10 +7439,12 @@
           c === "problemcode" ||
           c === "codigodeerror" ||
           c === "кодошибки" ||
+          c === "кодпомилки" ||
           c === "error" ||
           c === "status" ||
           c === "fehler" ||
           /^кодошиб/.test(c) ||
+          /^кодпомил/.test(c) ||
           c === "問題" ||
           c === "問題のコード" ||
           c === "問題コード" ||
@@ -8979,6 +9134,25 @@
     ["Терабайт", "terabyte"],
     ["Кілобайта", "kilobytes"],
     ["Кілобайт", "kilobyte"],
+    /** Ukrainian disk drive / time zone / locale strings frequently seen in MSInfo. */
+    ["байтів", "bytes"],
+    ["байтiв", "bytes"],
+    ["байт", "bytes"],
+    ["(літо)", "(summer)"],
+    ["(зима)", "(winter)"],
+    ["Фінляндія", "Finland"],
+    ["Україна", "Ukraine"],
+    ["Майкрософт Windows", "Microsoft Windows"],
+    ["Майкрософт", "Microsoft"],
+    ["ГБ", "GB"],
+    ["ТБ", "TB"],
+    ["МБ", "MB"],
+    ["КБ", "KB"],
+    ["МГц", "MHz"],
+    ["мГц", "MHz"],
+    ["ГГц", "GHz"],
+    ["гГц", "GHz"],
+    ["Гц", "Hz"],
     ["Установлена фізична пам’ять (ОЗП)", "Installed Physical Memory (RAM)"],
     ["Установлена фізична память (ОЗП)", "Installed Physical Memory (RAM)"],
     ["Загальний обсяг фізичної пам'яті", "Total Physical Memory"],

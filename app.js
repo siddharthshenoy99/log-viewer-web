@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.10";
+  const APP_VERSION = "1.6.0";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -142,6 +142,10 @@
     "Standard-gateway för IP",
     "Standardgateway för IP",
     "Standard-gateway",
+    /** Ukrainian (uk-UA) MSInfo — “Шлюз IP за замовчуванням”. */
+    "Шлюз IP за замовчуванням",
+    "Шлюз_IP_за_замовчуванням",
+    "Стандартний шлюз",
   ]);
 
   const MSINFO_DHCP_SERVER_LABELS = Object.freeze([
@@ -172,6 +176,9 @@
     /** Portuguese (pt-BR). */
     "Servidor DHCP",
     "Servidor de DHCP",
+    /** Ukrainian (uk-UA). */
+    "DHCP-сервер",
+    "DHCP_сервер",
   ]);
 
   /** @param {string} s */
@@ -1997,7 +2004,11 @@
       "Endereço IP",
       "Endereços IP",
       "Endereco IP",
-      "Enderecos IP"
+      "Enderecos IP",
+      /** Ukrainian (uk-UA) — XML element {@code <IP_адреса>} (decoded as space-separated key) and label {@code IP-адреса}. */
+      "IP-адреса",
+      "IP_адреса",
+      "IPv4-адреса"
     );
     let hit = tryVal(direct);
     if (hit) return hit;
@@ -2006,7 +2017,7 @@
       const kl = msinfoFieldKeyNormLower(k);
       const klA = networkFieldKeyAsciiFold(k);
       const addrHint =
-        /address|адрес|adres|addr|osoite|direcci|indirizzo|endereço|endereco|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(
+        /address|адрес|адреса|adres|addr|osoite|direcci|indirizzo|endereço|endereco|διεύθυνση|주소|地址|aadress|adresă|adresse|c[iíì]m|عنوان/i.test(
           kl
         );
       /** pt-BR / truncated MSInfo: “Endereço(s) IP…”, “Endereço …” */
@@ -2106,7 +2117,11 @@
         "IP 地址",
         "IPv4 地址",
         "IP Adresi",
-        "IP adresi"
+        "IP adresi",
+        /** Ukrainian (uk-UA). */
+        "IP-адреса",
+        "IP_адреса",
+        "IPv4-адреса"
       )
     );
     for (const name of [
@@ -2191,7 +2206,7 @@
         if (hit) return hit;
       }
     }
-    for (const n of ["IP Address", "IP address", "IP-адрес", "IP Adresi", "IP adresi", "Addresses"]) {
+    for (const n of ["IP Address", "IP address", "IP-адрес", "IP-адреса", "IP_адреса", "IP Adresi", "IP adresi", "Addresses"]) {
       const v = getNetworkField(fields, n) || fields[n];
       if (v) {
         const hit = tryValue(v);
@@ -2356,6 +2371,10 @@
         /^nombre$/i.test(it) ||
         /^имя$/i.test(it) ||
         /^наименование$/i.test(it) ||
+        /** Ukrainian (uk-UA) — {@code Ім'я} (regular apostrophe or modifier letter), and the {@code Ім_я} XML tag form. */
+        /^ім['ʼ]?я$/iu.test(it) ||
+        /^ім_я$/iu.test(it) ||
+        /^назва$/iu.test(it) ||
         /^名称$/i.test(it) ||
         /^名稱$/i.test(it) ||
         /^名前$/i.test(it) ||
@@ -2377,6 +2396,10 @@
         Object.prototype.hasOwnProperty.call(rec, "Nombre") ||
         Object.prototype.hasOwnProperty.call(rec, "Nom") ||
         Object.prototype.hasOwnProperty.call(rec, "Имя") ||
+        Object.prototype.hasOwnProperty.call(rec, "Ім'я") ||
+        Object.prototype.hasOwnProperty.call(rec, "Імʼя") ||
+        Object.prototype.hasOwnProperty.call(rec, "Ім_я") ||
+        Object.prototype.hasOwnProperty.call(rec, "Назва") ||
         Object.prototype.hasOwnProperty.call(rec, "Ad") ||
         Object.prototype.hasOwnProperty.call(rec, "Adı")
       );
@@ -2626,21 +2649,33 @@
    * @returns {{ name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string }[]}
    */
   function extractAllNetworkAdaptersFallback(kvs, rows) {
-    /** @type {{ name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string }[]} */
+    /** @type {{ name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string, ipv4: string, ipv6: string, gateway: string, dhcpServer: string, subnet: string, path: string }[]} */
     const out = [];
     const seenNames = new Set();
-    /** Scan flat path-keyed kvs so we can also rebuild adapters from sequential Item/Value rows. */
-    /** @type {Map<string, { name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string }>} */
-    const lastByPath = new Map();
+    /** Limit to "Adapter" sub-paths only (skip Protocol / WinSock / WAN protocols). */
+    const isAdapterPath = (/** @type {string} */ p) => {
+      const s = String(p || "");
+      if (!pathLooksLikeNetworkSection(s)) return false;
+      if (/winsock|protocol|протокол|protocole|protokoll|プロトコル|协议|wsock|wsa|winsock2/i.test(s)) return false;
+      if (
+        /(^|\/)\s*(Адаптер|Adapter|Adaptér|Adattatore|Adapt[ae]dor|Adaptör|Adaptér|Adapt[oa]rs?)\s*(\/|$)/iu.test(
+          s
+        )
+      )
+        return true;
+      /** Some exports embed adapters directly under "Network/Components/Network". */
+      if (/(^|\/)\s*(Мережа|Network|Netzwerk|Réseau|Rede|Red|Nätverk|Netværk|Verkko|Ağ)\s*$/iu.test(s)) return true;
+      return false;
+    };
     /** @type {Map<string, { path: string, item: string, value: string }[]>} */
     const kvsByPath = new Map();
     for (const k of kvs) {
-      if (!pathLooksLikeNetworkSection(k.path)) continue;
+      if (!isAdapterPath(k.path)) continue;
       if (!kvsByPath.has(k.path)) kvsByPath.set(k.path, []);
       kvsByPath.get(k.path).push(k);
     }
-    /** @param {Record<string, string>} f */
-    const pickFromFields = (f) => {
+    /** @param {Record<string, string>} f @param {string} path */
+    const pickFromFields = (f, path) => {
       if (!f) return null;
       const name = String(
         f["Ім'я"] || f["Імʼя"] || f["Ім_я"] || f.Name || f.Namn || f.Nombre || f.Nome || f["名前"] || f.Имя || ""
@@ -2657,52 +2692,49 @@
       const serviceName = String(
         f["Ім'я служби"] || f["Імʼя служби"] || f["Ім_я_служби"] || f["Service Name"] || f["Имя службы"] || ""
       ).trim();
+      const ipv4 = pickIpv4FromFields(f) || "";
+      const ipv6 = collectAllIpv6ForDisplay(f) || "";
+      const gateway = String(
+        f["Шлюз IP за замовчуванням"] || f["Шлюз_IP_за_замовчуванням"] || f["Default IP Gateway"] || f["Default Gateway"] ||
+          f["Шлюз IP по умолчанию"] || ""
+      ).trim();
+      const dhcpServer = String(
+        f["DHCP-сервер"] || f["DHCP_сервер"] || f["DHCP Server"] || ""
+      ).trim();
+      const subnet = String(
+        f["IP-підмережа"] || f["IP_підмережа"] || f["IP Subnet"] || f["Subnet Mask"] || f["IP-подсеть"] || ""
+      ).trim();
       if (!name && !productType && !macAddress && !serviceName) return null;
-      return { name: name || productType, productType, dhcpEnabled, macAddress, serviceName };
+      return { name: name || productType, productType, dhcpEnabled, macAddress, serviceName, ipv4, ipv6, gateway, dhcpServer, subnet, path };
     };
     for (const r of rows) {
-      if (!pathLooksLikeNetworkSection(r.path)) continue;
-      const e = pickFromFields(r.fields);
+      if (!isAdapterPath(r.path)) continue;
+      const e = pickFromFields(r.fields, r.path);
       if (!e) continue;
       const key = `${r.path}\u0001${e.name.toLowerCase()}`;
       if (e.name && seenNames.has(key)) continue;
       seenNames.add(key);
       out.push(e);
     }
-    /** @type {Map<string, { lab: string, val: string }[]>} */
-    const groupsByPath = new Map();
     for (const [path, list] of kvsByPath) {
-      /** @type {{ name: string, productType: string, dhcpEnabled: string, macAddress: string, serviceName: string } | null} */
-      let cur = null;
-      for (const k of list) {
-        const it = String(k.item || "").trim();
-        const v = String(k.value || "").trim();
-        const itLower = it.toLowerCase();
-        if (/^(ім['ʼ]я|name|namn|nombre|nome|имя)$/iu.test(it)) {
-          if (cur && cur.name) out.push(cur);
-          cur = { name: v, productType: "", dhcpEnabled: "", macAddress: "", serviceName: "" };
-          continue;
-        }
-        if (!cur) continue;
-        if (/^(тип продукту|product type|тип продукции|тип продукта)$/iu.test(it)) cur.productType = v;
-        else if (/^(dhcp увімк\.|dhcp enabled|dhcp включен)$/iu.test(it)) cur.dhcpEnabled = v;
-        else if (/^(mac-адреса|mac address|mac-адрес)$/iu.test(it)) cur.macAddress = v;
-        else if (/^(ім['ʼ]я служби|service name|имя службы)$/iu.test(it)) cur.serviceName = v;
-        void itLower;
-        void groupsByPath;
-        void lastByPath;
-      }
-      if (cur && cur.name) {
-        const key = `${path}\u0001${cur.name.toLowerCase()}`;
-        if (!seenNames.has(key)) {
-          seenNames.add(key);
-          out.push(cur);
-        }
+      /** Build per-adapter records by splitting on the localized "Name" item, so every {@code <Data>} row under {@code Network / Adapter} feeds exactly one adapter. */
+      const records = splitNetworkKvsIntoAdapterRecords(list);
+      for (const f of records) {
+        const e = pickFromFields(f, path);
+        if (!e) continue;
+        const key = `${path}\u0001${e.name.toLowerCase()}`;
+        if (e.name && seenNames.has(key)) continue;
+        seenNames.add(key);
+        out.push(e);
       }
     }
-    /** Filter out clearly virtual / placeholder entries (Kernel Debug, WAN Miniport variants) when something better exists. */
-    const realish = out.filter((a) => !/Kernel\s+Debug|WAN\s+Miniport|Microsoft\s+ISATAP|Microsoft\s+Teredo|6to4/i.test(a.name));
-    return realish.length ? realish : out;
+    /** Filter out clearly virtual / placeholder entries (Kernel Debug, WAN Miniport variants, Bluetooth PAN) when something better exists. */
+    const isVirtual = (/** @type {string} */ n) =>
+      /Kernel\s+Debug|WAN\s+Miniport|Microsoft\s+ISATAP|Microsoft\s+Teredo|6to4|Hyper-V\s+RAW|AF_UNIX|MSAFD|RSVP|Bluetooth\s+Device|Personal\s+Area\s+Network/i.test(
+        n
+      );
+    const realish = out.filter((a) => !isVirtual(a.name));
+    return realish.length ? realish : out.filter((a) => a.name);
   }
 
   /**
@@ -2833,6 +2865,9 @@
         "Endereço IP",
         "Endereços IP",
         "Adresse IP",
+        /** Ukrainian (uk-UA). */
+        "IP-адреса",
+        "IP_адреса",
       ],
       [
         "DHCP Lease Expires",
@@ -2843,6 +2878,9 @@
         "Дата окончания аренды DHCP",
         "DHCP Kiralama Bitişi",
         "DHCP-lånet upphör",
+        /** Ukrainian (uk-UA). */
+        "DHCP-оренда закінчується",
+        "DHCP_оренда_закінчується",
       ],
       [
         "DHCP Lease Obtained",
@@ -2853,6 +2891,9 @@
         "Дата получения аренды DHCP",
         "DHCP Kiralama Başlangıcı",
         "DHCP-lånet erhölls",
+        /** Ukrainian (uk-UA). */
+        "DHCP-оренду отримано",
+        "DHCP_оренду_отримано",
       ],
       ["Driver", "Драйвер", "Drivrutin", "Sürücü", "ドライブ", "ドライバー", "ドライバ"],
       ["Media State", "Состояние среды передачи"],
@@ -2871,6 +2912,9 @@
         "Sub-rede IP",
         "Sub-rede",
         "IP-nät",
+        /** Ukrainian (uk-UA). */
+        "IP-підмережа",
+        "IP_підмережа",
       ],
       [
         "Default Gateway",
@@ -2891,6 +2935,9 @@
         "Varsayılan ip ağ geçidi",
         "デフォルト ゲートウェイ",
         "IPv4 デフォルト ゲートウェイ",
+        /** Ukrainian (uk-UA). */
+        "Шлюз IP за замовчуванням",
+        "Шлюз_IP_за_замовчуванням",
       ],
       [
         "DHCP Enabled",
@@ -2902,8 +2949,23 @@
         "DHCP 有効",
         "DHCP を有効にする",
         "DHCP Etkin",
+        /** Ukrainian (uk-UA). */
+        "DHCP увімк.",
+        "DHCP_увімк_",
       ],
-      ["DHCP Server", "Servidor DHCP", "Servidor de DHCP", "DHCP-сервер", "DHCP сервер", "Сервер DHCP", "DHCP サーバー", "DHCPサーバー", "DHCP Sunucusu"],
+      [
+        "DHCP Server",
+        "Servidor DHCP",
+        "Servidor de DHCP",
+        "DHCP-сервер",
+        "DHCP сервер",
+        "Сервер DHCP",
+        "DHCP サーバー",
+        "DHCPサーバー",
+        "DHCP Sunucusu",
+        /** Ukrainian (uk-UA) — when XML tag becomes the row key. */
+        "DHCP_сервер",
+      ],
       [
         "Adapter Type",
         "Korttyp",
@@ -2912,6 +2974,8 @@
         "Bağdaştırıcı Türü",
         "アダプターの種類",
         "アダプタの種類",
+        /** Ukrainian (uk-UA). */
+        "Тип_адаптера",
       ],
       [
         "MAC Address",
@@ -2925,6 +2989,9 @@
         "MAC adresi",
         "物理アドレス",
         "MAC アドレス",
+        /** Ukrainian (uk-UA). */
+        "MAC-адреса",
+        "MAC_адреса",
       ],
       [
         "Memory Address",
@@ -2964,12 +3031,17 @@
         fields.Nome ||
         fields["Adı"] ||
         fields.Имя ||
+        /** Ukrainian (uk-UA) — adapter Name row uses "Ім'я" / XML tag {@code <Ім_я>}. */
+        fields["Ім'я"] ||
+        fields["Імʼя"] ||
+        fields["Ім_я"] ||
+        fields["Назва"] ||
         fields["名前"] ||
         fields["デバイス名"] ||
         fields.Device ||
         fields.Item ||
         fields.Description ||
-        getNetworkField(fields, "Adapter Name", "アダプター名", "アダプタ名", "Adı", "Nome") ||
+        getNetworkField(fields, "Adapter Name", "アダプター名", "アダプタ名", "Adı", "Nome", "Ім'я", "Назва") ||
         path.split(" / ").pop() ||
         "";
       if (!name && Object.keys(fields).length < 2) continue;
@@ -9498,13 +9570,6 @@
     ["Імʼя", "Name"],
     ["Ім'я тому", "Volume name"],
     ["Імʼя тому", "Volume name"],
-    /** Startup Programs table headers / cells (Ukrainian). */
-    ["Розташування", "Location"],
-    ["Розміщення", "Location"],
-    ["Користувач", "User"],
-    ["Програма", "Program"],
-    ["Команда запуску", "Startup command"],
-    ["Командний рядок", "Command line"],
   ];
 
   /**
@@ -11444,6 +11509,14 @@
     }
     /** JP volume lines use 「ドライブ C:」; do not let the standalone 「ドライブ」→「Driver」 pair corrupt those. */
     out = out.replace(/ドライブ\s*([A-Z])[：:]/gi, "Drive $1:");
+    /**
+     * Pre-table: Ukrainian byte-suffix forms must be normalized BEFORE the phrase table runs, otherwise
+     * the Russian {@code ") байт"} pair (length 6) can sort-tie with {@code байтів} (length 6) and replace
+     * the prefix → leaves the trailing suffix as {@code "bytesів"}.
+     */
+    out = out
+      .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?:і|i)в/giu, "$1 bytes")
+      .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?=[\s),]|$)/giu, "$1 bytes");
     out = applyMsinfoI18nTokenPairTable(out);
     /** Spacing in MSInfo text exports varies; apply regex fallbacks after phrase table. */
     out = out
@@ -12398,16 +12471,37 @@
         })
         .join("")}</ul>`;
     } else if (Array.isArray(sum.allNetworkAdapters) && sum.allNetworkAdapters.length) {
-      /** Fallback: this MSInfo export reports the adapters but with no usable IPv4/IPv6 (e.g. "Not Available"). Show them anyway with a hint. */
-      netBody = `<p class="summary-lede">No adapter in this export reported a usable IPv4 / IPv6 — showing the raw entries from <strong>Components → Network → Adapter</strong>. Open MSInfo on the live system for current addresses.</p><ul class="network-adapters">${sum.allNetworkAdapters
+      /** Fallback: surface every {@code Components → Network → Adapter} entry, prioritising those that DO have an IPv4/IPv6 in the export (so localized exports never hide active adapters). */
+      const fallbackHasAddr = sum.allNetworkAdapters.some(
+        (a) => (a.ipv4 && /\d+\.\d+\.\d+\.\d+/.test(a.ipv4)) || (a.ipv6 && a.ipv6.length > 2)
+      );
+      const intro = fallbackHasAddr
+        ? `<p class="summary-lede">Active adapters from <strong>Components → Network → Adapter</strong>: every adapter with an IPv4 / IPv6 in the export is listed first.</p>`
+        : `<p class="summary-lede">No adapter in this export reported a usable IPv4 / IPv6 — showing the raw entries from <strong>Components → Network → Adapter</strong>. Open MSInfo on the live system for current addresses.</p>`;
+      const sortedAdapters = sum.allNetworkAdapters.slice().sort((a, b) => {
+        const ah = (a.ipv4 && /\d+\.\d+\.\d+\.\d+/.test(a.ipv4)) || (a.ipv6 && a.ipv6.length > 2) ? 1 : 0;
+        const bh = (b.ipv4 && /\d+\.\d+\.\d+\.\d+/.test(b.ipv4)) || (b.ipv6 && b.ipv6.length > 2) ? 1 : 0;
+        return bh - ah;
+      });
+      netBody = `${intro}<ul class="network-adapters">${sortedAdapters
         .map((a) => {
           const name = String(a.name || "(unnamed adapter)");
           const productType = String(a.productType || "");
           const dhcpEnabled = String(a.dhcpEnabled || "");
           const macAddr = String(a.macAddress || "");
           const serviceName = String(a.serviceName || "");
+          const ipv4 = String(a.ipv4 || "");
+          const ipv6 = String(a.ipv6 || "");
+          const gateway = String(a.gateway || "");
+          const dhcpServer = String(a.dhcpServer || "");
+          const subnet = String(a.subnet || "");
           const meta = [
             productType ? `<div class="network-adapter__meta"><span class="muted-label">Product type</span> <span>${sumI18nSpan(productType, esc, undefined, netI18nOpts)}</span></div>` : "",
+            ipv4 ? `<div class="network-adapter__meta"><span class="muted-label">IPv4</span> <span class="network-wrap">${sumI18nSpan(ipv4, esc, undefined, netI18nOpts)}</span></div>` : "",
+            ipv6 ? `<div class="network-adapter__meta"><span class="muted-label">IPv6 address(es)</span> <span class="network-wrap">${sumI18nSpan(ipv6, esc, undefined, netI18nOpts)}</span></div>` : "",
+            subnet ? `<div class="network-adapter__meta"><span class="muted-label">Subnet</span> <span class="network-wrap">${sumI18nSpan(subnet, esc, undefined, netI18nOpts)}</span></div>` : "",
+            gateway ? `<div class="network-adapter__meta"><span class="muted-label">Default gateway</span> <span class="network-wrap">${sumI18nSpan(gateway, esc, undefined, netI18nOpts)}</span></div>` : "",
+            dhcpServer ? `<div class="network-adapter__meta"><span class="muted-label">DHCP server</span> <span>${sumI18nSpan(dhcpServer, esc, undefined, netI18nOpts)}</span></div>` : "",
             macAddr ? `<div class="network-adapter__meta"><span class="muted-label">MAC address</span> <span>${esc(macAddr)}</span></div>` : "",
             dhcpEnabled ? `<div class="network-adapter__meta"><span class="muted-label">DHCP enabled</span> <span>${sumI18nSpan(dhcpEnabled, esc, undefined, netI18nOpts)}</span></div>` : "",
             serviceName ? `<div class="network-adapter__meta"><span class="muted-label">Service name</span> <span>${esc(serviceName)}</span></div>` : "",
@@ -12467,7 +12561,11 @@
         ${summaryDlDtLabel("Total Size", "Tamaño total", "Taille totale", summaryLoc, esc, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.totalSize, esc, undefined, sumI18nSummary)}</dd>
         ${summaryDlDtLabel("Free Space", "Espacio libre", "Espace libre", summaryLoc, esc, summaryLblOpts)}<dd class="system-summary-dd--wrap">${sumI18nSpan(d.freeSpace, esc, undefined, sumI18nSummary)}</dd>
         ${summaryDlDtLabel("Used", "Espacio usado", "Espace utilisé", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(d.used, esc, undefined, sumI18nSummary)}</dd>
-        ${summaryDlDtLabel("Volume Name", "Nombre de volumen", "Nom du volume", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(d.volumeName, esc, undefined, sumI18nSummary)}</dd>
+        ${summaryDlDtLabel("Volume Name", "Nombre de volumen", "Nom du volume", summaryLoc, esc, summaryLblOpts)}<dd>${
+          d.volumeName && String(d.volumeName).trim()
+            ? sumI18nSpan(d.volumeName, esc, undefined, sumI18nSummary)
+            : `<em class="summary-empty-inline">Not provided in this export</em>`
+        }</dd>
         ${summaryDlDtLabel("Serial Number", "Número de serie", "Numéro de série", summaryLoc, esc, summaryLblOpts)}<dd>${sumI18nSpan(d.serialNumber, esc, undefined, sumI18nSummary)}</dd>
       </dl></article>`
             )
@@ -12481,21 +12579,24 @@
     });
 
     const startups = sum.startupPrograms || [];
-    /** Wrap headers in {@code sumI18nSpan} so the section's default Translate (or click Original) swaps them. */
-    const startupForceI18n = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
+    /**
+     * Wrap headers in {@link sumI18nSpan} so non-English exports can flip them with the section toggle.
+     * Default-translate-on sections render in English; pressing {@code Original} swaps headers back.
+     */
+    const startupHeadOpts = summaryLoc ? /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true }) : undefined;
     const _startupHead = spanishExport
-      ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Comando", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Ubicación", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Usuario", esc, undefined, startupForceI18n)}</th></tr></thead>`
+      ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, "Name", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Comando", esc, "Command", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Ubicación", esc, "Location", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Usuario", esc, "User", startupHeadOpts)}</th></tr></thead>`
       : portugueseExport
-        ? `<thead><tr><th scope="col">${sumI18nSpan("Nome", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Comando", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Localização", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Usuário", esc, undefined, startupForceI18n)}</th></tr></thead>`
+        ? `<thead><tr><th scope="col">${sumI18nSpan("Nome", esc, "Name", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Comando", esc, "Command", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Localização", esc, "Location", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Usuário", esc, "User", startupHeadOpts)}</th></tr></thead>`
         : ukrainianExport
-          ? `<thead><tr><th scope="col">${sumI18nSpan("Ім'я", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Команда", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Розташування", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Користувач", esc, undefined, startupForceI18n)}</th></tr></thead>`
+          ? `<thead><tr><th scope="col">${sumI18nSpan("Ім'я", esc, "Name", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Команда", esc, "Command", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Розташування", esc, "Location", startupHeadOpts)}</th><th scope="col">${sumI18nSpan("Користувач", esc, "User", startupHeadOpts)}</th></tr></thead>`
           : `<thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead>`;
     const startupBody =
       startups.length > 0
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Startup programs">${_startupHead}<tbody>${startups
             .map(
               (s) =>
-                `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc, undefined, startupForceI18n)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.command, esc, undefined, startupForceI18n)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.location, esc, undefined, startupForceI18n)}</td><td>${sumI18nSpan(s.user, esc, undefined, startupForceI18n)}</td></tr>`
+                `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.command, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.location, esc)}</td><td>${sumI18nSpan(s.user, esc)}</td></tr>`
             )
             .join("")}</tbody></table></div>`
         : `<p class="summary-empty">No startup program entries found (export may omit <strong>Software Environment → Startup Programs</strong>).</p>`;

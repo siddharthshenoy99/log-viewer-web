@@ -5101,6 +5101,12 @@ details.report-category__details:not([open]) .report-category__chevron {
   padding: 0.5rem 0;
 }
 
+.summary-empty-inline {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
 .summary-lede {
   margin: 0 0 0.65rem;
   font-size: 0.82rem;

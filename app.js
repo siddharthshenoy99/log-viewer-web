@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.4";
+  const APP_VERSION = "1.5.5";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -527,6 +527,8 @@
             child.getAttribute("名称") ||
             child.getAttribute("항목") ||
             child.getAttribute("Элемент") ||
+            child.getAttribute("Елемент") ||
+            child.getAttribute("елемент") ||
             /** Turkish MSInfo saves {@code Öğe} / {@code öğe} on {@code <Data>} when the UI is Turkish. */
             child.getAttribute("Öğe") ||
             child.getAttribute("öğe");
@@ -542,6 +544,8 @@
             child.getAttribute("数值") ||
             child.getAttribute("값") ||
             child.getAttribute("Значение") ||
+            child.getAttribute("Значення") ||
+            child.getAttribute("значення") ||
             child.getAttribute("Değer") ||
             child.getAttribute("değer");
           /** Some Turkish builds use NFC variants or other spellings not matched by {@code getAttribute} literals. */
@@ -561,6 +565,8 @@
                 lk === "öğe" ||
                 lk === "objekt" ||
                 /^элемент$/i.test(key) ||
+                normXmlTag(key) === "елемент" ||
+                key === "Елемент" ||
                 key === "項目" ||
                 key === "名称")
             )
@@ -571,6 +577,8 @@
                 lk === "değer" ||
                 lk === "värde" ||
                 /^значение$/i.test(key) ||
+                normXmlTag(key) === "значення" ||
+                key === "Значення" ||
                 key === "値" ||
                 key === "值")
             )
@@ -3049,7 +3057,9 @@
         /Lecteur\s+[A-Z]:/i.test(s) ||
         (/Composants/i.test(s) && /Stockage/i.test(s) && /(Disque|Lecteur|Disques|Volumes?)/i.test(s) && /[A-Z]:/i.test(s)) ||
         /Composants.*Stockage.*(Disque|Lecteur)/i.test(s) ||
-        /Disque\s+\d+.*Lecteur.*[A-Z]:/i.test(s)
+        /Disque\s+\d+.*Lecteur.*[A-Z]:/i.test(s) ||
+        (/Компоненти/i.test(s) && /Зберігання/i.test(s) && /Диски/i.test(s) && /[A-Z]:/i.test(s)) ||
+        (/Зберігання/i.test(s) && /Диски/i.test(s) && /(?:Диск|Том)\b/i.test(s))
       );
     };
 
@@ -3063,7 +3073,7 @@
     };
 
     const looksLikePhysicalDisk = (/** @type {Record<string, string>} */ f) => {
-      const desc = `${f["Описание"] || ""} ${f["Description"] || ""} ${f["Descripción"] || ""} ${f["Açıklama"] || ""} ${f["Beskrivning"] || ""} ${f["Model"] || ""} ${f["Modelo"] || ""} ${f["Модель"] || ""} ${f["Modeli"] || ""} ${f["モデル"] || ""} ${f["製品名"] || ""}`.toLowerCase();
+      const desc = `${f["Описание"] || ""} ${f["Опис"] || ""} ${f["Description"] || ""} ${f["Descripción"] || ""} ${f["Açıklama"] || ""} ${f["Beskrivning"] || ""} ${f["Model"] || ""} ${f["Modelo"] || ""} ${f["Модель"] || ""} ${f["Modeli"] || ""} ${f["モデル"] || ""} ${f["製品名"] || ""}`.toLowerCase();
       const hasModel = !!(
         f["Model"] ||
         f["Modelo"] ||
@@ -3074,8 +3084,8 @@
         f["モデル"] ||
         f["製品名"]
       );
-      const hasDesc = !!(f["Описание"] || f["Description"] || f["Descripción"] || f["Beskrivning"] || f["説明"]);
-      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""} ${f["Toplam Boyut"] || ""} ${f["Tamaño"] || ""} ${f["Tamanho"] || ""} ${f["サイズ"] || ""} ${f["合計サイズ"] || ""}`.trim();
+      const hasDesc = !!(f["Описание"] || f["Опис"] || f["Description"] || f["Descripción"] || f["Beskrivning"] || f["説明"]);
+      const sizeBlob = `${f["Size"] || ""} ${f["Размер"] || ""} ${f["Розмір"] || ""} ${f["Total Size"] || ""} ${f["Ёмкость"] || ""} ${f["Toplam Boyut"] || ""} ${f["Tamaño"] || ""} ${f["Tamanho"] || ""} ${f["サイズ"] || ""} ${f["合計サイズ"] || ""}`.trim();
       const hasSized =
         sizeBlob.length > 2 &&
         /[\d,\s]+/.test(sizeBlob) &&
@@ -3108,6 +3118,7 @@
           f["Sistema de arquivos"] ||
           f["Sistema de ficheiros"] ||
           f["Файловая система"] ||
+          f["Файлова система"] ||
           f["Dosya Sistemi"] ||
           f["Dosya sistemi"] ||
           f["ファイル システム"] ||
@@ -3115,7 +3126,7 @@
           f.Filsystem ||
           f["Fil system"]
         ) ||
-        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Capacité"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["Toplam Boyut"] || f["Tamaño"] || f["Tamanho"] || f["Tamanho total"] || f["Capacidade total"] || f["合計サイズ"] || f["サイズ"] || f["総容量"] || f["Totalt utrymme"] || f["Total storlek"] || f["Volymkapacitet"] || f.Storlek) &&
+        (!!(f["Total Size"] || f["Gesamtgröße"] || f["Taille totale"] || f["Capacité"] || f["Размер"] || f["Полный размер"] || f["Ёмкость"] || f["Розмір"] || f["Toplam Boyut"] || f["Tamaño"] || f["Tamanho"] || f["Tamanho total"] || f["Capacidade total"] || f["合計サイズ"] || f["サイズ"] || f["総容量"] || f["Totalt utrymme"] || f["Total storlek"] || f["Volymkapacitet"] || f.Storlek) &&
           !!(
             f["Free Space"] ||
             f["Available Space"] ||
@@ -3134,6 +3145,7 @@
             f["Kullanılabilir alan"] ||
             f["Свободно"] ||
             f["Свободное место"] ||
+            f["Вільно"] ||
             f["Доступно"] ||
             f["空き領域"] ||
             f["空き容量"] ||
@@ -3163,6 +3175,7 @@
           f["Capacité"] ||
           f["Tamaño"] ||
           f["Tamanho"] ||
+          f["Диск"] ||
           f["Serial Number"] ||
           f["Numéro de série du volume"] ||
           f["Numéro de série"] ||
@@ -3178,7 +3191,9 @@
       if (!s || s.length < 2) return false;
       return (
         /[\d.,]/.test(s) &&
-        /(tb|gb|mb|kb|bytes|байт|バイト|go|to|mo|ko|bayt|gigabayt|megabayt|terabayt|kilobayt)/i.test(s)
+        /(tb|gb|mb|kb|bytes|байт|гб|тб|мб|кб|バイト|go|to|mo|ko|bayt|gigabayt|megabayt|terabayt|kilobayt)/i.test(
+          s
+        )
       );
     };
 
@@ -3255,7 +3270,9 @@
             !nk.includes("fri") &&
             !nk.includes("tillgäng") &&
             !nk.includes("använd") &&
-            !nk.includes("anvant"))
+            !nk.includes("anvant")) ||
+          (nk.includes("загальний") && (nk.includes("обсяг") || nk.includes("розмір"))) ||
+          (nk.includes("повний") && nk.includes("розмір"))
         )
           return v;
       }
@@ -3291,6 +3308,7 @@
           nk.includes("utrymme")
         )
           return v;
+        if (nk.includes("зайнято") || (nk.includes("зайнят") && nk.includes("простір"))) return v;
       }
       return "";
     };
@@ -3311,6 +3329,8 @@
         if ((nk.includes("nombre") && nk.includes("volumen")) || nk.includes("etiqueta")) return v;
         if ((nk.includes("nome") && nk.includes("volume")) || /r[oó]tulo/i.test(nk)) return v;
         if ((nk.includes("volym") && nk.includes("namn")) || /volymens\s+namn/i.test(nk)) return v;
+        if (nk.includes("імен") && nk.includes("том")) return v;
+        if (nk.includes("ім'я") && nk.includes("том")) return v;
       }
       return "";
     };
@@ -3349,6 +3369,8 @@
           "Använt utrymme",
           "Använda utrymmet",
           "Använt",
+          "Зайнято",
+          "Зайнятий простір",
         ]) ||
         f["Used"] ||
         f["Used(%)"] ||
@@ -3371,6 +3393,8 @@
         f["使用領域"] ||
         f["Använt utrymme"] ||
         f["Använda utrymmet"] ||
+        f["Зайнято"] ||
+        f["Зайнятий простір"] ||
         "";
       const d = String(direct || "").trim();
       if (d) return d;
@@ -3426,6 +3450,8 @@
           "Nome do volume",
           "Rótulo do volume",
           "Nome da unidade",
+          "Ім'я тому",
+          "Імʼя тому",
         ]) ||
         f["Volume Name"] ||
         f["Nombre de volumen"] ||
@@ -3450,6 +3476,8 @@
         f["ドライブ ラベル"] ||
         f["Birim Etiketi"] ||
         f["Birim etiketi"] ||
+        f["Ім'я тому"] ||
+        f["Імʼя тому"] ||
         "";
       const d = String(direct || "").trim();
       if (d) return d;
@@ -3459,7 +3487,8 @@
         if (!vv || /シリアル|serial/i.test(kk)) continue;
         if (
           /ボリューム.*(名|ラベル)|^ラベル$/i.test(kk) ||
-          (/volym/i.test(kk) && /(namn|etikett)/i.test(kk))
+          (/volym/i.test(kk) && /(namn|etikett)/i.test(kk)) ||
+          /ім['ʼ]\s*я\s+тому/i.test(kk)
         )
           return vv;
       }
@@ -3480,7 +3509,9 @@
         f["Unidad"] ||
         f["Name"] ||
         f["Описание"] ||
+        f["Опис"] ||
         f["Модель"] ||
+        f["Диск"] ||
         f["Sürücü"] ||
         f["Yerel Disk"] ||
         f["Lokal disk"] ||
@@ -3530,6 +3561,7 @@
           "ファイルシステム",
           "Filsystem",
           "Fil system",
+          "Файлова система",
         ]) ||
         f["File System"] ||
         f.Filesystem ||
@@ -3539,6 +3571,7 @@
         f["Sistema de ficheiros"] ||
         f["Sistema de arquivos"] ||
         f["Файловая система"] ||
+        f["Файлова система"] ||
         f["Dosya Sistemi"] ||
         f["Dosya sistemi"] ||
         f["ファイル システム"] ||
@@ -3558,6 +3591,8 @@
           "Размер",
           "Полный размер",
           "Ёмкость",
+          "Розмір",
+          "Загальний розмір",
           "Toplam Boyut",
           "Toplam boyut",
           "Sürücü Boyutu",
@@ -3590,6 +3625,8 @@
         f["Размер"] ||
         f["Полный размер"] ||
         f["Ёмкость"] ||
+        f["Розмір"] ||
+        f["Загальний розмір"] ||
         f["Toplam Boyut"] ||
         f["Toplam boyut"] ||
         f["Tamaño"] ||
@@ -3618,6 +3655,8 @@
           "Espaco disponivel",
           "Свободно",
           "Свободное место",
+          "Вільно",
+          "Вільний простір",
           "Доступно",
           "Boş Alan",
           "Boş alan",
@@ -3646,6 +3685,8 @@
         f["Espaco disponivel"] ||
         f["Свободно"] ||
         f["Свободное место"] ||
+        f["Вільно"] ||
+        f["Вільний простір"] ||
         f["Доступно"] ||
         f["Boş Alan"] ||
         f["Boş alan"] ||
@@ -3684,6 +3725,8 @@
           "Número de série do volume",
           "Número de série",
           "Numero de serie do volume",
+          "Серійний номер тому",
+          "Серійний номер",
         ]) ||
         f["Serial Number"] ||
         f["Número de serie"] ||
@@ -3697,6 +3740,8 @@
         f["Número de série"] ||
         f["Seriennummer"] ||
         f["Серийный номер"] ||
+        f["Серійний номер тому"] ||
+        f["Серійний номер"] ||
         f["シリアル番号"] ||
         f["ボリューム シリアル番号"] ||
         f["Birim Seri Numarası"] ||
@@ -5479,6 +5524,9 @@
       f.item ??
       f.Element ??
       f.element ??
+      f["Елемент"] ??
+      f["елемент"] ??
+      f["Элемент"] ??
       "";
     const val =
       f.Värde ??
@@ -5486,6 +5534,9 @@
       f.Value ??
       f.value ??
       f.Valor ??
+      f["Значення"] ??
+      f["значення"] ??
+      f["Значение"] ??
       "";
     return { lab: String(lab || "").trim(), val: String(val || "").trim() };
   }
@@ -6154,6 +6205,7 @@
     pushItem(/^Função da Plataforma$/i);
     pushItem(/^Platform Rolü$/u);
     pushItem(/^Роль платформы$/i);
+    pushItem(/^Роль платформи$/u);
     pushItem(/^Systemrolle$/i);
     pushItem(/^System SKU$/i);
     pushItem(/^Тип системы$/i);
@@ -6442,6 +6494,7 @@
           /^Procesador$/i,
           /^Processador$/i,
           /^Процессор$/i,
+          /^Процесор$/u,
           /^处理器$/i,
           /^プロセッサ$/,
           /^プロセッサー$/,
@@ -6456,6 +6509,7 @@
           /^Processeur$/i,
           /^Prozessor$/i,
           /^Процессор$/i,
+          /^Процесор$/u,
           /^プロセッサ$/,
           /^プロセッサー$/,
           /^İşlemci$/u,
@@ -6469,6 +6523,7 @@
           /^Processeur$/i,
           /^Prozessor$/i,
           /^Процессор$/i,
+          /^Процесор$/u,
           /^プロセッサ$/,
           /^プロセッサー$/,
           /^İşlemci$/u,
@@ -6487,6 +6542,7 @@
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
+          /^Часовий пояс$/u,
           /^时区$/i,
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
@@ -6505,6 +6561,7 @@
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
+          /^Часовий пояс$/u,
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
           /^時刻帯$/,
@@ -6522,6 +6579,7 @@
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
+          /^Часовий пояс$/u,
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
           /^時刻帯$/,
@@ -6539,6 +6597,7 @@
           /^Zona horaria$/i,
           /^Fuso horário$/i,
           /^Часовой пояс$/i,
+          /^Часовий пояс$/u,
           /^タイム\s*ゾーン$/,
           /^タイムゾーン$/,
           /^時刻帯$/,
@@ -6644,6 +6703,7 @@
           /^Função da plataforma$/i,
           /^Função da Plataforma$/i,
           /^Роль платформы$/i,
+          /^Роль платформи$/u,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
           /^Platform Rolü$/u,
@@ -6664,6 +6724,7 @@
           /^Função da plataforma$/i,
           /^Função da Plataforma$/i,
           /^Роль платформы$/i,
+          /^Роль платформи$/u,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
           /^Platform Rolü$/u,
@@ -6683,6 +6744,7 @@
           /^Função da plataforma$/i,
           /^Função da Plataforma$/i,
           /^Роль платформы$/i,
+          /^Роль платформи$/u,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
           /^Platform Rolü$/u,
@@ -6702,6 +6764,7 @@
           /^Função da plataforma$/i,
           /^Função da Plataforma$/i,
           /^Роль платформы$/i,
+          /^Роль платформи$/u,
           /^プラットフォームの役割$/,
           /^プラットフォーム\s*ロール$/,
           /^Platform Rolü$/u,
@@ -6766,7 +6829,7 @@
     const prNorm = String(platformRole || "").toLocaleLowerCase("tr-TR");
     const pr = prNorm;
     if (
-      (/\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|настольн|рабочая\s+станция|masaüstü|masaustu|escritorio|sobremesa|equipo\s+de\s+escritorio|área\s+de\s+trabalho|area\s+de\s+trabalho|stationär\s+dator|stationar\s+dator|skrivbordsdator|poste\s+de\s+travail/i.test(
+      (/\bdesktop\b|workstation|appliance\s+pc|рабочий\s+стол|робочий\s+стіл|настольн|рабочая\s+станция|masaüstü|masaustu|escritorio|sobremesa|equipo\s+de\s+escritorio|área\s+de\s+trabalho|area\s+de\s+trabalho|stationär\s+dator|stationar\s+dator|skrivbordsdator|poste\s+de\s+travail/i.test(
         pr
       ) ||
         /^bureau$/i.test(String(platformRole || "").trim())) &&
@@ -6783,7 +6846,7 @@
       systemForm = "Laptop / mobile-class";
     } else if (
       pcSystemType &&
-      /\bdesktop\b|рабочий\s+стол|настольн|masaüstü|masaustu/i.test(
+      /\bdesktop\b|рабочий\s+стол|робочий\s+стіл|настольн|masaüstü|masaustu/i.test(
         String(pcSystemType).toLocaleLowerCase("tr-TR")
       ) &&
       !/\bmobile\b|\bmobil\b|laptop|ноутбук|планшет|dizüstü|dizustu|taşınabilir|tasinabilir/i.test(
@@ -7284,8 +7347,8 @@
     const looksLikePageFileSizeAmount = (/** @type {string} */ raw) => {
       const s = String(raw || "").trim().toLowerCase();
       if (!s) return false;
-      if (/^\d[\d.,\s]*(bytes|kb|mb|gb|tb)\b/i.test(s)) return true;
-      return /\d+,\d+\s*(gb|mb|tb)\b/i.test(s);
+      if (/^\d[\d.,\s]*(bytes|kb|mb|gb|tb|байт|гб|тб|мб|кб)\b/i.test(s)) return true;
+      return /\d+,\d+\s*(gb|mb|tb|гб|тб|мб)\b/i.test(s);
     };
 
     const pickPageFileLocation = () => {
@@ -7309,13 +7372,15 @@
           /Plats för växlingsfil/i,
           /Pagineringssökväg/i,
           /Sökväg för växlingsfil/i,
+          /Розташування\s+файл(?:ів|у)?\s+довантаження/i,
+          /Розташування\s+файла\s+підкачки/i,
         ]) || "";
       if (v && looksLikePageFileSizeAmount(v) && !looksLikePageFilePath(v)) v = "";
       if (v && (!looksLikePageFileSizeAmount(v) || looksLikePageFilePath(v))) return v;
       for (const k of kvs) {
         const it = normalizeMsinfoItemLabel(k.item);
         if (
-          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|plats\s+för\s+växlingsfil|sökväg\s+för\s+växlingsfil|pagineringssökväg/i.test(
+          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|розташування\s+файл.*довантажен|розташування\s+файла\s+підкачки|^файл\s+довантажен|^файл\s+підкачки|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|plats\s+för\s+växlingsfil|sökväg\s+för\s+växlingsfil|pagineringssökväg/i.test(
             it
           ) &&
           !/växlingsfilsstorlek|storlek\s+för\s+växlingsfil|storlek\s+på\s+växlingsfil/i.test(it) &&
@@ -7335,6 +7400,8 @@
             /^archivo de paginación$/i.test(it) ||
             /^arquivo de paginação$/i.test(it) ||
             /^файл подкачки$/i.test(it) ||
+            /^файл\s+довантаження$/iu.test(it) ||
+            /^файл\s+підкачки$/iu.test(it) ||
             /^sayfalama\s+dosyası$/iu.test(it) ||
             /^växlingsfil$/iu.test(it) ||
             /^ページ\s*ファイル$/i.test(it) ||
@@ -7347,7 +7414,7 @@
       for (const r of rows) {
         if (
           !MSINFO_I18N.memoryRowPath.test(r.path) &&
-          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页|подкачк|ページ|メモリ|Sayfalama|sayfalama/i.test(
+          !/(^|\/)Paging(\/|$)|Auslagerung|paginación|paginação|分页|подкачк|довантажен|підкачк|ページ|メモリ|Sayfalama|sayfalama/i.test(
             r.path
           )
         ) {
@@ -7357,7 +7424,7 @@
         const ol = normalizeMsinfoItemLabel(objLab.lab);
         if (
           ol &&
-          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|plats\s+för\s+växlingsfil|sökväg\s+för\s+växlingsfil|pagineringssökväg/i.test(
+          /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|localização do arquivo|расположение файла подкачки|^файл подкачки$|розташування\s+файл.*довантажен|розташування\s+файла\s+підкачки|^файл\s+довантажен|^файл\s+підкачки|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|plats\s+för\s+växlingsfil|sökväg\s+för\s+växlingsfil|pagineringssökväg/i.test(
             ol
           ) &&
           !/växlingsfilsstorlek|storlek\s+för\s+växlingsfil|storlek\s+på\s+växlingsfil/i.test(ol) &&
@@ -7369,7 +7436,7 @@
         for (const [key, val] of Object.entries(r.fields)) {
           const kt = key.trim();
           if (
-            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|plats\s+för\s+växlingsfil|sökväg\s+för\s+växlingsfil|pagineringssökväg/i.test(
+            /page file location|auslagerungsdateiort|speicherort der auslagerungsdatei|emplacement du fichier|ubicación del archivo|расположение файла подкачки|^файл подкачки$|розташування\s+файл.*довантажен|розташування\s+файла\s+підкачки|^файл\s+довантажен|^файл\s+підкачки|分页文件位置|ページ\s*ファイル.*場所|ページング\s*ファイル.*場所|sayfalama\s+dosyası.*konum|plats\s+för\s+växlingsfil|sökväg\s+för\s+växlingsfil|pagineringssökväg/i.test(
               kt
             ) &&
             String(val).trim()
@@ -7384,6 +7451,8 @@
               /^fichier d[\u2019']échange$/i.test(kt) ||
               /^archivo de paginación$/i.test(kt) ||
               /^файл подкачки$/i.test(kt) ||
+              /^файл\s+довантаження$/iu.test(kt) ||
+              /^файл\s+підкачки$/iu.test(kt) ||
               /^sayfalama\s+dosyası$/iu.test(kt) ||
               /^växlingsfil$/iu.test(kt) ||
               /^ページ\s*ファイル$/i.test(kt) ||
@@ -7421,6 +7490,10 @@
         /物理メモリ.*RAM|RAM.*物理メモリ/i,
         /Yüklü\s+Fiziksel\s+Bellek\s*\(\s*RAM\s*\)/iu,
         /^Yüklü\s+Fiziksel\s+Bellek$/iu,
+        /^Установлена\s+фізична\s+пам'ять\s*\(\s*ОЗП\s*\)$/iu,
+        /^Установлена\s+фізична\s+пам’ять\s*\(\s*ОЗП\s*\)$/u,
+        /^Установлена\s+фізична\s+пам'ять$/iu,
+        /^Установлена\s+фізична\s+пам’ять$/u,
       ]),
       totalPhysical: pickSummaryMemory([
         /^Total Physical Memory$/i,
@@ -7438,6 +7511,9 @@
         /^合計\s*物理メモリ/i,
         /^物理メモリの合計/i,
         /^Toplam Fiziksel Bellek$/iu,
+        /^Загальний\s+обсяг\s+фізичної\s+пам'яті$/iu,
+        /^Загальний\s+обсяг\s+фізичної\s+пам’яті$/u,
+        /^Усього\s+фізичної\s+пам'яті$/iu,
       ]),
       availablePhysical: pickSummaryMemory([
         /^Available Physical Memory$/i,
@@ -7452,6 +7528,8 @@
         /^利用可能な物理メモリ/i,
         /^使用可能な物理メモリ/i,
         /^Kullanılabilir Fiziksel Bellek$/iu,
+        /^Доступно\s+фізичної\s+пам'яті$/iu,
+        /^Доступно\s+фізичної\s+пам’яті$/u,
       ]),
       totalVirtual: pickSummaryMemory([
         /^Total Virtual Memory$/i,
@@ -7468,6 +7546,8 @@
         /^合計\s*仮想メモリ/i,
         /^仮想メモリの合計/i,
         /^Toplam Sanal Bellek$/iu,
+        /^Усього\s+віртуальної\s+пам'яті$/iu,
+        /^Усього\s+віртуальної\s+пам’яті$/u,
       ]),
       availableVirtual: pickSummaryMemory([
         /^Available Virtual Memory$/i,
@@ -7482,6 +7562,8 @@
         /^利用可能な仮想メモリ/i,
         /^使用可能な仮想メモリ/i,
         /^Kullanılabilir Sanal Bellek$/iu,
+        /^Доступно\s+віртуальної\s+пам'яті$/iu,
+        /^Доступно\s+віртуальної\s+пам’яті$/u,
       ]),
       pageFileSpace: pickSummaryMemory([
         /Page File Space/i,
@@ -7504,6 +7586,7 @@
         /^Växlingsfilsstorlek\b/iu,
         /^Storlek på växlingsfil\b/iu,
         /^Total storlek för växlingsfil\b/iu,
+        /^Розмір\s+файлу\s+довантаження$/iu,
       ]),
       pageFileLocation: pickPageFileLocation(),
     };
@@ -8896,6 +8979,8 @@
     ["Доступно віртуальної пам'яті", "Available Virtual Memory"],
     ["Розмір файлу довантаження", "Page File Space"],
     ["Файл довантаження", "Page File"],
+    ["Розташування файлу довантаження", "Page File Location(s)"],
+    ["Розташування файлів довантаження", "Page File Location(s)"],
     ["Апаратнозалежний рівень (HAL)", "Hardware Abstraction Layer"],
     ["Версія BIOS/Дата", "BIOS Version/Date"],
     ["Модель BIOS", "BIOS Mode"],
@@ -11033,6 +11118,7 @@
       .replace(/\bМГц\b/giu, "MHz")
       .replace(/\bГГц\b/giu, "GHz")
       .replace(/(\d+\.\d+\.\d+)\s+Збірка\s+(\d+)/giu, "$1 Build $2")
+      .replace(/\bРобочий\s+стіл\b/giu, "Desktop")
       /** Spanish WER (Problem Reports) — labels vary by build; regex covers spacing / short forms. */
       .replace(/\bNombre\s+de\s+evento\s*:/giu, "Event name:")
       .replace(/\bId\.\s*de\s+informe\s*:/giu, "Report identifier:")

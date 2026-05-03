@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.9";
+  const APP_VERSION = "1.5.10";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -9498,6 +9498,13 @@
     ["Імʼя", "Name"],
     ["Ім'я тому", "Volume name"],
     ["Імʼя тому", "Volume name"],
+    /** Startup Programs table headers / cells (Ukrainian). */
+    ["Розташування", "Location"],
+    ["Розміщення", "Location"],
+    ["Користувач", "User"],
+    ["Програма", "Program"],
+    ["Команда запуску", "Startup command"],
+    ["Командний рядок", "Command line"],
   ];
 
   /**
@@ -12474,19 +12481,21 @@
     });
 
     const startups = sum.startupPrograms || [];
+    /** Wrap headers in {@code sumI18nSpan} so the section's default Translate (or click Original) swaps them. */
+    const startupForceI18n = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
     const _startupHead = spanishExport
-      ? `<thead><tr><th scope="col">Nombre</th><th scope="col">Comando</th><th scope="col">Ubicación</th><th scope="col">Usuario</th></tr></thead>`
+      ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Comando", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Ubicación", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Usuario", esc, undefined, startupForceI18n)}</th></tr></thead>`
       : portugueseExport
-        ? `<thead><tr><th scope="col">Nome</th><th scope="col">Comando</th><th scope="col">Localização</th><th scope="col">Usuário</th></tr></thead>`
+        ? `<thead><tr><th scope="col">${sumI18nSpan("Nome", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Comando", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Localização", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Usuário", esc, undefined, startupForceI18n)}</th></tr></thead>`
         : ukrainianExport
-          ? `<thead><tr><th scope="col">Ім'я</th><th scope="col">Команда</th><th scope="col">Розташування</th><th scope="col">Користувач</th></tr></thead>`
+          ? `<thead><tr><th scope="col">${sumI18nSpan("Ім'я", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Команда", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Розташування", esc, undefined, startupForceI18n)}</th><th scope="col">${sumI18nSpan("Користувач", esc, undefined, startupForceI18n)}</th></tr></thead>`
           : `<thead><tr><th scope="col">Name</th><th scope="col">Command</th><th scope="col">Location</th><th scope="col">User</th></tr></thead>`;
     const startupBody =
       startups.length > 0
         ? `<div class="system-ext-scroll"><table class="system-ext-table" aria-label="Startup programs">${_startupHead}<tbody>${startups
             .map(
               (s) =>
-                `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.command, esc)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.location, esc)}</td><td>${sumI18nSpan(s.user, esc)}</td></tr>`
+                `<tr><td class="system-ext-td-name">${sumI18nSpan(s.name, esc, undefined, startupForceI18n)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.command, esc, undefined, startupForceI18n)}</td><td class="system-summary-dd--wrap">${sumI18nSpan(s.location, esc, undefined, startupForceI18n)}</td><td>${sumI18nSpan(s.user, esc, undefined, startupForceI18n)}</td></tr>`
             )
             .join("")}</tbody></table></div>`
         : `<p class="summary-empty">No startup program entries found (export may omit <strong>Software Environment → Startup Programs</strong>).</p>`;

@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.7";
+  const APP_VERSION = "1.5.8";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -11548,7 +11548,7 @@
    * @param {string} title
    * @param {string} bodyHtml inner HTML only
    * @param {(s: string) => string} esc
-   * @param {{ count?: number | null, open?: boolean, icon?: string, variant?: "default" | "alert", alwaysOfferTranslate?: boolean }} [opts]
+   * @param {{ count?: number | null, open?: boolean, icon?: string, variant?: "default" | "alert", alwaysOfferTranslate?: boolean, defaultTranslateOn?: boolean }} [opts]
    */
   function renderReportCategoryAccordion(title, bodyHtml, esc, opts) {
     const o = opts || {};
@@ -11566,8 +11566,10 @@
     );
     const needsTranslate =
       !!o.alwaysOfferTranslate || localeScriptLooksNonEnglishListed(plainForDetect);
+    /** When the export is non-English, show English by default; user can press {@code Original} to revert. */
+    const defaultOn = needsTranslate && o.defaultTranslateOn === true;
     const translateBtn = needsTranslate
-      ? `<button type="button" class="report-category__translate" aria-pressed="false">Translate</button>`
+      ? `<button type="button" class="report-category__translate" aria-pressed="${defaultOn ? "true" : "false"}"${defaultOn ? ` data-default-translate="1"` : ""}>${defaultOn ? "Original" : "Translate"}</button>`
       : "";
     return `<section class="report-category summary-card summary-card--wide${mod}" aria-label="${esc(title)}">
       <details class="report-category__details"${openAttr}>
@@ -11578,7 +11580,7 @@
           ${translateBtn}
           <span class="report-category__chevron" aria-hidden="true"></span>
         </summary>
-        <div class="report-category__body-inner"><div class="report-category__i18n-root">${bodyHtml}</div></div>
+        <div class="report-category__body-inner"><div class="report-category__i18n-root"${defaultOn ? ` data-default-translate="1"` : ""}>${bodyHtml}</div></div>
       </details>
     </section>`;
   }
@@ -12160,10 +12162,13 @@
     const summaryLblOpts = /** @type {{ forceI18nSpan: true }} */ ({ forceI18nSpan: true });
     const sumI18nSummary = summaryLoc ? summaryLblOpts : undefined;
 
+    /** When the export is non-English (Cyrillic, Spanish, French, …) flip every section to English by default. */
+    const defaultTranslateOn = !!summaryLoc;
     const mbBiosBody = renderMotherboardBiosBody(sum, esc, { forceI18nSpan: true });
     const mbBiosHtml = renderReportCategoryAccordion("Motherboard & BIOS", mbBiosBody, esc, {
       icon: "mb",
       alwaysOfferTranslate: true,
+      defaultTranslateOn,
     });
 
     const gpuCount = Array.isArray(sum.graphics?.adapters)
@@ -12213,6 +12218,7 @@
       open: true,
       icon: "system",
       alwaysOfferTranslate: true,
+      defaultTranslateOn,
     });
 
     const mem = sum.memory || {};
@@ -12228,6 +12234,7 @@
     const memoryHtml = renderReportCategoryAccordion("Memory Information", memoryBody, esc, {
       icon: "memory",
       alwaysOfferTranslate: !!summaryLoc,
+      defaultTranslateOn,
     });
 
     const storageDrives = sum.storageDrives || [];
@@ -12251,6 +12258,8 @@
     const storageHtml = renderReportCategoryAccordion("Storage Drives", storageBody, esc, {
       count: storageDrives.length || null,
       icon: "disk",
+      alwaysOfferTranslate: !!summaryLoc,
+      defaultTranslateOn,
     });
 
     const startups = sum.startupPrograms || [];
@@ -12273,6 +12282,8 @@
     const startupHtml = renderReportCategoryAccordion("Startup Applications", startupBody, esc, {
       count: startups.length || null,
       icon: "startup",
+      alwaysOfferTranslate: !!summaryLoc,
+      defaultTranslateOn,
     });
 
     const svcAll = sum.servicesAll || [];
@@ -12306,6 +12317,7 @@
       count: svcAll.length || null,
       icon: "services",
       alwaysOfferTranslate: svcOfferTranslate,
+      defaultTranslateOn,
     });
     const servicesRunMsg = `<p class="summary-empty">No Windows <strong>Services</strong> rows matched a running state (including localized text such as <em>Em execução</em>, <em>Çalışıyor</em>, <em>Виконується</em>, <em>Выполняется</em>, <em>Работает</em>, <em>Запущена</em>, or <em>RUNNING</em>). Only <strong>Software Environment → Services</strong> is used here — the <strong>Running Tasks</strong> / <strong>Выполняющиеся задачи</strong> process list is a different MSInfo section.</p>`;
     const runningBody = runningList.length > 0 ? svcRows(runningList) : servicesRunMsg;
@@ -12313,6 +12325,7 @@
       count: runningList.length || null,
       icon: "running",
       alwaysOfferTranslate: svcOfferTranslate,
+      defaultTranslateOn,
     });
 
     const wer = sum.windowsErrorReports || [];
@@ -12326,6 +12339,7 @@
       count: wer.length || null,
       icon: "wer",
       alwaysOfferTranslate: werNeedsI18n,
+      defaultTranslateOn,
     });
 
     const os = sum.os || { name: "", versionLine: "", build: "", installDate: "" };
@@ -12339,6 +12353,7 @@
     const osHtml = renderReportCategoryAccordion("OS Information", osBody, esc, {
       icon: "os",
       alwaysOfferTranslate: true,
+      defaultTranslateOn,
     });
 
     const recHtml = renderReportCategoryAccordion("Recommendations & Updates", renderRecommendationsCard(sum, true), esc, {
@@ -12349,12 +12364,14 @@
       icon: "gpu",
       open: true,
       alwaysOfferTranslate: gpuCount > 0,
+      defaultTranslateOn,
     });
     const netCount = Array.isArray(sum.networkAdapters) ? sum.networkAdapters.length : 0;
     const networkHtml = renderReportCategoryAccordion("Network (Internet)", netBody, esc, {
       count: netCount || null,
       icon: "network",
       alwaysOfferTranslate: !!(sum.networkAdapters && sum.networkAdapters.length),
+      defaultTranslateOn,
     });
 
     el.innerHTML = `${xmlRepairBanner}${recoveryBanner}
@@ -12373,6 +12390,41 @@
   ${networkHtml}
   ${werHtml}
 </div>`;
+    /** Pre-translate sections marked {@code data-default-translate="1"} so non-English exports show English up-front. */
+    applyDefaultSectionTranslate(el);
+  }
+
+  /**
+   * Walks {@code .report-category__i18n-root[data-default-translate="1"]} and replaces each
+   * {@code .sum-i18n} span text with its offline-translated English where available.
+   * @param {HTMLElement | Element | null | undefined} root
+   */
+  function applyDefaultSectionTranslate(root) {
+    if (!root || !root.querySelectorAll) return;
+    const sections = root.querySelectorAll(".report-category__i18n-root[data-default-translate='1']");
+    sections.forEach((section) => {
+      section.querySelectorAll(".sum-i18n").forEach((span) => {
+        const enc = span.getAttribute("data-i18n-enc");
+        let raw = "";
+        if (enc) {
+          try {
+            raw = decodeURIComponent(enc);
+          } catch {
+            raw = span.getAttribute("data-export") || "";
+          }
+        } else {
+          raw = span.getAttribute("data-export") || "";
+        }
+        if (!raw) return;
+        const tEn = translateExportValueToEnglish(raw);
+        if (tEn && tEn !== raw) {
+          span.textContent = tEn;
+        } else {
+          const alt = span.getAttribute("data-alt-en") || "";
+          if (alt) span.textContent = alt;
+        }
+      });
+    });
   }
 
   /**

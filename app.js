@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.5.5";
+  const APP_VERSION = "1.5.6";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -8584,11 +8584,12 @@
    */
   function looksLikeUkrainianWindowsCyrillicHint(s) {
     const u = String(s || "");
+    /** JS {@code \b} word boundaries are ASCII-only — do not use {@code \b} around Cyrillic (paths then fail to match). */
     return (
-      /\bВідомості\s+про\s+систему\b|\bПрограмне\s+середовище\b|\bНазва\s+ОС\b|\bУстановлена\s+фізична\s+пам/i.test(u) ||
-      /\bРобочий\s+стіл\b|\bЗбірка\b|\bНедоступно\b|\bСистемні\s+драйвери\b|\bЗмінні\s+оточення\b|\bМережеві\s+підключення\b/i.test(u) ||
-      /\bядер\s+\d+,\s*логічних\s+процесорів\b|\bлогічних\s+процесорів\b|\bелемент\b|\bзначення\b/i.test(u) ||
-      /\bПристрої\s+з\s+неполадками\b|\bКомпоненти\b|\bЗберігання\b/i.test(u)
+      /Відомості\s+про\s+систему|Програмне\s+середовище|Назва\s+ОС|Установлена\s+фізична\s+пам/i.test(u) ||
+      /Робочий\s+стіл|Збірка|Недоступно|Системні\s+драйвери|Змінні\s+оточення|Мережеві\s+підключення/i.test(u) ||
+      /ядер\s+\d+,\s*логічних\s+процесорів|логічних\s+процесорів|елемент|значення/i.test(u) ||
+      /Пристрої\s+з\s+неполадками|Компоненти|Зберігання/i.test(u)
     );
   }
 
@@ -8605,6 +8606,13 @@
     if (/[\u3040-\u30FF\u31F0-\u31FF]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
     if (/[\uAC00-\uD7AF]/.test(b)) return { code: "ko", name: "Korean", confidence: 0.99 };
     if (/[\u0400-\u04FF]/.test(b)) {
+      /** Strong MSInfo path/item signals (ASCII {@code \b} misses Cyrillic; paths must still resolve here). */
+      if (
+        /Відомості\s+про\s+систему|Програмне\s+середовище|Зберігання\s*\/|Компоненти\s*\/|елемент|значення|логічних\s+процесорів/i.test(
+          b
+        )
+      )
+        return { code: "uk", name: "Ukrainian", confidence: 0.96 };
       if (looksLikeUkrainianWindowsCyrillicHint(b)) return { code: "uk", name: "Ukrainian", confidence: 0.92 };
       return { code: "ru", name: "Russian", confidence: 0.99 };
     }
@@ -9020,6 +9028,127 @@
     ["Збірка", "Build"],
     ["Версія", "Version"],
     ["Процесор", "Processor"],
+  ];
+
+  /**
+   * Ukrainian MSInfo **Item** column labels (components, network, storage, serial) from Language Adder exports.
+   * Longer strings win at merge time; keep full phrases before short words like {@code Тип} / {@code Стан}.
+   * @type {readonly (readonly [string, string])[]}
+   */
+  const LOCALE_PAIRS_MSINFO_UK_LABELS = [
+    ["Перевірку парності ввімк.", "Parity check enabled"],
+    ["Перервати читання/запис у разі помилки", "Abort on read/write error"],
+    ["Підтримка гарантованої пропускної здатності", "Guaranteed bandwidth support"],
+    ["Підтримка даних з'єднання", "Connection-oriented data support"],
+    ["Підтримка даних роз'єднання", "Connectionless data support"],
+    ["Підтримка мультиадресності", "Multicast support"],
+    ["Підтримка поступового закриття", "Graceful closing support"],
+    ["Підтримка прискореної обробки", "Expedited data support"],
+    ["Підтримка широкомовлення", "Broadcast support"],
+    ["Підтримка шифрування", "Encryption support"],
+    ["Підтримка 16-розрядного режиму", "16-bit mode supported"],
+    ["Підтримка спеціальних символів", "Special character support"],
+    ["Максимальний розмір буфера вводу", "Maximum input buffer size"],
+    ["Максимальний розмір буфера виводу", "Maximum output buffer size"],
+    ["Максимальний розмір повідомлення", "Maximum message size"],
+    ["Максимальний розмір адреси", "Maximum address size"],
+    ["Мінімальний розмір адреси", "Minimum address size"],
+    ["Установлюване керування потоком", "Flow control configurable"],
+    ["Установлювана перевірка парності", "Parity check configurable"],
+    ["Настроювання під робочу руку", "Settings for right-handed"],
+    ["Контроль вихідних XOnXOff", "XOn/XOff output control"],
+    ["Контроль вхідних XOnXOff", "XOn/XOff input control"],
+    ["Тип керування потоком DTR", "DTR flow control type"],
+    ["Тип керування потоком RTS", "RTS flow control type"],
+    ["Початковий зсув розділу", "Partition starting offset"],
+    ["Елементи колірної таблиці", "Color table entries"],
+    ["Логічний пристрій SCSI", "SCSI logical unit"],
+    ["Підтримка керування живленням", "Power management supported"],
+    ["Поріг подвійного клацання", "Double-click threshold"],
+    ["Опис адаптера", "Adapter description"],
+    ["Порт вводу/виводу", "I/O port"],
+    ["Роздільна здатність", "Resolution"],
+    ["Розрядів/піксель", "Bits/pixel"],
+    ["Тип устаткування", "Hardware type"],
+    ["Кількість функціональних клавіш", "Number of function keys"],
+    ["Кількість кнопок", "Number of buttons"],
+    ["Код PNP-пристрою", "PNP Device ID"],
+    ["Серійний номер тому", "Volume serial number"],
+    ["Шлюз IP за замовчуванням", "Default IP gateway"],
+    ["DHCP-оренда закінчується", "DHCP lease expires"],
+    ["DHCP-оренду отримано", "DHCP lease obtained"],
+    ["MAC-адреса", "MAC address"],
+    ["IP-підмережа", "IP subnet"],
+    ["IRQ-канал", "IRQ channel"],
+    ["Адреса пам'яті", "Memory address"],
+    ["Гарантія послідовності", "Ordering guarantee"],
+    ["Гарантія доставки", "Delivery guarantee"],
+    ["Для псевдопотоків", "For pseudo-streams"],
+    ["Для повідомлень", "For datagrams"],
+    ["Тип адаптера", "Adapter type"],
+    ["Тип продукту", "Product type"],
+    ["Останнє скидання", "Last reset"],
+    ["INF-файл", "INF file"],
+    ["ОЗП адаптера", "Adapter RAM"],
+    ["Колірні площини", "Color planes"],
+    ["Файлова система", "File System"],
+    ["Байт/сектор", "Bytes/sector"],
+    ["Розмір розділу", "Partition size"],
+    ["Треків/циліндр", "Tracks/cylinder"],
+    ["Усього циліндрів", "Total cylinders"],
+    ["Секторів/трек", "Sectors/track"],
+    ["Усього секторів", "Total sectors"],
+    ["Усього треків", "Total tracks"],
+    ["Порт SCSI", "SCSI port"],
+    ["Шина SCSI", "SCSI bus"],
+    ["Тип носія", "Media type"],
+    ["Ім'я служби", "Service name"],
+    ["Імʼя служби", "Service name"],
+    ["DHCP-сервер", "DHCP server"],
+    ["DHCP увімк.", "DHCP enabled"],
+    ["Служба без підключення", "Connectionless service"],
+    ["Установлювані стоп-біти", "Stop bits configurable"],
+    ["Установлювана розрядність", "Data bits configurable"],
+    ["Установлювана швидкість", "Baud rate configurable"],
+    ["Установлювана парність", "Parity configurable"],
+    ["Установлювана RLSD", "RLSD configurable"],
+    ["Підтримка RLSD", "RLSD supported"],
+    ["Продовжувати XMit по XOff", "Continue Xmit on XOff"],
+    ["Заміну за помилкою ввімк.", "Replace on error enabled"],
+    ["Видаляти пусті байти", "Discard null bytes"],
+    ["Увімкнено двійковий режим", "Binary mode enabled"],
+    ["Швидкість передачі", "Baud rate"],
+    ["Знак заміни за помилкою", "Error replacement character"],
+    ["Контроль вихідних CTS", "CTS output control"],
+    ["Контроль вихідних DSR", "DSR output control"],
+    ["DSR-чутливість", "DSR sensitivity"],
+    ["Біт/байт", "Bit/byte"],
+    ["Зайнято", "Occupied"],
+    ["Знак EOF", "EOF character"],
+    ["Знак XOff", "XOff character"],
+    ["Знак події", "Event character"],
+    ["Парність", "Parity"],
+    ["Поріг XOffXMit", "XOff threshold"],
+    ["Поріг XOnXMit", "XOn threshold"],
+    ["Символ XOn", "XOn character"],
+    ["Стоп-біти", "Stop bits"],
+    ["Тип", "Type"],
+    ["Стан", "Status"],
+    ["Розмір", "Size"],
+    ["Опис", "Description"],
+    ["Розкладка", "Layout"],
+    ["Розділ", "Partition"],
+    ["Розділи", "Partitions"],
+    ["Диск", "Disk"],
+    ["Носій", "Media"],
+    ["Вільно", "Free"],
+    ["Стиснутий", "Compressed"],
+    ["Файл", "File"],
+    ["Індекс", "Index"],
+    ["Ім'я", "Name"],
+    ["Імʼя", "Name"],
+    ["Ім'я тому", "Volume name"],
+    ["Імʼя тому", "Volume name"],
   ];
 
   /**
@@ -10846,6 +10975,7 @@
       [
         ...LOCALE_PAIRS_MSINFO_RU,
         ...LOCALE_PAIRS_MSINFO_UK,
+        ...LOCALE_PAIRS_MSINFO_UK_LABELS,
         ...LOCALE_PAIRS_MSINFO_INTL,
         ...LOCALE_PAIRS_MSINFO_TR_SERVICES,
         ...LOCALE_PAIRS_MSINFO_PT_SERVICES,
@@ -14320,6 +14450,7 @@
       "This report lists only strings that look non-English AND are not already covered by the current offline translation tables.",
       "Use it to add new token pairs or label mappings without guessing. Keep translations specific (prefer full labels over short substrings).",
       "The unknownTokens block additionally lists non-English tokens found in Network / Services / Storage values that were not translated by current offline tables.",
+      "After a viewer update that adds your missing pairs, export once more: the list should be empty (or only show text that is genuinely new). Re-exporting the same .nfo many times is not required unless the file or the app changed.",
     ];
 
     return {
@@ -14499,6 +14630,7 @@
     const notes = [
       "This report lists only strings that look non-English AND are not already covered by the current offline translation tables.",
       "Use it to add new token pairs or label mappings without guessing. Keep translations specific (prefer full labels over short substrings).",
+      "After the viewer adds mappings from your export, one follow-up export from the same source should show (none) unless strings are new.",
     ];
 
     return {

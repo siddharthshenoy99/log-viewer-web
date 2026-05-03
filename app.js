@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.6.0";
+  const APP_VERSION = "1.6.1";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -3703,32 +3703,45 @@
       if (seen.has(key)) return;
       if (Object.keys(f).length < 2 || !looksLikeDisk(f)) return;
       seen.add(key);
-      let title =
-        f["Drive"] ||
-        f["Lecteur"] ||
-        f.Laufwerk ||
-        f["Volume"] ||
-        f.Enhet ||
-        f["Unidad"] ||
-        f["Name"] ||
-        f["Описание"] ||
-        f["Опис"] ||
-        f["Модель"] ||
-        f["Диск"] ||
-        f["Sürücü"] ||
-        f["Yerel Disk"] ||
-        f["Lokal disk"] ||
-        f["Lokal enhet"] ||
-        f["ドライブ"] ||
-        f["ディスク"] ||
-        (path.match(/Drive\s+[A-Z]:/i) ||
-          path.match(/ドライブ\s+[A-Z]:/i) ||
-          path.match(/Sürücü\s+[A-Z]:/i) ||
-          path.match(/Unidad local\s*\([A-Z]:/i) ||
-          path.match(/Unidad\s+[A-Z]:/i) ||
-          [""])[0] ||
-        path.split(" / ").pop() ||
-        "Drive";
+      /**
+       * Title priority: a drive-letter row beats a description, so "C: / Local Fixed Disk" renders as
+       * "Drive C:". Ukrainian {@code Диск} = "C:" must therefore come before {@code Опис} = "Local Fixed Disk".
+       */
+      const driveLetterFromField =
+        String(f["Drive"] || f["Lecteur"] || f["Unidad"] || f["Unidade"] || f["Диск"] || "").trim();
+      const driveLetterMatch = driveLetterFromField.match(/^([A-Z]):?$/i);
+      let title = "";
+      if (driveLetterMatch) {
+        title = `Drive ${driveLetterMatch[1]}:`;
+      } else {
+        title =
+          f["Drive"] ||
+          f["Lecteur"] ||
+          f.Laufwerk ||
+          f["Volume"] ||
+          f.Enhet ||
+          f["Unidad"] ||
+          f["Диск"] ||
+          f["Name"] ||
+          f["Sürücü"] ||
+          f["Yerel Disk"] ||
+          f["Lokal disk"] ||
+          f["Lokal enhet"] ||
+          f["ドライブ"] ||
+          f["ディスク"] ||
+          /** Description / model fall to the BACK so a volume ("C:") is preferred over its description ("Local Fixed Disk"). */
+          f["Описание"] ||
+          f["Опис"] ||
+          f["Модель"] ||
+          (path.match(/Drive\s+[A-Z]:/i) ||
+            path.match(/ドライブ\s+[A-Z]:/i) ||
+            path.match(/Sürücü\s+[A-Z]:/i) ||
+            path.match(/Unidad local\s*\([A-Z]:/i) ||
+            path.match(/Unidad\s+[A-Z]:/i) ||
+            [""])[0] ||
+          path.split(" / ").pop() ||
+          "Drive";
+      }
       const tTrim = String(title).trim();
       // French exports often show a generic "Lecteurs" group; prefer a per-drive title when the record has a drive letter.
       if (/^Lecteurs?$/iu.test(tTrim)) {
@@ -3743,6 +3756,12 @@
         // "Lecteur: C:" should become "Drive C:" by default (English UI labels).
         const letter = String(f["Lecteur"] || "").trim();
         if (letter && !/^[A-Z]:$/i.test(String(tTrim))) title = `Drive ${letter}`;
+      }
+      /** Ukrainian/Russian {@code Опис: Disk drive} is generic — promote the model / drive letter when available. */
+      if (/^(Disk\s+drive|Local\s+Fixed\s+Disk)$/i.test(tTrim)) {
+        const dl = String(f["Диск"] || "").trim().match(/^([A-Z]):?$/i);
+        if (dl) title = `Drive ${dl[1]}:`;
+        else if (f["Модель"] && String(f["Модель"]).trim()) title = String(f["Модель"]).trim();
       }
       const pathDiskN = String(path || "").match(/ディスク\s*(\d+)/i);
       const titleDiskN = tTrim.match(/^ディスク\s*(\d+)$/i);
@@ -3998,9 +4017,12 @@
       });
     };
 
-    /** JP exports split volumes on ドライブ / ローカル ディスク (C:); physical disks repeat ディスク / ディスク 1. Spanish uses Unidad / Disco. */
+    /**
+     * JP exports split volumes on ドライブ / ローカル ディスク (C:); physical disks repeat ディスク / ディスク 1. Spanish uses Unidad / Disco.
+     * Ukrainian (uk-UA) exports use {@code Диск} as the first row of every disk record (`<Елемент>Диск</Елемент>` ↦ value `C:` for the volume, then a separate physical-disk record with `<Елемент>Опис</Елемент>` ↦ value `Disk drive`).
+     */
     const driveRecordStartRe =
-      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?|Yerel\s+Disk(?:\s*\([A-Z]:?\))?|Yerel\s+disk(?:\s*\([A-Z]:?\))?|Sürücü(?:\s+[A-Z]:)?|Yerel\s+sürücü(?:\s*\([A-Z]:?\))?|Unidad|Unidade(?:\s+local(?:\s*\([A-Z]:?\))?)?|Disco(?:\s+\d+)?|Disco\s+local(?:\s*\([A-Z]:?\))?|Lokal\s+disk(?:\s*\([A-Z]:?\))?|Lokal\s+enhet(?:\s*\([A-Z]:?\))?|Volym(?:\s+\d+)?|Enhet|Lecteur|Lecteurs|Disque\s+local)$/iu;
+      /^(ドライブ|Drive|Volume|Laufwerk|ボリューム|ディスク(?:\s+\d+)?|ローカル\s*ディスク(?:\s*\([A-Z]:?\))?|Yerel\s+Disk(?:\s*\([A-Z]:?\))?|Yerel\s+disk(?:\s*\([A-Z]:?\))?|Sürücü(?:\s+[A-Z]:)?|Yerel\s+sürücü(?:\s*\([A-Z]:?\))?|Unidad|Unidade(?:\s+local(?:\s*\([A-Z]:?\))?)?|Disco(?:\s+\d+)?|Disco\s+local(?:\s*\([A-Z]:?\))?|Lokal\s+disk(?:\s*\([A-Z]:?\))?|Lokal\s+enhet(?:\s*\([A-Z]:?\))?|Volym(?:\s+\d+)?|Enhet|Lecteur|Lecteurs|Disque\s+local|Диск(?:\s+\d+)?|Том(?:\s+\d+)?|Опис|Описание)$/iu;
     const emitDrivesForPath = (/** @type {string} */ p) => {
       const chunks = chunkKvsPlainSectionRecords(kvs, p, driveRecordStartRe, 2);
       let any = false;
@@ -8910,27 +8932,89 @@
   }
 
   /**
+   * Counts how many distinct token signals match in {@code blob}; used to bump confidence when many of a locale's
+   * marker phrases appear together (one signal could be coincidence; six is the locale).
+   * @param {string} blob
+   * @param {RegExp[]} signals
+   * @returns {number}
+   */
+  function countLocaleSignals(blob, signals) {
+    let n = 0;
+    for (const re of signals) if (re.test(blob)) n++;
+    return n;
+  }
+
+  /**
+   * Boosts the base confidence when several distinct signals fired (n ≥ 3 → +0.05, n ≥ 5 → +0.08).
+   * @param {number} base
+   * @param {number} n
+   */
+  function bumpConfidence(base, n) {
+    if (n >= 5) return Math.min(0.99, base + 0.08);
+    if (n >= 3) return Math.min(0.99, base + 0.05);
+    return base;
+  }
+
+  /**
    * Best-effort offline UI language guess for MSInfo / Windows strings (no network). Scripts first, then Latin locales.
+   * Returns {@code confidence} ∈ [0, 1] — higher when multiple signals agree, so the Language Adder can flag
+   * low-confidence detections in its export.
    * @param {string} blob
    * @returns {{ code: string, name: string, confidence: number }}
    */
   function detectOfflineUiLanguage(blob) {
     const b = String(blob || "");
     if (!b.trim()) return { code: "unknown", name: "Unknown", confidence: 0 };
-    if (/[\u0600-\u06FF]/.test(b)) return { code: "ar", name: "Arabic", confidence: 0.95 };
+    /** Script-based prelim detection — these scripts are exclusive to a single language family. */
+    if (/[\u0600-\u06FF]/.test(b)) {
+      /** Persian (fa) and Urdu (ur) overlap with Arabic block — disambiguate on diacritics. */
+      if (/[\u067E\u0686\u0698\u06A9\u06AF\u06CC]/.test(b)) {
+        if (/\bسیستم|پیکربندی|نسخه|پردازنده/.test(b)) return { code: "fa", name: "Persian", confidence: 0.92 };
+      }
+      return { code: "ar", name: "Arabic", confidence: 0.95 };
+    }
     if (/[\u0590-\u05FF]/.test(b)) return { code: "he", name: "Hebrew", confidence: 0.95 };
     if (/[\u3040-\u30FF\u31F0-\u31FF]/.test(b)) return { code: "ja", name: "Japanese", confidence: 0.99 };
     if (/[\uAC00-\uD7AF]/.test(b)) return { code: "ko", name: "Korean", confidence: 0.99 };
     if (/[\u0400-\u04FF]/.test(b)) {
+      /** Distinct Cyrillic locales: Bulgarian / Serbian / Macedonian / Belarusian. */
+      if (/Системна\s+информация|Информация\s+за\s+системата|Часова\s+зона/i.test(b))
+        return { code: "bg", name: "Bulgarian", confidence: 0.9 };
+      if (/Системске\s+информације|Подаци\s+о\s+систему|Преглед\s+система|Хардвер/i.test(b))
+        return { code: "sr", name: "Serbian", confidence: 0.88 };
+      if (/Сістэма|сістэмы|Працэсар|Праграмнае/i.test(b))
+        return { code: "be", name: "Belarusian", confidence: 0.9 };
       /** Strong MSInfo path/item signals (ASCII {@code \b} misses Cyrillic; paths must still resolve here). */
-      if (
-        /Відомості\s+про\s+систему|Програмне\s+середовище|Зберігання\s*\/|Компоненти\s*\/|елемент|значення|логічних\s+процесорів/i.test(
-          b
-        )
-      )
-        return { code: "uk", name: "Ukrainian", confidence: 0.96 };
-      if (looksLikeUkrainianWindowsCyrillicHint(b)) return { code: "uk", name: "Ukrainian", confidence: 0.92 };
-      return { code: "ru", name: "Russian", confidence: 0.99 };
+      const ukSignals = [
+        /Відомості\s+про\s+систему/i,
+        /Програмне\s+середовище/i,
+        /Зберігання\s*\//i,
+        /Компоненти\s*\//i,
+        /\bелемент\b/iu,
+        /\bзначення\b/iu,
+        /логічних\s+процесорів/i,
+        /Робочий\s+стіл/i,
+        /Збірка\s+\d+/i,
+        /Часовий\s+пояс/i,
+        /Назва\s+ОС/i,
+      ];
+      const ukHits = countLocaleSignals(b, ukSignals);
+      if (ukHits >= 2) return { code: "uk", name: "Ukrainian", confidence: bumpConfidence(0.92, ukHits) };
+      if (looksLikeUkrainianWindowsCyrillicHint(b)) return { code: "uk", name: "Ukrainian", confidence: 0.9 };
+      const ruSignals = [
+        /Сведения\s+о\s+системе/i,
+        /Программная\s+среда/i,
+        /Системные\s+драйверы/i,
+        /Операционная\s+система/i,
+        /Часовой\s+пояс/i,
+        /Сборка\s+\d+/i,
+        /\bядер\s+\d+/i,
+        /\bлогических\s+процессоров/i,
+        /Рабочий\s+стол/i,
+      ];
+      const ruHits = countLocaleSignals(b, ruSignals);
+      if (ruHits >= 2) return { code: "ru", name: "Russian", confidence: bumpConfidence(0.95, ruHits) };
+      return { code: "ru", name: "Russian", confidence: 0.85 };
     }
     if (/[\u0370-\u03FF]/.test(b)) return { code: "el", name: "Greek", confidence: 0.95 };
     if (/[\u0E00-\u0E7F]/.test(b)) return { code: "th", name: "Thai", confidence: 0.95 };
@@ -8938,50 +9022,115 @@
     if (/[\u0980-\u09FF]/.test(b)) return { code: "bn", name: "Bengali", confidence: 0.9 };
     if (/[\u0900-\u097F]/.test(b)) return { code: "hi", name: "Hindi", confidence: 0.9 };
     if (/[\u0A00-\u0A7F]/.test(b)) return { code: "pa", name: "Punjabi", confidence: 0.9 };
-    if (/[\u3400-\u9FFF]/.test(b) && !/[\u3040-\u30FF]/.test(b)) return { code: "zh", name: "Chinese", confidence: 0.92 };
+    if (/[\u0980-\u09FF]/.test(b)) return { code: "bn", name: "Bengali", confidence: 0.9 };
+    if (/[\u0B80-\u0BFF]/.test(b)) return { code: "ta", name: "Tamil", confidence: 0.9 };
+    if (/[\u0C00-\u0C7F]/.test(b)) return { code: "te", name: "Telugu", confidence: 0.9 };
+    if (/[\u0CB0-\u0CFF]/.test(b)) return { code: "kn", name: "Kannada", confidence: 0.9 };
+    if (/[\u0D00-\u0D7F]/.test(b)) return { code: "ml", name: "Malayalam", confidence: 0.9 };
+    if (/[\u0AB0-\u0AFF]/.test(b)) return { code: "gu", name: "Gujarati", confidence: 0.9 };
+    if (/[\u3400-\u9FFF]/.test(b) && !/[\u3040-\u30FF]/.test(b)) {
+      if (/繁體|繁体|簡體|简体/.test(b) || /[\uF900-\uFAFF]/.test(b)) return { code: "zh-Hant", name: "Traditional Chinese", confidence: 0.9 };
+      return { code: "zh", name: "Chinese", confidence: 0.92 };
+    }
     if (looksLikeTurkishWindowsLatinHint(b)) return { code: "tr", name: "Turkish", confidence: 0.9 };
-    if (/Rendszerösszefoglaló|Időzóna|Illesztőprogram|Operációs\s+rendszer/i.test(b))
-      return { code: "hu", name: "Hungarian", confidence: 0.88 };
-    if (/Systemübersicht|Zeitzone|Betriebssystem|Arbeitsspeicher|Gerätetreiber|Treiberversion/i.test(b))
-      return { code: "de", name: "German", confidence: 0.88 };
-    if (/Informazioni\s+di\s+sistema|Ambiente\s+software|Memoria\s+fisica|Zona\s+oraria/i.test(b))
-      return { code: "it", name: "Italian", confidence: 0.88 };
-    if (/Systeemoverzicht|Software-omgeving|Tijdzone|Besturingssysteem/i.test(b))
-      return { code: "nl", name: "Dutch", confidence: 0.88 };
-    if (/Podsumowanie\s+systemu|Pamięć\s+fizyczna|Strefa\s+czasowa|Sterownik/i.test(b))
-      return { code: "pl", name: "Polish", confidence: 0.88 };
-    if (/Přehled\s+systému|Softwarové\s+prostředí|Časové\s+pásmo|Ovladač/i.test(b))
-      return { code: "cs", name: "Czech", confidence: 0.88 };
-    if (/Rezumat\s+sistem|Memorie\s+fizică|Fus\s+orar/i.test(b)) return { code: "ro", name: "Romanian", confidence: 0.85 };
-    if (/Järjestelmäyhteenveto|Ohjelmistoympäristö|Aikavyöhyke|Ohjain/i.test(b))
-      return { code: "fi", name: "Finnish", confidence: 0.88 };
-    if (/Thông\s+tin\s+hệ\s+thống|Hệ\s+điều\s+hành|Múi\s+giờ|Bộ\s+nhớ/i.test(b))
-      return { code: "vi", name: "Vietnamese", confidence: 0.85 };
-    if (/Systeminformasjon|Tidssone\s+for|Programvaremiljø/i.test(b))
-      return { code: "no", name: "Norwegian", confidence: 0.82 };
-    if (/Systemoversigt|Programvaremiljø|Tidssone/i.test(b)) return { code: "da", name: "Danish", confidence: 0.82 };
+    /** Latin-script locales: count signals so confidence reflects how confident we are. */
+    const latinTests = [
+      { code: "hu", name: "Hungarian", base: 0.88, signals: [
+        /Rendszerösszefoglaló/i, /Időzóna/i, /Illesztőprogram/i, /Operációs\s+rendszer/i, /Telepítés\s+dátuma/i, /Alapértelmezett\s+átjáró/i,
+      ]},
+      { code: "de", name: "German", base: 0.88, signals: [
+        /Systemübersicht/i, /Zeitzone/i, /Betriebssystem/i, /Arbeitsspeicher/i, /Gerätetreiber/i, /Treiberversion/i,
+        /Auslagerungsdatei/i, /Standardgateway/i,
+      ]},
+      { code: "it", name: "Italian", base: 0.88, signals: [
+        /Informazioni\s+di\s+sistema/i, /Ambiente\s+software/i, /Memoria\s+fisica/i, /Zona\s+oraria/i,
+        /Versione\s+del\s+sistema/i, /Gateway\s+predefinito/i,
+      ]},
+      { code: "nl", name: "Dutch", base: 0.88, signals: [
+        /Systeemoverzicht/i, /Software-omgeving/i, /Tijdzone/i, /Besturingssysteem/i, /Stuurprogramma/i, /Standaardgateway/i,
+      ]},
+      { code: "pl", name: "Polish", base: 0.88, signals: [
+        /Podsumowanie\s+systemu/i, /Pamięć\s+fizyczna/i, /Strefa\s+czasowa/i, /Sterownik/i, /Adapter\s+sieciowy/i,
+      ]},
+      { code: "cs", name: "Czech", base: 0.88, signals: [
+        /Přehled\s+systému/i, /Softwarové\s+prostředí/i, /Časové\s+pásmo/i, /Ovladač/i, /Výchozí\s+brána/i,
+      ]},
+      { code: "sk", name: "Slovak", base: 0.85, signals: [
+        /Súhrn\s+systému/i, /Časové\s+pásmo/i, /Ovládač/i, /Predvolená\s+brána/i,
+      ]},
+      { code: "sl", name: "Slovenian", base: 0.82, signals: [
+        /Povzetek\s+sistema/i, /Časovni\s+pas/i, /Gonilnik/i, /Privzeti\s+prehod/i,
+      ]},
+      { code: "hr", name: "Croatian", base: 0.82, signals: [
+        /Sažetak\s+sustava/i, /Vremenska\s+zona/i, /Upravljački\s+program/i, /Zadani\s+pristupnik/i,
+      ]},
+      { code: "ro", name: "Romanian", base: 0.85, signals: [
+        /Rezumat\s+sistem/i, /Memorie\s+fizică/i, /Fus\s+orar/i, /Driver/i, /Poarta\s+implicită/i,
+      ]},
+      { code: "fi", name: "Finnish", base: 0.88, signals: [
+        /Järjestelmäyhteenveto/i, /Ohjelmistoympäristö/i, /Aikavyöhyke/i, /Ohjain/i, /Oletusyhdyskäytävä/i,
+      ]},
+      { code: "et", name: "Estonian", base: 0.82, signals: [
+        /Süsteemi\s+kokkuvõte/i, /Tarkvara\s+keskkond/i, /Ajavöönd/i, /Draiver/i, /Vaikimisi\s+lüüs/i,
+      ]},
+      { code: "lt", name: "Lithuanian", base: 0.82, signals: [
+        /Sistemos\s+suvestinė/i, /Laiko\s+juosta/i, /Tvarkyklė/i, /Numatytasis\s+tinklų\s+sietuvas/i,
+      ]},
+      { code: "lv", name: "Latvian", base: 0.82, signals: [
+        /Sistēmas\s+kopsavilkums/i, /Laika\s+josla/i, /Draiveris/i, /Noklusētais\s+vārteja/i,
+      ]},
+      { code: "vi", name: "Vietnamese", base: 0.85, signals: [
+        /Thông\s+tin\s+hệ\s+thống/i, /Hệ\s+điều\s+hành/i, /Múi\s+giờ/i, /Bộ\s+nhớ/i, /Trình\s+điều\s+khiển/i,
+      ]},
+      { code: "id", name: "Indonesian", base: 0.82, signals: [
+        /Informasi\s+sistem/i, /Lingkungan\s+perangkat\s+lunak/i, /Zona\s+waktu/i, /Driver/i, /Memori\s+fisik/i,
+      ]},
+      { code: "no", name: "Norwegian", base: 0.82, signals: [
+        /Systeminformasjon/i, /Tidssone\s+for/i, /Programvaremiljø/i, /Driver/i,
+      ]},
+      { code: "da", name: "Danish", base: 0.82, signals: [
+        /Systemoversigt/i, /Programvaremiljø/i, /Tidssone/i, /Driver/i,
+      ]},
+    ];
+    for (const t of latinTests) {
+      const hits = countLocaleSignals(b, t.signals);
+      if (hits >= 1) return { code: t.code, name: t.name, confidence: bumpConfidence(t.base, hits) };
+    }
     if (looksLikeFrenchWindowsLatinHint(b)) return { code: "fr", name: "French", confidence: 0.9 };
     if (looksLikePortugueseWindowsLatinHint(b)) return { code: "pt", name: "Portuguese", confidence: 0.85 };
     if (looksLikeSpanishWindowsLatinHint(b)) return { code: "es", name: "Spanish", confidence: 0.85 };
     if (looksLikeSwedishWindowsLatinHint(b)) return { code: "sv", name: "Swedish", confidence: 0.85 };
+    /** Loose ASCII MSInfo English — sometimes the export is in English even when filename suggests otherwise. */
+    if (/System Summary|Software Environment|Operating System|Time Zone|Default IP Gateway/.test(b))
+      return { code: "en", name: "English", confidence: 0.7 };
     return { code: "unknown", name: "Unknown", confidence: 0.45 };
   }
 
   /** Maps detection codes to safe English filenames for Language Adder downloads. */
   const LANGUAGE_ADDER_FILENAME_LABEL = /** @type {const} */ ({
     ar: "Arabic",
+    fa: "Persian",
     he: "Hebrew",
     ja: "Japanese",
     ko: "Korean",
     ru: "Russian",
     uk: "Ukrainian",
+    bg: "Bulgarian",
+    sr: "Serbian",
+    be: "Belarusian",
     el: "Greek",
     th: "Thai",
     lo: "Lao",
     bn: "Bengali",
     hi: "Hindi",
     pa: "Punjabi",
+    ta: "Tamil",
+    te: "Telugu",
+    kn: "Kannada",
+    ml: "Malayalam",
+    gu: "Gujarati",
     zh: "Chinese",
+    "zh-Hant": "Traditional Chinese",
     tr: "Turkish",
     hu: "Hungarian",
     de: "German",
@@ -8989,15 +9138,23 @@
     nl: "Dutch",
     pl: "Polish",
     cs: "Czech",
+    sk: "Slovak",
+    sl: "Slovenian",
+    hr: "Croatian",
     ro: "Romanian",
     fi: "Finnish",
+    et: "Estonian",
+    lt: "Lithuanian",
+    lv: "Latvian",
     vi: "Vietnamese",
+    id: "Indonesian",
     no: "Norwegian",
     da: "Danish",
     fr: "French",
     pt: "Portuguese",
     es: "Spanish",
     sv: "Swedish",
+    en: "English",
   });
 
   /**
@@ -9553,6 +9710,13 @@
     ["Поріг XOnXMit", "XOn threshold"],
     ["Символ XOn", "XOn character"],
     ["Стоп-біти", "Stop bits"],
+    /** Multi-word service-table headers MUST come BEFORE the bare {@code Тип}/{@code Стан} pairs so they win in the length sort. */
+    ["Тип запуску", "Startup type"],
+    ["Тип_запуску", "Startup type"],
+    ["Режим запуску", "Start mode"],
+    ["Режим_запуску", "Start mode"],
+    ["Поточний стан", "Current state"],
+    ["Поточний_стан", "Current state"],
     ["Тип", "Type"],
     ["Стан", "Status"],
     ["Розмір", "Size"],
@@ -11513,9 +11677,12 @@
      * Pre-table: Ukrainian byte-suffix forms must be normalized BEFORE the phrase table runs, otherwise
      * the Russian {@code ") байт"} pair (length 6) can sort-tie with {@code байтів} (length 6) and replace
      * the prefix → leaves the trailing suffix as {@code "bytesів"}.
+     * Replace the longer Cyrillic forms first, anchored only by their endings (no digit context — the value
+     * may already be inside parentheses, e.g. {@code "(1 048 576) байтів"}).
      */
     out = out
-      .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?:і|i)в/giu, "$1 bytes")
+      .replace(/байт(?:і|i)в/giu, "bytes")
+      .replace(/байтов\b/giu, "bytes")
       .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?=[\s),]|$)/giu, "$1 bytes");
     out = applyMsinfoI18nTokenPairTable(out);
     /** Spacing in MSInfo text exports varies; apply regex fallbacks after phrase table. */
@@ -11678,8 +11845,9 @@
       .replace(/\bГГц\b/giu, "GHz")
       .replace(/(\d+\.\d+\.\d+)\s+Збірка\s+(\d+)/giu, "$1 Build $2")
       .replace(/\bРобочий\s+стіл\b/giu, "Desktop")
-      /** Ukrainian byte-suffix forms: “байтів / байтiв / байт” (handle longest first to avoid “bytesів”). */
-      .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?:і|i)в/giu, "$1 bytes")
+      /** Ukrainian byte-suffix forms (after-table net): values inside parens like {@code "(… ) байтів"} also covered. */
+      .replace(/байт(?:і|i)в/giu, "bytes")
+      .replace(/байтов\b/giu, "bytes")
       .replace(/(\d[\d\s\u00A0\u202F]*)\s*байт(?=[\s),]|$)/giu, "$1 bytes")
       /** Ukrainian display / GPU adapter strings ("…-сумісний"). */
       .replace(/\bNVIDIA-сумісний\b/giu, "NVIDIA-compatible")
@@ -12615,13 +12783,18 @@
     const svcOfferTranslate = svcAll.length > 0 || runningList.length > 0;
     const svcI18nOpts =
       svcOfferTranslate || svcNeedsI18n ? { forceI18nSpan: true } : undefined;
+    /**
+     * Each header is wrapped via {@code sumI18nSpan(rawCyrillic, esc, "English", opts)} so:
+     *   1. the visible text is English by default (matches "Default Translate ON" for non-English exports);
+     *   2. clicking {@code Original} restores the source-language string from {@code data-i18n-enc}.
+     */
     const svcTableHead =
       spanishExport && svcI18nOpts
-        ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicio", esc, undefined, svcI18nOpts)}</th></tr></thead>`
+        ? `<thead><tr><th scope="col">${sumI18nSpan("Nombre", esc, "Name", svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, "State", svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicio", esc, "Startup type", svcI18nOpts)}</th></tr></thead>`
         : portugueseExport && svcI18nOpts
-          ? `<thead><tr><th scope="col">${sumI18nSpan("Nome", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicialização", esc, undefined, svcI18nOpts)}</th></tr></thead>`
+          ? `<thead><tr><th scope="col">${sumI18nSpan("Nome", esc, "Name", svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Estado", esc, "State", svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Tipo de inicialização", esc, "Startup type", svcI18nOpts)}</th></tr></thead>`
           : ukrainianExport && svcI18nOpts
-            ? `<thead><tr><th scope="col">${sumI18nSpan("Назва", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Стан", esc, undefined, svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Тип запуску", esc, undefined, svcI18nOpts)}</th></tr></thead>`
+            ? `<thead><tr><th scope="col">${sumI18nSpan("Назва", esc, "Name", svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Стан", esc, "State", svcI18nOpts)}</th><th scope="col">${sumI18nSpan("Тип запуску", esc, "Startup type", svcI18nOpts)}</th></tr></thead>`
             : `<thead><tr><th scope="col">Name</th><th scope="col">State</th><th scope="col">Startup type</th></tr></thead>`;
     const svcRows = (list) =>
       list.length > 0

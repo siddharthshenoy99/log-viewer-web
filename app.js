@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.6.2";
+  const APP_VERSION = "1.6.3";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -8475,6 +8475,235 @@
   }
 
   /**
+   * Inspect a non-MSInfo text blob and tell the user what kind of file it actually looks like.
+   *
+   * The classifier is conservative — we want clear, accurate answers (not guesses), so it returns
+   * <code>{ kind: "unknown" }</code> when no high-confidence signal matches. Detection covers every
+   * tab supported by the viewer (BSOD/WinDbg, DxDiag, GPU-Z CSV, EVTX) plus common unwanted shapes
+   * (email, JSON / HTML / source code, plain prose).
+   *
+   * @param {string} text decoded file text (UTF-8 / UTF-16 already decoded by the caller)
+   * @returns {{
+   *   kind:
+   *     | "msinfo-plaintext"
+   *     | "bsod"
+   *     | "dxdiag"
+   *     | "gpuz"
+   *     | "evtx-fragment"
+   *     | "registry"
+   *     | "json"
+   *     | "html"
+   *     | "email"
+   *     | "prose"
+   *     | "binary"
+   *     | "empty"
+   *     | "unknown",
+   *   summary: string,
+   *   suggestedTab: "system" | "bsod" | "gpu" | "evtx" | "dxdiag" | null,
+   *   notes: string[]
+   * }}
+   */
+  function classifyNonMsinfoTextContent(text) {
+    const sample = String(text || "").trim();
+    if (!sample) {
+      return {
+        kind: "empty",
+        summary: "Empty file",
+        suggestedTab: null,
+        notes: ["The decoded file has no text content."],
+      };
+    }
+    /** Short binary garbage: lots of NULs / replacement chars relative to length. */
+    const repl = (sample.match(/\uFFFD/g) || []).length;
+    const nulls = (sample.match(/\u0000/g) || []).length;
+    if (sample.length < 8 || (repl + nulls) > sample.length * 0.25) {
+      return {
+        kind: "binary",
+        summary: "Binary or wrongly-decoded content",
+        suggestedTab: null,
+        notes: [
+          "The file appears to be binary or saved with a different encoding than the one selected.",
+          "Try the Encoding dropdown above (Auto, UTF-16 LE/BE, UTF-8, Windows-1252, Windows-31J) or open the source file with a hex editor to confirm its real format.",
+        ],
+      };
+    }
+    /** MSInfo plain-text export uses '[Section]' headers + tab-separated Item / Value rows. */
+    if (
+      /^\s*\[(System Summary|Hardware Resources|Components|Software Environment|Internet Settings|Office .+|.+System Summary.+)\]/im.test(
+        sample
+      ) ||
+      ((sample.match(/^\s*\[[^\]\n]{2,80}\]\s*$/gm) || []).length >= 2 &&
+        (sample.match(/\t/g) || []).length > 6)
+    ) {
+      return {
+        kind: "msinfo-plaintext",
+        summary: "MSInfo plain-text / tab export",
+        suggestedTab: "system",
+        notes: [
+          "This looks like an MSInfo plain-text export, not the XML form. The viewer normally accepts both — try toggling the Encoding dropdown (Auto → UTF-16 LE → UTF-8) and reload the file. If that still fails, on the source PC run msinfo32 → File → Save As… → choose Save as type: System Information File (*.nfo) and reload the resulting XML here.",
+        ],
+      };
+    }
+    /** BSOD / WinDbg !analyze -v dump. */
+    if (
+      /BugCheck\s+\w+|STOP:\s*0x[0-9A-F]+|MODULE_NAME:|IMAGE_NAME:|FAILURE_BUCKET_ID:|Probably caused by\s*:|MEMORY_MANAGEMENT|KERNEL_SECURITY_CHECK_FAILURE|DRIVER_IRQL_NOT_LESS_OR_EQUAL|Crash Dump|Bug check\s+0x|!analyze\s+-v/i.test(
+        sample
+      )
+    ) {
+      return {
+        kind: "bsod",
+        summary: "Windows kernel crash text (BSOD / WinDbg !analyze -v)",
+        suggestedTab: "bsod",
+        notes: [
+          "This file looks like a Windows kernel crash dump or WinDbg analysis text, not an MSInfo export.",
+          "Open it on the BSOD & WinDbg tab — the parser there extracts BugCheck, modules, drivers, faulting addresses and a recommendations panel from the same content.",
+        ],
+      };
+    }
+    /** DxDiag text export. */
+    if (
+      /^[\s-]*DxDiag\s+(Notes|System Information)|^[\s-]*------?\s*\n.*?(System Information|Display Devices|Sound Devices)/im.test(
+        sample
+      ) ||
+      (/Operating System:/i.test(sample) && /System Manufacturer:/i.test(sample) && /DirectX Version:/i.test(sample))
+    ) {
+      return {
+        kind: "dxdiag",
+        summary: "DxDiag text report",
+        suggestedTab: "dxdiag",
+        notes: [
+          "This looks like a DxDiag report (System Information / Display Devices / Sound Devices blocks).",
+          "Open it on the DxDiag tab — the viewer there summarises display, system and sound devices from this exact text format.",
+        ],
+      };
+    }
+    /** GPU-Z sensor CSV. First line should be a comma-separated header containing key terms. */
+    {
+      const firstLine = sample.split(/\r?\n/, 1)[0] || "";
+      const commaCount = (firstLine.match(/,/g) || []).length;
+      if (
+        commaCount >= 4 &&
+        /\b(Date|GPU\s*Clock|Memory\s*Clock|GPU\s*Temperature|GPU\s*Load|Power|Fan|Hot\s*Spot|VDDC)/i.test(firstLine)
+      ) {
+        return {
+          kind: "gpuz",
+          summary: "GPU-Z sensor log (CSV)",
+          suggestedTab: "gpu",
+          notes: [
+            "This looks like a GPU-Z sensor log (timestamped CSV with GPU clock / temperature / load columns).",
+            "Open it on the GPU-Z logs tab — that tab graphs every column over time.",
+          ],
+        };
+      }
+    }
+    /** EVTX text fragment (someone exported events to text). */
+    if (
+      /Event\[\d+\]:\s*(Log Name|Source|Date|Event ID)/i.test(sample) ||
+      /<Event\s+xmlns="http:\/\/schemas\.microsoft\.com\/win\/2004\/08\/events\/event"/i.test(sample)
+    ) {
+      return {
+        kind: "evtx-fragment",
+        summary: "Windows Event Log fragment (text export)",
+        suggestedTab: "evtx",
+        notes: [
+          "This looks like a Windows Event Viewer text export, not an MSInfo file.",
+          "Open the original .evtx binary on the Event Viewer tab if available — text exports have lower fidelity and many tools cannot reconstruct provider names from them.",
+        ],
+      };
+    }
+    /** Windows Registry export. */
+    if (/^Windows Registry Editor Version\s+\d/m.test(sample) || /^REGEDIT4\b/m.test(sample)) {
+      return {
+        kind: "registry",
+        summary: "Windows Registry export (.reg)",
+        suggestedTab: null,
+        notes: [
+          "This is a Windows registry export (.reg). The viewer does not parse registry files; open it in regedit.exe or a text editor.",
+        ],
+      };
+    }
+    /** JSON document. */
+    if (/^[\s\u200B]*[\[{]/.test(sample) && /["{}\[\],:]/.test(sample.slice(-200))) {
+      try {
+        JSON.parse(sample);
+        return {
+          kind: "json",
+          summary: "JSON document",
+          suggestedTab: null,
+          notes: [
+            "This is a JSON document. The viewer does not interpret arbitrary JSON; open it in a JSON viewer or paste it into a text editor.",
+          ],
+        };
+      } catch {
+        /* fall through */
+      }
+    }
+    /** HTML document. */
+    if (/<!DOCTYPE\s+html|<html[\s>]|<head[\s>]|<body[\s>]/i.test(sample)) {
+      return {
+        kind: "html",
+        summary: "HTML document",
+        suggestedTab: null,
+        notes: [
+          "This is an HTML page, not an MSInfo export. Open it in a browser, or rename to .html.",
+        ],
+      };
+    }
+    /**
+     * Email body / forum reply / customer-support message — common when a help-desk ticket attachment
+     * is renamed to .nfo by mistake. We look for typical structural cues so we don't false-positive on
+     * MSInfo content that happens to contain prose.
+     */
+    {
+      const emailMarkers =
+        /^\s*(From|To|Cc|Bcc|Subject|Sent|Date)\s*:|^\s*-----\s*Original\s+Message\s*-----|wrote on .{0,40}:\s*$|^\s*On\s+\w+,\s+\w+\s+\d+,\s+\d{4},\s+at\s+\d/im;
+      const farewell =
+        /\n\s*(Thanks|Thank you|Regards|Best regards|Sincerely|Cheers|Kind regards|Cordialement|Saludos|Atenciosamente|Mit freundlichen Grüßen|С уважением|З повагою|よろしく)/i;
+      const emailLike = /\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b/.test(sample);
+      const phoneLike = /\b\d{7,15}\b/.test(sample);
+      const sentenceCount = (sample.match(/[.!?][\s)]/g) || []).length;
+      const wordCount = (sample.match(/\b\w{3,}\b/g) || []).length;
+      const tabCount = (sample.match(/\t/g) || []).length;
+      if (
+        tabCount < 4 &&
+        sentenceCount >= 2 &&
+        wordCount >= 25 &&
+        (emailMarkers.test(sample) || farewell.test(sample) || (emailLike && phoneLike))
+      ) {
+        return {
+          kind: "email",
+          summary: "Plain text — looks like an email or support reply",
+          suggestedTab: null,
+          notes: [
+            "This file has prose, an email signature and/or contact details — it looks like a customer-support reply or email body, not an MSInfo file.",
+            "On the source PC, run msinfo32 → File → Export… (or → Save As… → System Information File *.nfo) and load the new .nfo here.",
+          ],
+        };
+      }
+      if (sentenceCount >= 2 && wordCount >= 12 && tabCount < 4) {
+        return {
+          kind: "prose",
+          summary: "Plain text / prose",
+          suggestedTab: null,
+          notes: [
+            "This file is plain prose, not an MSInfo XML export.",
+            "If you meant to share a different artefact, open the matching tab. Otherwise, on the source PC run msinfo32 → File → Export… to create a real .nfo and reload it here.",
+          ],
+        };
+      }
+    }
+    return {
+      kind: "unknown",
+      summary: "Unknown / unrecognised content",
+      suggestedTab: null,
+      notes: [
+        "The viewer did not recognise this file as MSInfo, BSOD, DxDiag, GPU-Z, EVTX, or any other supported export.",
+        "Try the Encoding dropdown (Auto → UTF-16 LE → UTF-8 → Windows-1252) and reload, or open the source file with a hex editor to confirm its real format.",
+      ],
+    };
+  }
+
+  /**
    * @param {string} original raw decoded text
    * @returns {{
    *   doc: Document | null,
@@ -8482,7 +8711,10 @@
    *   mode: "xml" | "repaired" | "loose" | "plaintext" | "none",
    *   notes: string[],
    *   repairedText: string | null,
-   *   rawDisplayText: string
+   *   rawDisplayText: string,
+   *   nonMsinfoKind?: string,
+   *   nonMsinfoSuggestedTab?: string | null,
+   *   nonMsinfoSummary?: string
    * }}
    */
   function parseMsInfoDocumentWithRecovery(original) {
@@ -8580,47 +8812,20 @@
         return { doc: null, data: loose1, mode: "loose", notes, repairedText: null, rawDisplayText: sourceDecoded };
       }
       /**
-       * Distinguish "this is genuinely an MSInfo file we just couldn't parse" from
-       * "this is a forum reply / email / random log saved as .nfo". The latter is
-       * common when users rename a Pastebin / e-mail snippet to .nfo to attach to a ticket.
-       * Heuristic: prose looks like ≥1 multi-sentence paragraph with no MSInfo / XML markers
-       * AND no recognisable MSInfo plain-text section header ("[System Summary]" etc.).
+       * Walk every supported tab's signatures and report back a confident classification so the user
+       * can either open it on the right tab or accept that the file genuinely has no system info.
+       * Pure heuristic, no remote calls; works for all supported MSInfo languages too.
        */
-      const looksLikeProseNotMsinfo = (() => {
-        const sample = String(sourceDecoded || "").trim();
-        if (!sample) return false;
-        if (sample.length < 40) return false;
-        if (/<\s*[A-Za-z][\w:-]*[\s>]/.test(sample)) return false;
-        if (/^\s*\[[^\]]+\]\s*$/m.test(sample)) return false;
-        if (
-          /System Summary|Hardware Resources|Components|Software Environment|Сведения о системе|Resumen del sistema|Résumé du système|Resumo do sistema|Systemübersicht|Informazioni di sistema|システムの要約|시스템 요약|系统摘要|Sistem özeti|Відомості\s+про\s+систему/i.test(
-            sample
-          )
-        )
-          return false;
-        // Looks like an MSInfo "Item\tValue" tabular dump? Then it is data, not prose.
-        if ((sample.match(/\t/g) || []).length > 4) return false;
-        // "Real" prose: at least 2 sentence terminators, ≥ 4 ASCII words, mostly Latin script.
-        const sentences = (sample.match(/[.!?][\s)]/g) || []).length;
-        const wordCount = (sample.match(/\b\w{3,}\b/g) || []).length;
-        const latin = (sample.match(/[A-Za-z]/g) || []).length;
-        return sentences >= 2 && wordCount >= 12 && latin > sample.length * 0.4;
-      })();
-
+      const classification = classifyNonMsinfoTextContent(sourceDecoded);
       /** @type {string[]} */
-      const noneNotes = looksLikeProseNotMsinfo
-        ? [
-            "This file does not look like an MSInfo (msinfo32) export. The opening bytes are plain prose, not XML or a tabular Item/Value section.",
-            "If you meant to share a different file (e.g. BSOD text, DxDiag, GPU-Z log, .evtx), open it on the matching tab. Otherwise, on the source PC run msinfo32 → File → Export… to produce a real .nfo and reload it here.",
-          ]
-        : [
-            "Not recognized as MSInfo / XML text (no opening “<” tag in the decoded content).",
-            "If this is a text export from msinfo32, re-save as .nfo XML, or try Encoding → UTF-16 BE / UTF-8 / Windows-31J.",
-          ];
+      const noneNotes = classification.notes;
       return {
         doc: null,
         data: null,
         mode: "none",
+        nonMsinfoKind: classification.kind,
+        nonMsinfoSuggestedTab: classification.suggestedTab,
+        nonMsinfoSummary: classification.summary,
         notes: notes.length ? notes.concat(noneNotes) : noneNotes,
         repairedText: null,
         rawDisplayText: sourceDecoded,
@@ -12585,8 +12790,11 @@
    * @param {boolean} ok
    * @param {string[]=} repairNotes
    * @param {string[]=} msinfoXmlRepairs messages from {@link parseMsInfoDocument} in-memory XML repair
+   * @param {{ kind: string, summary: string, suggestedTab: string | null }=} nonMsinfoInfo
+   *   When the file is not MSInfo at all, renders an explanatory card instead of the generic failure
+   *   message and offers a button to switch to the matching tab when one applies.
    */
-  function renderSystemSummary(el, sum, ok, repairNotes, msinfoXmlRepairs) {
+  function renderSystemSummary(el, sum, ok, repairNotes, msinfoXmlRepairs, nonMsinfoInfo) {
     el.innerHTML = "";
     const notes = Array.isArray(repairNotes) ? repairNotes : [];
     const xmlRep = Array.isArray(msinfoXmlRepairs) ? msinfoXmlRepairs : [];
@@ -12603,8 +12811,31 @@
             .join("")}</ul></div>`
         : "";
     if (!ok || !sum) {
+      const info = nonMsinfoInfo || null;
+      const labelByTab = {
+        bsod: "BSOD & WinDbg",
+        gpu: "GPU-Z logs",
+        evtx: "Event Viewer",
+        dxdiag: "DxDiag",
+        system: "System Information",
+      };
+      const targetPanelId = info && info.suggestedTab && info.suggestedTab !== "system"
+        ? `tool-panel-${info.suggestedTab === "evtx" ? "evtx" : info.suggestedTab}`
+        : "";
+      const switchBtn =
+        targetPanelId && info && info.suggestedTab && labelByTab[/** @type {string} */ (info.suggestedTab)]
+          ? `<p class="non-msinfo-card__actions"><a class="report-pri-btn" href="#${esc(targetPanelId)}">Open the ${esc(labelByTab[/** @type {string} */ (info.suggestedTab)])} tab</a></p>`
+          : "";
+      const detectedKindCard = info
+        ? `<section class="non-msinfo-card" role="status" aria-labelledby="non-msinfo-title" style="margin-bottom:1rem;border:1px solid rgba(118,185,0,0.35);border-radius:10px;padding:1rem 1.15rem;background:rgba(118,185,0,0.05);">
+              <h3 id="non-msinfo-title" style="margin:0 0 .35rem;font-size:1.05rem;color:var(--accent-strong, #76b900);">Detected file type: ${esc(info.summary)}</h3>
+              <p style="margin:0 0 .5rem;color:var(--muted);font-size:.9rem;line-height:1.5;">The viewer reads MSInfo (msinfo32) exports here. The file you loaded was something else — see the recovery notes above for details and what to do next.</p>
+              ${switchBtn}
+           </section>`
+        : "";
       el.innerHTML =
         xmlRepairBanner +
+        detectedKindCard +
         recoveryBanner +
         '<p class="summary-empty">Could not build a structured summary from this file. Open <strong>Raw export</strong> below, try a different encoding, export a fresh <code>.nfo</code> from msinfo32, or use <strong>Copy repaired XML</strong> if it appears after a partial fix.</p>';
       return;
@@ -15838,7 +16069,11 @@
             }
           }
       } else {
-        renderSystemSummary(summaryEl, null, false, recovery.notes, xmlRep);
+        renderSystemSummary(summaryEl, null, false, recovery.notes, xmlRep, {
+          kind: recovery.nonMsinfoKind || "unknown",
+          summary: recovery.nonMsinfoSummary || "Unrecognised content",
+          suggestedTab: recovery.nonMsinfoSuggestedTab || null,
+        });
       }
       if (searchInput && searchInput.value.trim()) performRawSearch(searchInput.value);
       if (onStage) onStage(1, "done");

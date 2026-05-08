@@ -11,7 +11,7 @@
 ; Output:  desktop\installer\out\NvidiaReportViewer-Setup.exe
 
 #define MyAppName        "NVIDIA Report Viewer"
-#define MyAppVersion     "1.6.2"
+#define MyAppVersion     "1.6.3"
 #define MyAppPublisher   "NVIDIA"
 #define MyAppExeName     "NvidiaReportViewer.exe"
 #define MyAppId          "{{A4F8B2D6-9F1E-4E18-B5A0-37AA3F1B3210}"

@@ -6,9 +6,9 @@
     <RootNamespace>NvidiaReportViewer</RootNamespace>
     <AssemblyName>NvidiaReportViewer</AssemblyName>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>1.6.2</Version>
-    <FileVersion>1.6.2.0</FileVersion>
-    <AssemblyVersion>1.6.2.0</AssemblyVersion>
+    <Version>1.6.3</Version>
+    <FileVersion>1.6.3.0</FileVersion>
+    <AssemblyVersion>1.6.3.0</AssemblyVersion>
     <Product>NVIDIA Report Viewer</Product>
     <Company>NVIDIA</Company>
     <Description>Offline structured viewer for MSInfo, BSOD, GPU-Z, EVTX and DxDiag exports.</Description>

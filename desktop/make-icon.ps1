@@ -20,19 +20,40 @@ $sizes = 16,32,48,64,128,256
 
 $src = [System.Drawing.Image]::FromFile($png)
 $pngBytes = @{}
+
+# Step 1: lay the (possibly non-square) source onto a square transparent canvas so every downscale
+# keeps the original aspect ratio. Without this, a 344x274 logo shrunk to 16x16 looks squashed.
+$srcW = [int]$src.Width
+$srcH = [int]$src.Height
+$srcSquare = [Math]::Max($srcW, $srcH)
+$squareBmp = New-Object System.Drawing.Bitmap $srcSquare, $srcSquare
+$gSquare = [System.Drawing.Graphics]::FromImage($squareBmp)
+$gSquare.Clear([System.Drawing.Color]::Transparent)
+$gSquare.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+$gSquare.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+$offsetX = [int](($srcSquare - $srcW) / 2)
+$offsetY = [int](($srcSquare - $srcH) / 2)
+$gSquare.DrawImage($src, $offsetX, $offsetY, $srcW, $srcH)
+$gSquare.Dispose()
+$src.Dispose()
+
+# Step 2: downscale the square canvas to each icon size with high-quality bicubic.
 foreach ($s in $sizes) {
   $bmp = New-Object System.Drawing.Bitmap $s,$s
   $g = [System.Drawing.Graphics]::FromImage($bmp)
+  $g.Clear([System.Drawing.Color]::Transparent)
+  $g.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
   $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
   $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-  $g.DrawImage($src, 0, 0, $s, $s)
+  $g.DrawImage($squareBmp, 0, 0, $s, $s)
   $g.Dispose()
   $ms = New-Object System.IO.MemoryStream
   $bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
   $bmp.Dispose()
   $pngBytes[$s] = $ms.ToArray()
 }
-$src.Dispose()
+$squareBmp.Dispose()
 
 # Hand-build the .ico container: ICONDIR + ICONDIRENTRY x N + payloads.
 $out = New-Object System.IO.MemoryStream

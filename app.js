@@ -2,7 +2,7 @@
   "use strict";
 
   /** Bump when you ship a handoff ZIP or tag a review build (footer + About dialog). */
-  const APP_VERSION = "1.6.1";
+  const APP_VERSION = "1.6.2";
 
   /** Show determinate progress for reads / decodes above this size (system .nfo, Event Viewer). */
   const LARGE_FILE_PROGRESS_THRESHOLD = 380 * 1024;
@@ -8579,11 +8579,44 @@
         notes.push("File does not look like complete XML; built a partial summary from visible <Data> rows.");
         return { doc: null, data: loose1, mode: "loose", notes, repairedText: null, rawDisplayText: sourceDecoded };
       }
+      /**
+       * Distinguish "this is genuinely an MSInfo file we just couldn't parse" from
+       * "this is a forum reply / email / random log saved as .nfo". The latter is
+       * common when users rename a Pastebin / e-mail snippet to .nfo to attach to a ticket.
+       * Heuristic: prose looks like ≥1 multi-sentence paragraph with no MSInfo / XML markers
+       * AND no recognisable MSInfo plain-text section header ("[System Summary]" etc.).
+       */
+      const looksLikeProseNotMsinfo = (() => {
+        const sample = String(sourceDecoded || "").trim();
+        if (!sample) return false;
+        if (sample.length < 40) return false;
+        if (/<\s*[A-Za-z][\w:-]*[\s>]/.test(sample)) return false;
+        if (/^\s*\[[^\]]+\]\s*$/m.test(sample)) return false;
+        if (
+          /System Summary|Hardware Resources|Components|Software Environment|Сведения о системе|Resumen del sistema|Résumé du système|Resumo do sistema|Systemübersicht|Informazioni di sistema|システムの要約|시스템 요약|系统摘要|Sistem özeti|Відомості\s+про\s+систему/i.test(
+            sample
+          )
+        )
+          return false;
+        // Looks like an MSInfo "Item\tValue" tabular dump? Then it is data, not prose.
+        if ((sample.match(/\t/g) || []).length > 4) return false;
+        // "Real" prose: at least 2 sentence terminators, ≥ 4 ASCII words, mostly Latin script.
+        const sentences = (sample.match(/[.!?][\s)]/g) || []).length;
+        const wordCount = (sample.match(/\b\w{3,}\b/g) || []).length;
+        const latin = (sample.match(/[A-Za-z]/g) || []).length;
+        return sentences >= 2 && wordCount >= 12 && latin > sample.length * 0.4;
+      })();
+
       /** @type {string[]} */
-      const noneNotes = [
-        "Not recognized as MSInfo / XML text (no opening “<” tag in the decoded content).",
-        "If this is a text export from msinfo32, re-save as .nfo XML, or try Encoding → UTF-16 BE / UTF-8 / Windows-31J.",
-      ];
+      const noneNotes = looksLikeProseNotMsinfo
+        ? [
+            "This file does not look like an MSInfo (msinfo32) export. The opening bytes are plain prose, not XML or a tabular Item/Value section.",
+            "If you meant to share a different file (e.g. BSOD text, DxDiag, GPU-Z log, .evtx), open it on the matching tab. Otherwise, on the source PC run msinfo32 → File → Export… to produce a real .nfo and reload it here.",
+          ]
+        : [
+            "Not recognized as MSInfo / XML text (no opening “<” tag in the decoded content).",
+            "If this is a text export from msinfo32, re-save as .nfo XML, or try Encoding → UTF-16 BE / UTF-8 / Windows-31J.",
+          ];
       return {
         doc: null,
         data: null,

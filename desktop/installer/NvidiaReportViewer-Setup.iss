@@ -11,7 +11,7 @@
 ; Output:  desktop\installer\out\NvidiaReportViewer-Setup.exe
 
 #define MyAppName        "NVIDIA Report Viewer"
-#define MyAppVersion     "1.6.1"
+#define MyAppVersion     "1.6.2"
 #define MyAppPublisher   "NVIDIA"
 #define MyAppExeName     "NvidiaReportViewer.exe"
 #define MyAppId          "{{A4F8B2D6-9F1E-4E18-B5A0-37AA3F1B3210}"
@@ -56,12 +56,16 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "..\dist\NvidiaReportViewer.exe"; DestDir: "{app}"; Flags: ignoreversion
+; Drop the icon next to the .exe so shortcuts and the Start Menu can reference an absolute file
+; (Inno Setup pulls icons embedded inside .exe files lazily; a side-by-side .ico is a stable backup).
+Source: "..\app.ico"; DestDir: "{app}"; DestName: "NvidiaReportViewer.ico"; Flags: ignoreversion
 Source: "redist\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
-Name: "{group}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
+; AppUserModelID matches Program.cs so Windows groups taskbar / pinned shortcuts under our identity.
+Name: "{group}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\NvidiaReportViewer.ico"; AppUserModelID: "NVIDIA.ReportViewer.Desktop"
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{commondesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\NvidiaReportViewer.ico"; AppUserModelID: "NVIDIA.ReportViewer.Desktop"; Tasks: desktopicon
 
 [Run]
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; Flags: waituntilterminated; Check: NeedsWebView2; StatusMsg: "Installing Microsoft Edge WebView2 Runtime (one-time, ~50 MB)..."

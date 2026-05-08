@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -7,9 +8,22 @@ namespace NvidiaReportViewer;
 
 internal static class Program
 {
+    /// <summary>
+    /// Stable Windows AppUserModelID so the taskbar groups our app under "NVIDIA Report Viewer"
+    /// and pins / jumplists pick up the embedded icon instead of the .NET fallback.
+    /// </summary>
+    internal const string AppUserModelId = "NVIDIA.ReportViewer.Desktop";
+
+    [DllImport("shell32.dll", SetLastError = true)]
+    private static extern int SetCurrentProcessExplicitAppUserModelID(
+        [MarshalAs(UnmanagedType.LPWStr)] string AppID);
+
     [STAThread]
     private static void Main()
     {
+        try { SetCurrentProcessExplicitAppUserModelID(AppUserModelId); }
+        catch { /* best-effort; older Windows still works without it. */ }
+
         ApplicationConfiguration.Initialize();
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.Run(new MainForm());
@@ -29,24 +43,48 @@ internal sealed class MainForm : Form
         MinimumSize = new Size(1100, 700);
         BackColor = Color.FromArgb(15, 15, 15);
 
-        try
+        // Load the icon from the embedded resource (works from any working directory, e.g. when the
+        // user launches us from a Start Menu shortcut or the taskbar).
+        var icon = LoadEmbeddedIcon();
+        if (icon != null)
         {
-            using var iconStream = typeof(MainForm).Assembly.GetManifestResourceStream("webroot/favicon.svg");
-            // Form icons need .ico; fall through to default if not embedded.
-            if (File.Exists("app.ico"))
-            {
-                Icon = new Icon("app.ico");
-            }
-            iconStream?.Dispose();
-        }
-        catch
-        {
-            // Default icon is fine.
+            Icon = icon;
+            ShowIcon = true;
         }
 
         _webView = new WebView2 { Dock = DockStyle.Fill };
         Controls.Add(_webView);
         _ = InitWebViewAsync();
+    }
+
+    /// <summary>
+    /// Pull the multi-resolution app icon from <c>NvidiaReportViewer.resources/app.ico</c> so the
+    /// taskbar, Alt+Tab and the title-bar all show the NVIDIA mark instead of a generic icon.
+    /// </summary>
+    private static Icon? LoadEmbeddedIcon()
+    {
+        try
+        {
+            var asm = Assembly.GetExecutingAssembly();
+            // Two places the .ico can live, depending on how MSBuild lands it:
+            //   1) ApplicationIcon (Win32 native resource embedded in the PE),
+            //   2) Manifest resource fallback for safety.
+            // Try (1) first via Application.OpenForms is not viable here; use Icon.ExtractAssociatedIcon.
+            var location = Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrEmpty(location) && File.Exists(location))
+            {
+                var native = Icon.ExtractAssociatedIcon(location);
+                if (native != null) return native;
+            }
+            // Fallback: a manifest resource named "webroot/app.ico" if the project switches to that.
+            using var stream = asm.GetManifestResourceStream("webroot/app.ico");
+            if (stream != null) return new Icon(stream);
+        }
+        catch
+        {
+            // Default Windows icon is acceptable.
+        }
+        return null;
     }
 
     /// <summary>

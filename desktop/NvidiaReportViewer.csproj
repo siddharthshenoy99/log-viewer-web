@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RootNamespace>NvidiaReportViewer</RootNamespace>
+    <AssemblyName>NvidiaReportViewer</AssemblyName>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <Version>1.6.1</Version>
+    <FileVersion>1.6.1.0</FileVersion>
+    <AssemblyVersion>1.6.1.0</AssemblyVersion>
+    <Product>NVIDIA Report Viewer</Product>
+    <Company>NVIDIA</Company>
+    <Description>Offline structured viewer for MSInfo, BSOD, GPU-Z, EVTX and DxDiag exports.</Description>
+    <Copyright>© NVIDIA</Copyright>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>embedded</DebugType>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <PublishTrimmed>false</PublishTrimmed>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2535.41" />
+  </ItemGroup>
+
+  <!-- Pull every public web asset from the parent folder into the .exe as embedded resources.
+       The shell loads them with VirtualHostNameToFolderMapping so the page sees a normal http origin
+       (file:// has too many security restrictions for things like web fonts and module workers). -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\index.html" LogicalName="webroot/index.html" />
+    <EmbeddedResource Include="..\styles.css" LogicalName="webroot/styles.css" />
+    <EmbeddedResource Include="..\app.js" LogicalName="webroot/app.js" />
+    <EmbeddedResource Include="..\favicon.svg" LogicalName="webroot/favicon.svg" />
+    <EmbeddedResource Include="..\nvidia-logo.png" LogicalName="webroot/nvidia-logo.png" />
+    <EmbeddedResource Include="..\vendor\jspdf.umd.min.js" LogicalName="webroot/vendor/jspdf.umd.min.js" />
+  </ItemGroup>
+</Project>

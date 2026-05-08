@@ -1,0 +1,53 @@
+name: Build NvidiaReportViewer.exe
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app.js"
+      - "index.html"
+      - "styles.css"
+      - "nvidia-logo.png"
+      - "vendor/**"
+      - "desktop/**"
+      - ".github/workflows/build-desktop.yml"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Generate app.ico
+        shell: pwsh
+        working-directory: desktop
+        run: ./make-icon.ps1
+
+      - name: Build (single-file, self-contained, win-x64)
+        shell: pwsh
+        working-directory: desktop
+        run: ./build.ps1
+
+      - name: Compute SHA256
+        shell: pwsh
+        working-directory: desktop/dist
+        run: |
+          $h = (Get-FileHash NvidiaReportViewer.exe -Algorithm SHA256).Hash
+          "$h  NvidiaReportViewer.exe" | Set-Content -NoNewline NvidiaReportViewer.exe.sha256
+          Write-Host "SHA256: $h"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NvidiaReportViewer-windows-x64
+          path: |
+            desktop/dist/NvidiaReportViewer.exe
+            desktop/dist/NvidiaReportViewer.exe.sha256
+          if-no-files-found: error

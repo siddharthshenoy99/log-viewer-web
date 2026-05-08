@@ -79,12 +79,12 @@ internal sealed class MainForm : Form
             core.Settings.AreHostObjectsAllowed = false;
             core.Settings.IsBuiltInErrorPageEnabled = true;
 
-            // Map a virtual host to in-memory embedded resources. The handler below answers every
-            // request under https://app.local/* with the matching file from the assembly.
+            // Intercept every request to our virtual origin and serve the matching embedded resource.
+            // We deliberately DO NOT use SetVirtualHostNameToFolderMapping: that API requires a real folder
+            // on disk and would short-circuit the WebResourceRequested event below.
             const string virtualHost = "app.local";
-            core.SetVirtualHostNameToFolderMapping(virtualHost, ".", CoreWebView2HostResourceAccessKind.Deny);
             core.WebResourceRequested += OnWebResourceRequested;
-            core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+            core.AddWebResourceRequestedFilter($"https://{virtualHost}/*", CoreWebView2WebResourceContext.All);
 
             // External links open in the user's default browser, not inside the app shell.
             core.NewWindowRequested += (s, e) =>
@@ -131,23 +131,29 @@ internal sealed class MainForm : Form
             var uri = new Uri(e.Request.Uri);
             if (!uri.Host.Equals("app.local", StringComparison.OrdinalIgnoreCase)) return;
 
-            var pathPart = uri.AbsolutePath.TrimStart('/');
+            // AbsolutePath already excludes query strings (e.g. "?v=adv62"); decode percent escapes.
+            var pathPart = Uri.UnescapeDataString(uri.AbsolutePath).TrimStart('/');
             if (string.IsNullOrEmpty(pathPart)) pathPart = "index.html";
 
-            // Strip the query string we use for cache busting (?v=adv62 etc.).
             var resourceName = "webroot/" + pathPart;
-
-            var asm = Assembly.GetExecutingAssembly();
-            var stream = asm.GetManifestResourceStream(resourceName);
+            var stream = LoadEmbeddedResource(resourceName);
             if (stream == null)
             {
+                var bodyBytes = System.Text.Encoding.UTF8.GetBytes(
+                    $"<!doctype html><meta charset=utf-8><title>Resource missing</title>" +
+                    $"<body style='font-family:Segoe UI,sans-serif;background:#111;color:#eee;padding:2rem'>" +
+                    $"<h1>Resource not found</h1>" +
+                    $"<p>The application could not load <code>{System.Net.WebUtility.HtmlEncode(resourceName)}</code> from the embedded webroot.</p>" +
+                    $"<p>Path requested: <code>{System.Net.WebUtility.HtmlEncode(uri.AbsoluteUri)}</code></p>" +
+                    $"<hr><p style='font-size:.8em;color:#888'>Please reinstall NVIDIA Report Viewer.</p>");
                 e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
-                    null, 404, "Not Found", "Content-Type: text/plain; charset=utf-8");
+                    new MemoryStream(bodyBytes), 404, "Not Found",
+                    "Content-Type: text/html; charset=utf-8");
+                Trace.WriteLine($"WebResourceRequested 404: {resourceName} (uri={uri})");
                 return;
             }
 
             var contentType = MimeFor(pathPart);
-            // CSP header keeps the surface tight: same-origin only, no remote scripts.
             var headers = string.Join("\r\n",
                 $"Content-Type: {contentType}",
                 "Cache-Control: no-cache",
@@ -161,12 +167,30 @@ internal sealed class MainForm : Form
         {
             try
             {
+                var msg = System.Text.Encoding.UTF8.GetBytes($"Internal error: {ex.Message}");
                 e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
-                    null, 500, "Internal Error", "Content-Type: text/plain; charset=utf-8");
+                    new MemoryStream(msg), 500, "Internal Error",
+                    "Content-Type: text/plain; charset=utf-8");
             }
             catch { /* nothing else to do here */ }
             Trace.WriteLine($"OnWebResourceRequested error: {ex}");
         }
+    }
+
+    /// <summary>
+    /// Read an embedded resource into a <see cref="MemoryStream"/> so WebView2 can consume it
+    /// asynchronously without us having to keep a file handle open. Returns null when no
+    /// resource matches (so the caller can serve a 404 page).
+    /// </summary>
+    private static MemoryStream? LoadEmbeddedResource(string resourceName)
+    {
+        var asm = Assembly.GetExecutingAssembly();
+        using var src = asm.GetManifestResourceStream(resourceName);
+        if (src == null) return null;
+        var ms = new MemoryStream(capacity: (int)Math.Min(int.MaxValue, src.CanSeek ? src.Length : 64 * 1024));
+        src.CopyTo(ms);
+        ms.Position = 0;
+        return ms;
     }
 
     private static string MimeFor(string path)
